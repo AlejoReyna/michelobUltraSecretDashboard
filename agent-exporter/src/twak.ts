@@ -34,6 +34,10 @@ export type TwakCommandResult = {
 
 export type TwakTelemetry = Record<TwakCommandKey, TwakCommandResult>;
 
+let cachedTwak: TwakTelemetry | null = null;
+let cachedTwakAt = 0;
+const TWAK_CACHE_TTL_MS = 30000;
+
 function twakBin(): string {
   return process.env.TWAK_BIN?.trim() || "twak";
 }
@@ -72,12 +76,19 @@ export async function runTwakCommand(key: TwakCommandKey): Promise<TwakCommandRe
 }
 
 export async function readTwakTelemetry(): Promise<TwakTelemetry> {
-  const telemetry = {} as TwakTelemetry;
+  const now = Date.now();
+
+  if (cachedTwak && now - cachedTwakAt < TWAK_CACHE_TTL_MS) {
+    return cachedTwak;
+  }
 
   // TWAK wallet commands share local state; run sequentially to avoid lock/race failures.
+  const telemetry = {} as TwakTelemetry;
   for (const key of TWAK_COMMAND_KEYS) {
     telemetry[key] = await runTwakCommand(key);
   }
 
+  cachedTwak = telemetry;
+  cachedTwakAt = now;
   return telemetry;
 }
