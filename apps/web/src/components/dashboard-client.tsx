@@ -147,6 +147,14 @@ function latestPortfolioValue(data: StatusPayload | null) {
     return data.wallet.portfolioTotalUsd;
   }
 
+  if (
+    (data.wallet?.errors && data.wallet.errors.length > 0) ||
+    data.connection?.source === "error" ||
+    data.connection?.error
+  ) {
+    return null;
+  }
+
   if (typeof data.latestDecision?.portfolio_value_usdc === "number") {
     return data.latestDecision.portfolio_value_usdc;
   }

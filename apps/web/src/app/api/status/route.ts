@@ -43,12 +43,18 @@ export async function GET() {
     const statusUrl = new URL("status", base);
     statusUrl.searchParams.set("limit", "100");
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     const response = await fetch(statusUrl, {
       cache: "no-store",
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return json(
