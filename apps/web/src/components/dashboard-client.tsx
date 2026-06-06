@@ -537,7 +537,7 @@ export function DashboardClient() {
                   Base x402
                 </span>
               </div>
-              <h1 className="text-3xl font-semibold text-[#EAECEF] sm:text-4xl">Cascade AI Trading Agent</h1>
+              <h1 className="text-3xl font-semibold text-[#EAECEF] sm:text-4xl">Alexis Reyna Trading Agent</h1>
               <div className="mt-3 grid gap-3 text-sm text-[#848E9C] md:grid-cols-3">
                 <div className="flex items-center gap-2">
                   <Clock size={15} className="text-[#848E9C]" />
