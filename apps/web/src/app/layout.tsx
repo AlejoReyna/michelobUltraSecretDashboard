@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cascade AI Trading Agent",
-  description: "Read-only operator console for Cascade AI telemetry.",
+  title: "MapachesBot Trading Agent",
+  description: "Read-only operator console for MapachesBot telemetry.",
 };
 
 export default function RootLayout({
