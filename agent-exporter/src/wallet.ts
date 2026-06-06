@@ -161,6 +161,29 @@ function findStringByKeys(value: unknown, keys: readonly string[], depth = 0): s
   return null;
 }
 
+function sumPortfolioUsdValue(value: unknown): number | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+
+  let sum = 0;
+  let found = false;
+
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+    const usd = directNumber(item, VALUE_USD_KEYS);
+    if (usd !== null) {
+      sum += usd;
+      found = true;
+    }
+  }
+
+  return found ? sum : null;
+}
+
 function findNumberByKeys(value: unknown, keys: readonly string[], depth = 0): number | null {
   if (depth > 5) {
     return null;
@@ -487,7 +510,8 @@ export function normalizeTwakWallet(twak: TwakTelemetry, refreshedAt = new Date(
       findAddress(twak.baseAddress.data) ??
       findAddress(twak.portfolio.data),
     refreshedAt,
-    portfolioTotalUsd: findNumberByKeys(twak.portfolio.data, PORTFOLIO_TOTAL_KEYS),
+    portfolioTotalUsd:
+      findNumberByKeys(twak.portfolio.data, PORTFOLIO_TOTAL_KEYS) ?? sumPortfolioUsdValue(twak.portfolio.data),
     balances: [
       ...normalizeBalancesForChain(twak, "bscBalance", "bsc"),
       ...normalizeBalancesForChain(twak, "baseBalance", "base"),

@@ -34,28 +34,50 @@ export type TwakCommandResult = {
 
 export type TwakTelemetry = Record<TwakCommandKey, TwakCommandResult>;
 
+function twakBin(): string {
+  return process.env.TWAK_BIN?.trim() || "twak";
+}
+
+function twakExecOptions(): {
+  timeout: number;
+  maxBuffer: number;
+  shell: false;
+  env: NodeJS.ProcessEnv;
+  cwd: string | undefined;
+} {
+  return {
+    timeout: 8000,
+    maxBuffer: 1024 * 1024,
+    shell: false,
+    env: process.env,
+    cwd: process.env.CASCADE_AI_PATH?.trim() || undefined,
+  };
+}
+
 export async function runTwakCommand(key: TwakCommandKey): Promise<TwakCommandResult> {
   const args = ALLOWED_TWAK_COMMANDS[key];
 
   try {
-    const { stdout } = await execFileAsync("twak", [...args], {
-      timeout: 8000,
-      maxBuffer: 1024 * 1024,
-      shell: false,
-    });
+    const { stdout } = await execFileAsync(twakBin(), [...args], twakExecOptions());
     const trimmed = stdout.trim();
     const parsed = trimmed ? JSON.parse(trimmed) : null;
 
     return { ok: true, data: redact(parsed) };
   } catch (error) {
-    return { ok: false, data: null, error: safeError(error) };
+    const execError = error as Error & { stderr?: string | Buffer };
+    const stderr = typeof execError.stderr === "string" ? execError.stderr.trim() : "";
+    const detail = stderr || execError.message;
+    return { ok: false, data: null, error: safeError(detail || error) };
   }
 }
 
 export async function readTwakTelemetry(): Promise<TwakTelemetry> {
-  const entries = await Promise.all(
-    TWAK_COMMAND_KEYS.map(async (key) => [key, await runTwakCommand(key)] as const),
-  );
+  const telemetry = {} as TwakTelemetry;
 
-  return Object.fromEntries(entries) as TwakTelemetry;
+  // TWAK wallet commands share local state; run sequentially to avoid lock/race failures.
+  for (const key of TWAK_COMMAND_KEYS) {
+    telemetry[key] = await runTwakCommand(key);
+  }
+
+  return telemetry;
 }

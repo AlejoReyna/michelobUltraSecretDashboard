@@ -102,7 +102,12 @@ CASCADE_AI_PATH=/home/ec2-user/cascade-ai
 AGENT_EXPORTER_TOKEN=replace-with-a-long-random-token
 VERCEL_DASHBOARD_ORIGIN=https://your-dashboard.vercel.app
 PORT=8787
+HOME=/home/ec2-user
+PATH=/home/ec2-user/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+TWAK_BIN=/home/ec2-user/.npm-global/bin/twak
 ```
+
+If the token contains `$`, escape it for systemd as `$$` (for example `secret$$token`).
 
 Create `/etc/systemd/system/cascade-ai-exporter.service`:
 
@@ -113,12 +118,13 @@ After=network.target
 
 [Service]
 Type=simple
+User=ec2-user
+Group=ec2-user
 WorkingDirectory=/home/ec2-user/cascade-ai-dashboard/agent-exporter
 EnvironmentFile=/etc/cascade-ai-exporter.env
-ExecStart=/usr/bin/node dist/server.js
+ExecStart=/usr/bin/node dist/src/server.js
 Restart=always
 RestartSec=5
-User=ec2-user
 
 [Install]
 WantedBy=multi-user.target

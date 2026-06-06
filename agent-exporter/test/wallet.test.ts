@@ -58,6 +58,20 @@ test("TWAK command failures become wallet errors without throwing", () => {
   assert.equal(wallet.errors[0]?.source, "bscAddress");
 });
 
+test("portfolio array usdValue fields sum into portfolioTotalUsd", () => {
+  const wallet = normalizeTwakWallet(
+    telemetry({
+      portfolio: command([
+        { chain: "bsc", symbol: "USDC", usdValue: 7.11 },
+        { chain: "base", symbol: "ETH", usdValue: 0.86 },
+        { chain: "base", symbol: "USDC", usdValue: 0.5 },
+      ]),
+    }),
+  );
+
+  assert.equal(wallet.portfolioTotalUsd, 8.47);
+});
+
 test("execution log tx hashes become wallet movements", () => {
   const movement = movementFromExecution(execution());
 
