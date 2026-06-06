@@ -76,8 +76,6 @@ type DashboardViewModel = {
   pnlValue: string;
   pnlDelta: string;
   pnlTone: "positive" | "negative";
-  performanceDelta: string;
-  performanceTone: "positive" | "negative";
   system: SystemView;
 };
 
@@ -326,8 +324,6 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
     pnlValue: formatSignedUsd(pnl.absolute),
     pnlDelta: performanceDelta,
     pnlTone,
-    performanceDelta,
-    performanceTone: pnlTone,
     system: systemView(data, error, latencyMs),
   };
 }
@@ -488,7 +484,7 @@ function DesktopHeader() {
       </div>
       <button className="inline-flex h-10 items-center gap-2 border border-[#333333] bg-[#171717] px-5 font-mono text-sm text-white transition-colors hover:border-[#4A4A4A] hover:bg-[#202020]">
         <Download size={16} />
-        <span>Export CSV</span>
+        <span className="font-mono">Export CSV</span>
       </button>
     </header>
   );
@@ -513,14 +509,15 @@ function DesktopMetricBlock({ label, value, unit, delta, tone, tooltip }: Metric
   );
 }
 
-function DesktopTimeRangeSelector() {
+function TimeRangeSelector({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>
       {timeRanges.map((range) => (
         <button
           key={range}
           className={cx(
-            "h-8 min-w-10 border px-3 font-mono text-xs transition-colors",
+            "border font-mono transition-colors",
+            compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
             range === "1W"
               ? "border-[#666666] bg-[#222222] text-white"
               : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
@@ -538,7 +535,7 @@ function DesktopPerformancePanel({ view }: { view: DashboardViewModel }) {
     <section className="flex min-h-0 flex-col px-10 py-9">
       <div className="mb-9">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Overview</div>
-        <h1 className="mt-2 text-[32px] font-semibold leading-tight text-white">Bot Performance</h1>
+        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Bot Performance</h1>
       </div>
       <div className="grid gap-x-6 gap-y-7 lg:grid-cols-2 2xl:grid-cols-[1.25fr_1fr_0.72fr_0.72fr]">
         {view.metrics.map((metric) => (
@@ -548,7 +545,7 @@ function DesktopPerformancePanel({ view }: { view: DashboardViewModel }) {
       <div className="mt-10 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1A1A1A] px-7 py-5">
           <h2 className="font-mono text-lg text-[#CFCFCF]">Portfolio Chart</h2>
-          <DesktopTimeRangeSelector />
+          <TimeRangeSelector />
         </div>
         <div className="min-h-[340px] flex-1 p-6">
           <PortfolioChart data={view.chartData} variant="desktop" />
@@ -685,14 +682,14 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
     <section className="px-4 pt-5">
       <div className="grid grid-cols-2 gap-x-4">
         <div className="min-w-0">
-          <div className="text-[16px] font-medium text-[#B8B8B8]">Total Balance</div>
+          <div className="font-mono text-[16px] font-medium text-[#B8B8B8]">Total Balance</div>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
             <span className="font-mono text-[14px] text-[#B8B8B8]">USD</span>
           </div>
         </div>
         <div className="min-w-0">
-          <div className="text-[16px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
+          <div className="font-mono text-[16px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
             <span className={cx("font-mono text-[14px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
@@ -707,14 +704,12 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
 
 function MobilePerformanceWidget({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="mx-4 mt-9 border border-[#1A1A1A] bg-black px-5 py-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <h1 className="text-[24px] font-bold text-white">Performance</h1>
-        <span className={cx("font-mono text-[18px] font-bold tabular-nums", view.performanceTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
-          {view.performanceDelta}
-        </span>
+    <section className="mx-4 mt-9 flex min-h-0 flex-col border border-[#2A2A2A] bg-black/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-4 py-4">
+        <h2 className="font-mono text-base text-[#CFCFCF]">Portfolio Chart</h2>
+        <TimeRangeSelector compact />
       </div>
-      <div className="h-[150px] border border-[#1A1A1A] bg-[#050505]">
+      <div className="h-[200px] p-4">
         <PortfolioChart data={view.mobileChartData} variant="mobile" />
       </div>
     </section>

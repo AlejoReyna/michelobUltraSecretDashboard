@@ -45,8 +45,9 @@ export function PortfolioChart({
   variant?: "desktop" | "mobile";
 }) {
   const chart = useMemo(() => buildChartPaths(data), [data]);
-  const gridColumns = variant === "mobile" ? 6 : 12;
-  const gridRows = variant === "mobile" ? 4 : 7;
+  const isMobile = variant === "mobile";
+  const gridColumns = isMobile ? 6 : 12;
+  const gridRows = isMobile ? 4 : 7;
 
   return (
     <svg className="h-full w-full overflow-visible" viewBox={`0 0 ${chartFrame.width} ${chartFrame.height}`} preserveAspectRatio="none" role="img" aria-label="Portfolio trend chart">
@@ -75,10 +76,16 @@ export function PortfolioChart({
       })}
 
       <path d={chart.areaPath} fill={`url(#portfolio-fill-${variant})`} />
-      <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={variant === "mobile" ? 3 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
+      <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
       <line x1={chartFrame.left} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
-      {variant === "desktop" ? (
+      {isMobile ? (
+        <g className="font-mono text-[10px] fill-[#8A8A8A]">
+          <text x={chartFrame.left + 4} y={chartFrame.height - 12}>00:00</text>
+          <text x={chartFrame.width * 0.5 - 16} y={chartFrame.height - 12}>12:00</text>
+          <text x={chartFrame.width - chartFrame.right - 40} y={chartFrame.height - 12}>24:00</text>
+        </g>
+      ) : (
         <g className="font-mono text-[11px] fill-[#8A8A8A]">
           <text x={chartFrame.left + 8} y={chartFrame.height - 12}>00:00</text>
           <text x={chartFrame.width * 0.32} y={chartFrame.height - 12}>06:00</text>
@@ -86,7 +93,7 @@ export function PortfolioChart({
           <text x={chartFrame.width * 0.82} y={chartFrame.height - 12}>18:00</text>
           <text x={chartFrame.width - chartFrame.right - 54} y={chartFrame.height - 12}>24:00</text>
         </g>
-      ) : null}
+      )}
     </svg>
   );
 }
