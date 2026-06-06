@@ -12,7 +12,7 @@ import {
   type Guardrails,
   type Positions,
 } from "./schemas.js";
-import { readTwakTelemetry } from "./twak.js";
+import { getTwakTelemetrySnapshot, requestTwakRefresh } from "./twak.js";
 import { buildWalletTelemetry } from "./wallet.js";
 
 const DEFAULT_LIMIT = 100;
@@ -45,14 +45,30 @@ export async function getGuardrails(sourcePath: string) {
   return readJsonFile<Guardrails>(sourceFile(sourcePath, FILES.guardrails), guardrailsSchema, {});
 }
 
+export async function getWallet(sourcePath: string, limit = DEFAULT_LIMIT) {
+  requestTwakRefresh("wallet");
+  const twak = getTwakTelemetrySnapshot();
+
+  const executions = await getExecutions(sourcePath, limit);
+
+  return redact({
+    balances: twak.telemetry,
+    twakCache: twak.cache,
+    wallet: buildWalletTelemetry(twak.telemetry, executions.items, twak.cache.refreshedAt ?? ""),
+    executionErrors: executions.errors,
+  });
+}
+
 export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
-  const [health, decisions, executions, positions, guardrails, balances, files] = await Promise.all([
+  requestTwakRefresh("status");
+  const twak = getTwakTelemetrySnapshot();
+
+  const [health, decisions, executions, positions, guardrails, files] = await Promise.all([
     getHealth(sourcePath),
     getDecisions(sourcePath, limit),
     getExecutions(sourcePath, limit),
     getPositions(sourcePath),
     getGuardrails(sourcePath),
-    readTwakTelemetry(),
     fileStatuses(sourcePath),
   ]);
 
@@ -68,8 +84,9 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
     positionsError: positions.error,
     guardrails: guardrails.data,
     guardrailsError: guardrails.error,
-    balances,
-    wallet: buildWalletTelemetry(balances, executions.items),
+    balances: twak.telemetry,
+    twakCache: twak.cache,
+    wallet: buildWalletTelemetry(twak.telemetry, executions.items, twak.cache.refreshedAt ?? ""),
     x402: {
       instrumented: false,
       paidCallCount: null,

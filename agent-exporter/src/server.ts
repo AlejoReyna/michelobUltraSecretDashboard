@@ -5,7 +5,8 @@ import express, { type Request, type Response, type NextFunction } from "express
 import { loadConfig, type ExporterConfig } from "./config.js";
 import { getHealth } from "./health.js";
 import { redact } from "./redact.js";
-import { getDecisions, getExecutions, getGuardrails, getPositions, getStatus, parseLimit } from "./telemetry.js";
+import { getDecisions, getExecutions, getGuardrails, getPositions, getStatus, getWallet, parseLimit } from "./telemetry.js";
+import { startTwakAutoRefresh, stopTwakAutoRefresh } from "./twak.js";
 
 function authMatches(authorization: string | undefined, expectedToken: string): boolean {
   const presented = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -73,6 +74,10 @@ export function createApp(config: ExporterConfig = loadConfig()) {
     sendJson(res, await getStatus(config.cascadeAiPath, parseLimit(req.query.limit)));
   });
 
+  app.get("/wallet", async (req, res) => {
+    sendJson(res, await getWallet(config.cascadeAiPath, parseLimit(req.query.limit)));
+  });
+
   app.get("/decisions", async (req, res) => {
     sendJson(res, await getDecisions(config.cascadeAiPath, parseLimit(req.query.limit)));
   });
@@ -103,8 +108,18 @@ export function createApp(config: ExporterConfig = loadConfig()) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const config = loadConfig();
   const app = createApp(config);
+  startTwakAutoRefresh();
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`Cascade AI exporter listening on ${config.port}`);
   });
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      stopTwakAutoRefresh();
+      server.close(() => {
+        process.exit(0);
+      });
+    });
+  }
 }
