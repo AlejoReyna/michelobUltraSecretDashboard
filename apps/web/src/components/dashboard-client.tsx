@@ -10,7 +10,6 @@ import {
   FileText,
   Github,
   Home,
-  Menu,
   Rocket,
   Settings,
   type LucideIcon,
@@ -363,40 +362,74 @@ function PythonLogo({ className }: { className?: string }) {
   );
 }
 
-function GithubRepositoryCard() {
+function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "compact" }) {
+  const compact = variant === "compact";
+
   return (
     <a
       href={projectRepository.url}
       target="_blank"
       rel="noreferrer"
-      className="group block w-full border border-[#1A1A1A] bg-[#070707] p-3 text-left transition-colors hover:border-[#2A2A2A] hover:bg-[#0B0B0B]"
+      className={cx(
+        "group block w-full text-left transition-colors",
+        compact ? "p-0 hover:opacity-90" : "border border-[#1A1A1A] bg-[#070707] p-3 hover:border-[#2A2A2A] hover:bg-[#0B0B0B]",
+      )}
       aria-label="Open cascade-ai project on GitHub"
     >
-      <span className="flex min-w-0 items-start justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center border border-[#242424] bg-[#111111] text-white">
-            <Github size={16} />
+      <span className={cx("flex min-w-0 justify-between", compact ? "items-center gap-2" : "items-start gap-3")}>
+        <span className={cx("flex min-w-0 items-center", compact ? "gap-2" : "gap-2.5")}>
+          <span
+            className={cx(
+              "grid shrink-0 place-items-center border border-[#242424] bg-[#111111] text-white",
+              compact ? "h-6 w-6" : "h-8 w-8",
+            )}
+          >
+            <Github size={compact ? 13 : 16} />
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-mono text-[10px] uppercase leading-4 tracking-[0.18em] text-[#777777]">
+            <span
+              className={cx(
+                "block truncate font-mono uppercase tracking-[0.18em] text-[#777777]",
+                compact ? "text-[9px] leading-3" : "text-[10px] leading-4",
+              )}
+            >
               {projectRepository.owner}
             </span>
-            <span className="block truncate text-sm font-semibold leading-5 text-[#F2F2F2]">{projectRepository.name}</span>
+            <span className={cx("block truncate font-semibold text-[#F2F2F2]", compact ? "text-xs leading-4" : "text-sm leading-5")}>
+              {projectRepository.name}
+            </span>
           </span>
         </span>
-        <span className="grid h-8 w-8 shrink-0 place-items-center border border-[#242424] bg-[#111111] text-[#8A8A8A] transition-colors group-hover:text-white">
-          <ExternalLink size={14} />
+        <span
+          className={cx(
+            "grid shrink-0 place-items-center border border-[#242424] bg-[#111111] text-[#8A8A8A] transition-colors group-hover:text-white",
+            compact ? "h-6 w-6" : "h-8 w-8",
+          )}
+        >
+          <ExternalLink size={compact ? 12 : 14} />
         </span>
       </span>
-      <span className="mt-3 flex items-center">
-        <span className="inline-flex items-center gap-1.5 border border-[#202020] bg-black px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
-          <PythonLogo className="h-3 w-3 shrink-0" />
-          Python
+      {compact ? (
+        <span className="mt-1.5 flex min-w-0 items-center gap-2">
+          <span className="inline-flex shrink-0 items-center gap-1 border border-[#202020] bg-black px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+            <PythonLogo className="h-2.5 w-2.5 shrink-0" />
+            Python
+          </span>
+          <span className="min-w-0 truncate text-[10px] leading-4 text-[#BDBDBD]">{projectRepository.description}</span>
         </span>
-      </span>
-      <span className="mt-3 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-        {projectRepository.description}
-      </span>
+      ) : (
+        <>
+          <span className="mt-3 flex items-center">
+            <span className="inline-flex items-center gap-1.5 border border-[#202020] bg-black px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+              <PythonLogo className="h-3 w-3 shrink-0" />
+              Python
+            </span>
+          </span>
+          <span className="mt-3 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+            {projectRepository.description}
+          </span>
+        </>
+      )}
     </a>
   );
 }
@@ -639,15 +672,9 @@ function DesktopDashboard({ view }: { view: DashboardViewModel }) {
 
 function MobileHeader() {
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-[#1A1A1A] bg-[#050505]">
-      <div className="mx-auto flex h-[74px] max-w-[640px] items-center justify-between px-4">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-white">{projectRepository.name}</div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#777777]">Monolith Terminal v2</div>
-        </div>
-        <button className="grid h-11 w-11 place-items-center border border-[#1A1A1A] text-[#CFCFCF] hover:bg-[#101010]" aria-label="Open menu">
-          <Menu size={24} strokeWidth={2.2} />
-        </button>
+    <header className="sticky top-0 z-50 border-b border-[#1A1A1A] bg-[#050505]">
+      <div className="mx-auto max-w-[640px] px-4 py-2">
+        <GithubRepositoryCard variant="compact" />
       </div>
     </header>
   );
@@ -655,19 +682,24 @@ function MobileHeader() {
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="px-4 pt-7">
-      <GithubRepositoryCard />
-      <div className="mt-7 text-[16px] font-medium text-[#B8B8B8]">Total Balance</div>
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-[34px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-        <span className="font-mono text-[18px] text-[#B8B8B8]">USD</span>
-      </div>
-      <div className="mt-8 text-[16px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-[29px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-        <span className={cx("font-mono text-[18px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
-          ({view.pnlDelta})
-        </span>
+    <section className="px-4 pt-5">
+      <div className="grid grid-cols-2 gap-x-4">
+        <div className="min-w-0">
+          <div className="text-[16px] font-medium text-[#B8B8B8]">Total Balance</div>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+            <span className="font-mono text-[14px] text-[#B8B8B8]">USD</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[16px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+            <span className={cx("font-mono text-[14px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
+              ({view.pnlDelta})
+            </span>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -752,7 +784,7 @@ function MobileDashboard({ view }: { view: DashboardViewModel }) {
   return (
     <div className="technical-grid min-h-screen bg-black text-white lg:hidden">
       <MobileHeader />
-      <main className="mx-auto max-w-[640px] pb-[124px] pt-[74px]">
+      <main className="mx-auto max-w-[640px] pb-[124px]">
         <MobileHeroMetrics view={view} />
         <MobilePerformanceWidget view={view} />
         <MobileRecentActivity rows={view.activityRows} />
