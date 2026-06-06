@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio-chart";
+import { boughtTokensFromTelemetry, COMPETITION_TOKENS, type WalletHolding } from "@/lib/competition-tokens";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
 const navItems: Array<{ label: string; icon: LucideIcon; active?: boolean }> = [
@@ -106,6 +107,7 @@ type SystemView = {
 type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
+  walletHoldings: WalletHolding[];
   chartData: PortfolioChartPoint[];
   mobileChartData: PortfolioChartPoint[];
   totalBalance: string;
@@ -441,6 +443,7 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
       },
     ],
     activityRows: activityFromTelemetry(data),
+    walletHoldings: boughtTokensFromTelemetry(data),
     chartData: chart,
     mobileChartData: chart.slice(-16).length > 1 ? chart.slice(-16) : chart,
     totalBalance: formatUsd(latest),
@@ -666,6 +669,89 @@ function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow
   return <span className={cx("inline-flex border px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
 }
 
+function formatTokenAmount(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  if (value >= 1_000_000) {
+    return `${compactNumberFormatter.format(value / 1_000_000)}M`;
+  }
+
+  if (value >= 1_000) {
+    return compactNumberFormatter.format(value);
+  }
+
+  if (value >= 1) {
+    return compactNumberFormatter.format(value);
+  }
+
+  return value.toPrecision(4);
+}
+
+function WalletSection({ holdings, compact = false }: { holdings: WalletHolding[]; compact?: boolean }) {
+  return (
+    <section className="border border-[#2A2A2A] bg-black/88">
+      <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Competition Wallet</div>
+        <h2 className={cx("mt-1 font-mono text-[#DADADA]", compact ? "text-base" : "text-xl")}>Bought Tokens</h2>
+        <p className="mt-1 font-mono text-[11px] text-[#8A8A8A]">
+          Eligible BSC holdings from the {COMPETITION_TOKENS.length}-token allowlist
+        </p>
+      </div>
+      <div className={cx("console-scroll overflow-x-auto", compact ? "max-h-[220px]" : "max-h-[280px]")}>
+        <table className="w-full table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[30%]" />
+            <col className="w-[22%]" />
+            <col className="w-[20%]" />
+          </colgroup>
+          <thead className="sticky top-0 z-10 border-b border-[#1A1A1A] bg-[#050505] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+            <tr>
+              <th className="px-4 py-3">Token</th>
+              <th className="px-2 py-3">Amount</th>
+              <th className="px-2 py-3">Value</th>
+              <th className="px-4 py-3 text-right">Entry</th>
+            </tr>
+          </thead>
+          <tbody>
+            {holdings.map((holding) => (
+              <tr key={holding.symbol} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+                <td className="truncate px-4 py-4 font-mono text-[13px] font-bold text-[#F2F2F2]">{holding.symbol}</td>
+                <td className="truncate px-2 py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  {formatTokenAmount(holding.amount)}
+                </td>
+                <td className="truncate px-2 py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  {formatUsd(holding.valueUsd)}
+                </td>
+                <td className="truncate px-4 py-4 text-right font-mono text-[12px] tabular-nums text-[#A8A8A8]">
+                  {formatUsd(holding.entryValueUsd)}
+                </td>
+              </tr>
+            ))}
+            {holdings.length === 0 ? (
+              <tr className="border-b border-[#1A1A1A]">
+                <td className="px-4 py-5 font-mono text-[12px] leading-5 text-[#8A8A8A]" colSpan={4}>
+                  No eligible bought tokens yet. Only in-scope BSC assets from the hackathon allowlist are shown here.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function DesktopWalletPanel({ holdings }: { holdings: WalletHolding[] }) {
+  return (
+    <section className="flex min-h-0 flex-col border-l border-[#1A1A1A] bg-black/72 px-5 py-9 2xl:px-7">
+      <WalletSection holdings={holdings} />
+    </section>
+  );
+}
+
 function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compact?: boolean }) {
   return (
     <table className="w-full table-fixed border-collapse text-left">
@@ -719,7 +805,7 @@ function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compac
 
 function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
   return (
-    <section className="flex min-h-0 flex-col border-l border-[#1A1A1A] bg-black/72 px-5 py-9 2xl:px-7">
+    <section className="flex min-h-0 flex-col border-l border-[#1A1A1A] bg-black/72 px-5 pb-9 2xl:px-7">
       <div className="border border-[#2A2A2A] bg-black/88">
         <div className="border-b border-[#1A1A1A] px-5 py-5">
           <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
@@ -773,7 +859,10 @@ function DesktopDashboard({ view }: { view: DashboardViewModel }) {
       <main className="technical-grid min-w-0 flex-1 pb-9">
         <section className="grid min-h-[calc(100vh-36px)] grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,65fr)_minmax(330px,35fr)] 2xl:grid-cols-[minmax(0,65fr)_minmax(400px,35fr)]">
           <DesktopPerformancePanel view={view} />
-          <DesktopRecentActivity rows={view.activityRows} />
+          <div className="flex min-h-0 flex-col">
+            <DesktopWalletPanel holdings={view.walletHoldings} />
+            <DesktopRecentActivity rows={view.activityRows} />
+          </div>
         </section>
       </main>
       <DesktopStatusBar system={view.system} />
@@ -826,6 +915,14 @@ function MobilePerformanceWidget({ view }: { view: DashboardViewModel }) {
       <div className="h-[200px] p-4">
         <PortfolioChart data={view.mobileChartData} variant="mobile" />
       </div>
+    </section>
+  );
+}
+
+function MobileWalletSection({ holdings }: { holdings: WalletHolding[] }) {
+  return (
+    <section className="mx-4 mt-9 overflow-hidden">
+      <WalletSection holdings={holdings} compact />
     </section>
   );
 }
@@ -896,6 +993,7 @@ function MobileDashboard({ view }: { view: DashboardViewModel }) {
       <main className="mx-auto max-w-[640px] pb-[124px]">
         <MobileHeroMetrics view={view} />
         <MobilePerformanceWidget view={view} />
+        <MobileWalletSection holdings={view.walletHoldings} />
         <MobileRecentActivity rows={view.activityRows} />
       </main>
       <MobileSystemBar system={view.system} />
