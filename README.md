@@ -1,36 +1,207 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cascade AI Dashboard
 
-## Getting Started
+Read-only operator console for the Cascade AI BSC trading agent. This repository is separate from the trading bot repo and is designed to be deployed as:
 
-First, run the development server:
+- `apps/web`: Next.js App Router dashboard for Vercel.
+- `agent-exporter`: small read-only telemetry exporter for the EC2 instance that runs the agent.
+
+The dashboard never talks to the trading bot directly. Browser requests poll `apps/web/src/app/api/status/route.ts`; that server route calls the EC2 exporter with `AGENT_EXPORTER_URL` and `AGENT_EXPORTER_TOKEN`.
+
+`/status` includes normalized read-only wallet telemetry under `wallet`:
+
+- `wallet.address`: TWAK wallet address, read from BSC/Base wallet address commands.
+- `wallet.portfolioTotalUsd`: TWAK portfolio total when available.
+- `wallet.balances`: normalized BSC/Base token balances.
+- `wallet.movements`: merged TWAK history and `execution_log.jsonl` movements. Matching tx hashes are collapsed into one `source: "merged"` row.
+- `wallet.errors`: safe read errors from TWAK commands. Failed reads do not blank the dashboard.
+
+The raw redacted TWAK command results remain under `balances` for debugging and backwards compatibility.
+
+## Local Development
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run the dashboard with built-in mock telemetry only when you explicitly want demo data:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd apps/web
+USE_MOCK_AGENT_DATA=true npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open `http://localhost:3000`.
 
-## Learn More
+Run the exporter against bundled fixtures:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd agent-exporter
+CASCADE_AI_PATH=./fixtures AGENT_EXPORTER_TOKEN=dev-token VERCEL_DASHBOARD_ORIGIN=http://localhost:3000 npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Then point the web app at it:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd apps/web
+AGENT_EXPORTER_URL=http://localhost:8787 AGENT_EXPORTER_TOKEN=dev-token npm run dev
+```
 
-## Deploy on Vercel
+Useful commands:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run lint
+npm run test
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Environment Files
+
+Vercel dashboard env (`apps/web/.env.example`):
+
+```bash
+AGENT_EXPORTER_URL=
+AGENT_EXPORTER_TOKEN=
+USE_MOCK_AGENT_DATA=false
+```
+
+EC2 exporter env (`agent-exporter/.env.example`):
+
+```bash
+CASCADE_AI_PATH=/home/ec2-user/cascade-ai
+AGENT_EXPORTER_TOKEN=change-me
+VERCEL_DASHBOARD_ORIGIN=https://your-dashboard.vercel.app
+PORT=8787
+```
+
+## Vercel Deployment
+
+1. Create a new Vercel project from this repository.
+2. Set the project root to `apps/web`.
+3. Add `AGENT_EXPORTER_URL` with the HTTPS URL for the EC2 exporter.
+4. Add `AGENT_EXPORTER_TOKEN` with the same bearer token configured on EC2.
+5. Deploy.
+
+No `NEXT_PUBLIC_` token is used. The token remains server-side in the App Router API route.
+
+## EC2 Exporter Setup
+
+Copy this repository to the EC2 instance, install dependencies, and build the exporter:
+
+```bash
+cd /home/ec2-user/cascade-ai-dashboard
+npm install
+npm run build:exporter
+```
+
+Create `/etc/cascade-ai-exporter.env`:
+
+```bash
+CASCADE_AI_PATH=/home/ec2-user/cascade-ai
+AGENT_EXPORTER_TOKEN=replace-with-a-long-random-token
+VERCEL_DASHBOARD_ORIGIN=https://your-dashboard.vercel.app
+PORT=8787
+```
+
+Create `/etc/systemd/system/cascade-ai-exporter.service`:
+
+```ini
+[Unit]
+Description=Cascade AI read-only telemetry exporter
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ec2-user/cascade-ai-dashboard/agent-exporter
+EnvironmentFile=/etc/cascade-ai-exporter.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable cascade-ai-exporter
+sudo systemctl start cascade-ai-exporter
+sudo systemctl status cascade-ai-exporter
+```
+
+Terminate TLS at a reverse proxy or load balancer and expose only HTTPS to Vercel.
+
+## Exporter Endpoints
+
+- `GET /health`: unauthenticated health check.
+- `GET /status`: combined sanitized telemetry.
+- `GET /decisions?limit=100`: latest parsed decision JSONL rows.
+- `GET /executions?limit=100`: latest parsed execution JSONL rows.
+- `GET /positions`: parsed `positions.json`.
+- `GET /guardrails`: parsed `guardrail_state.json`.
+
+All routes except `/health` require:
+
+```bash
+Authorization: Bearer <AGENT_EXPORTER_TOKEN>
+```
+
+## Security Notes
+
+- The exporter has no mutation endpoints.
+- The exporter does not start, stop, or signal the bot.
+- The exporter does not call `twak swap`.
+- The exporter never returns raw environment variables.
+- Recursive redaction removes fields containing `password`, `secret`, `private`, `key`, `token`, `TWAK_WALLET_PASSWORD`, or `.env`.
+- CORS only allows `VERCEL_DASHBOARD_ORIGIN` plus non-browser server calls.
+- The only process command is `pgrep -af src.main`.
+- The only TWAK commands are read-only:
+  - `twak wallet address --chain bsc --json`
+  - `twak wallet address --chain base --json`
+  - `twak wallet portfolio --json`
+  - `twak wallet balance --chain bsc --json`
+  - `twak wallet balance --chain base --json`
+  - `twak history --chain bsc --limit 20 --json`
+  - `twak history --chain base --limit 20 --json`
+- TWAK command failures are returned as safe errors and do not break the dashboard.
+- Dashboard refreshes poll only the exporter and must not trigger CMC or x402 payments.
+
+## Verify Read-Only Behavior
+
+Search for mutation risks:
+
+```bash
+rg "twak swap|child_process|exec\\(|spawn\\(|POST|PUT|PATCH|DELETE" agent-exporter apps/web
+```
+
+Expected:
+
+- No `twak swap`.
+- No arbitrary shell command routes.
+- No Express mutation routes.
+- Only the allowlisted read-only `execFile` calls in the exporter.
+- Only `GET` Route Handlers in the web app.
+
+Check exporter auth:
+
+```bash
+curl -i http://localhost:8787/status
+curl -i -H "Authorization: Bearer dev-token" http://localhost:8787/status
+```
+
+Check health remains public:
+
+```bash
+curl -i http://localhost:8787/health
+```
+
+## Mock Fixtures
+
+The dashboard serves mock telemetry only when `USE_MOCK_AGENT_DATA=true`. If `AGENT_EXPORTER_URL` or `AGENT_EXPORTER_TOKEN` is missing, `/api/status` returns an exporter configuration error instead of demo wallet values. Static fixtures are also included under:
+
+- `agent-exporter/fixtures`
+- `apps/web/fixtures`

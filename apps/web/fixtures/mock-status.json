@@ -1,0 +1,211 @@
+{
+  "health": {
+    "ok": true,
+    "agentRunning": true,
+    "pids": ["2401 python -m src.main"],
+    "lastLogLine": "cycle complete action=WAIT symbol=AAVE",
+    "serverTime": "2026-06-05T16:11:00.000Z",
+    "sourcePath": "mock://cascade-ai"
+  },
+  "latestDecision": {
+    "timestamp": "2026-06-05T16:10:00.000Z",
+    "cycle_number": 123,
+    "mode": "live",
+    "portfolio_value_usdc": 7.898116100221645,
+    "position_count": 2,
+    "entries_allowed": true,
+    "action": "WAIT",
+    "symbol": "AAVE",
+    "position_size_usdc": 0,
+    "factor_scores": {
+      "volume_breakout": true,
+      "six_hour_high_break": true,
+      "regime_not_risk_off": true,
+      "slippage_under_cap": true,
+      "rsi_in_range": true,
+      "derivatives_risk_clear": true
+    },
+    "true_factor_count": 5,
+    "estimated_slippage_pct": 0,
+    "reason": "Waiting for stronger entry confirmation.",
+    "priced_target_count": 14
+  },
+  "decisions": [],
+  "latestExecution": {
+    "timestamp": "2026-06-05T15:16:00.000Z",
+    "action": "SWAP",
+    "from_symbol": "USDC",
+    "to_symbol": "BNB",
+    "amount_in": 0.5,
+    "max_slippage_pct": 0.5,
+    "expected_amount_out": 0.000828458273533057,
+    "result": {
+      "mode": "twak",
+      "provider": "LiquidMesh",
+      "input": "0.5 USDC",
+      "output": "0.000828458273533057 BNB",
+      "explorer": "https://bscscan.com/tx/0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94"
+    },
+    "tx_hash": "0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94",
+    "approval_hash": "0x5863c33ba5fbfd7016fae9dfe062d853213b198376862fd76ce81336a20fe7d0",
+    "error": null
+  },
+  "executions": [],
+  "positions": {
+    "positions": [
+      {
+        "symbol": "AAVE",
+        "amount_tokens": 0.005559374320855752,
+        "entry_price": 71.03208079286041,
+        "entry_value_usdc": 0.3948939259167793,
+        "highest_price": 71.09781002760573,
+        "trailing_stop_price": 68.60938667663953,
+        "take_profit_price": 76.71464725628925,
+        "opened_at": "2026-06-04T21:36:51.001089+00:00"
+      },
+      {
+        "symbol": "SHIB",
+        "amount_tokens": 174956740.11108723,
+        "entry_price": 2.255669528977881e-9,
+        "entry_value_usdc": 0.3946445875578817,
+        "highest_price": 2.255669528977881e-9,
+        "trailing_stop_price": 2.1767210954636553e-9,
+        "take_profit_price": 2.4361230912961118e-9,
+        "opened_at": "2026-06-04T22:14:04.737752+00:00"
+      }
+    ]
+  },
+  "guardrails": {
+    "daily_realized_loss": 0,
+    "daily_trade_count": 2,
+    "last_reset_date": "2026-06-05",
+    "portfolio_ath": 7.9
+  },
+  "balances": {
+    "bscAddress": {
+      "ok": true,
+      "data": {
+        "chain": "bsc",
+        "address": "0x7CE28f5d2D1B2eFd8f87FF0a7fdC7D2EaB465c9c"
+      }
+    },
+    "baseAddress": {
+      "ok": true,
+      "data": {
+        "chain": "base",
+        "address": "0x7CE28f5d2D1B2eFd8f87FF0a7fdC7D2EaB465c9c"
+      }
+    },
+    "portfolio": {
+      "ok": true,
+      "data": {
+        "total_usd": 10.73,
+        "custody": "local"
+      }
+    },
+    "bscBalance": {
+      "ok": true,
+      "data": {
+        "chain": "bsc",
+        "balances": [
+          { "chain": "bsc", "symbol": "BNB", "amount": 0.00241804, "valueUsd": 1.61 },
+          { "chain": "bsc", "symbol": "USDC", "amount": 7.90520501, "valueUsd": 7.91 },
+          { "chain": "bsc", "symbol": "AAVE", "amount": 0.0055593743, "valueUsd": 0.4 },
+          { "chain": "bsc", "symbol": "SHIB", "amount": 174956740.11108723, "valueUsd": 0.39 }
+        ]
+      }
+    },
+    "baseBalance": {
+      "ok": true,
+      "data": {
+        "chain": "base",
+        "balances": [
+          { "chain": "base", "symbol": "USDC", "amount": 0.42, "valueUsd": 0.42 },
+          { "chain": "base", "symbol": "x402", "amount": 1, "valueUsd": null }
+        ]
+      }
+    },
+    "bscHistory": {
+      "ok": true,
+      "data": [
+        {
+          "action": "swap",
+          "timestamp": "2026-06-05T15:16:00.000Z",
+          "input": "0.5 USDC",
+          "output": "0.000828458273533057 BNB",
+          "provider": "LiquidMesh",
+          "hash": "0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94",
+          "explorer": "https://bscscan.com/tx/0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94",
+          "status": "success"
+        }
+      ]
+    },
+    "baseHistory": {
+      "ok": true,
+      "data": [
+        {
+          "action": "x402 usage",
+          "timestamp": "2026-06-05T14:01:00.000Z",
+          "input": "0.01 USDC",
+          "output": "market data access",
+          "provider": "TWAK x402",
+          "txHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "explorer": "https://basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "status": "success"
+        }
+      ]
+    }
+  },
+  "wallet": {
+    "address": "0x7CE28f5d2D1B2eFd8f87FF0a7fdC7D2EaB465c9c",
+    "refreshedAt": "2026-06-05T16:11:00.000Z",
+    "portfolioTotalUsd": 10.73,
+    "balances": [
+      { "chain": "bsc", "symbol": "BNB", "amount": 0.00241804, "valueUsd": 1.61 },
+      { "chain": "bsc", "symbol": "USDC", "amount": 7.90520501, "valueUsd": 7.91 },
+      { "chain": "bsc", "symbol": "AAVE", "amount": 0.0055593743, "valueUsd": 0.4 },
+      { "chain": "bsc", "symbol": "SHIB", "amount": 174956740.11108723, "valueUsd": 0.39 },
+      { "chain": "base", "symbol": "USDC", "amount": 0.42, "valueUsd": 0.42 },
+      { "chain": "base", "symbol": "x402", "amount": 1, "valueUsd": null }
+    ],
+    "movements": [
+      {
+        "chain": "bsc",
+        "timestamp": "2026-06-05T15:16:00.000Z",
+        "action": "SWAP",
+        "fromSymbol": "USDC",
+        "toSymbol": "BNB",
+        "amountIn": 0.5,
+        "output": "0.000828458273533057 BNB",
+        "txHash": "0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94",
+        "approvalHash": "0x5863c33ba5fbfd7016fae9dfe062d853213b198376862fd76ce81336a20fe7d0",
+        "explorerUrl": "https://bscscan.com/tx/0x2b5db498c97d6c69af6718872feb749457e7e6434c17569a34a2f78ff64eda94",
+        "provider": "LiquidMesh",
+        "status": "success",
+        "source": "merged"
+      },
+      {
+        "chain": "base",
+        "timestamp": "2026-06-05T14:01:00.000Z",
+        "action": "x402 usage",
+        "fromSymbol": "USDC",
+        "toSymbol": "CMC",
+        "amountIn": 0.01,
+        "output": "market data access",
+        "txHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approvalHash": null,
+        "explorerUrl": "https://basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "provider": "TWAK x402",
+        "status": "success",
+        "source": "twak-history"
+      }
+    ],
+    "errors": []
+  },
+  "x402": {
+    "instrumented": false,
+    "paidCallCount": null,
+    "records": []
+  },
+  "files": {}
+}

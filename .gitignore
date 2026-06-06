@@ -12,13 +12,18 @@
 
 # testing
 /coverage
+**/coverage/
 
 # next.js
 /.next/
+**/.next/
 /out/
+**/out/
 
 # production
 /build
+**/build/
+**/dist/
 
 # misc
 .DS_Store
@@ -30,8 +35,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
+!**/.env.example
 
 # vercel
 .vercel
