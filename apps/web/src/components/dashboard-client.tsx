@@ -55,9 +55,45 @@ type MetricView = {
 type ActivityRow = {
   amount: string;
   hash: string;
-  status: "SUCCESS" | "PENDING" | "FAILED";
+  explorerUrl: string | null;
+  status: string;
   tone: "green" | "yellow" | "red";
 };
+
+const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
+
+function explorerUrlFor(chain: string | null | undefined, txHash: string | null | undefined): string | null {
+  if (!txHash || !TX_HASH_RE.test(txHash)) {
+    return null;
+  }
+
+  if (chain?.toLowerCase() === "base") {
+    return `https://basescan.org/tx/${txHash}`;
+  }
+
+  if (chain?.toLowerCase() === "bsc") {
+    return `https://bscscan.com/tx/${txHash}`;
+  }
+
+  return null;
+}
+
+function explorerUrlFromExecution(execution: StatusPayload["executions"][number]): string | null {
+  const txHash =
+    execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash);
+  const direct =
+    stringFromUnknown(execution.explorer) ??
+    stringFromUnknown(execution.result?.explorer) ??
+    stringFromUnknown(execution.result?.explorerUrl) ??
+    stringFromUnknown(execution.result?.explorer_url);
+
+  if (direct) {
+    return direct;
+  }
+
+  const chain = stringFromUnknown(execution.result?.chain) ?? "bsc";
+  return explorerUrlFor(chain, txHash);
+}
 
 type SystemView = {
   label: string;
@@ -125,6 +161,23 @@ function shortHash(value: string | null | undefined) {
 
 function stringFromUnknown(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function timeReference(timestamp: string | null | undefined) {
+  if (!timestamp) {
+    return "N/A";
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return timestamp;
+  }
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function numericPortfolioValues(data: StatusPayload | null) {
@@ -228,6 +281,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       return {
         amount: amountLabel(movement),
         hash: shortHash(movement.txHash),
+        explorerUrl: movement.explorerUrl ?? explorerUrlFor(movement.chain, movement.txHash),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
         tone: failed ? "red" : pending ? "yellow" : "green",
       } satisfies ActivityRow;
@@ -237,24 +291,93 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     return movements;
   }
 
-  return (
+  const executions =
     data?.executions.slice(0, 7).map((execution) => {
       const failed = executionFailed(execution);
       const pending = !executionSucceeded(execution) && !failed;
       const from = execution.from_symbol ?? "";
       const to = execution.to_symbol ?? "";
 
+      const txHash =
+        execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash);
+
       return {
         amount:
           typeof execution.amount_in === "number"
             ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
             : `${from}->${to}`,
-        hash: shortHash(execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash)),
+        hash: shortHash(txHash),
+        explorerUrl: explorerUrlFromExecution(execution),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
         tone: failed ? "red" : pending ? "yellow" : "green",
       } satisfies ActivityRow;
-    }) ?? []
-  );
+    }) ?? [];
+
+  if (executions.length > 0) {
+    return executions;
+  }
+
+  const decisions =
+    data?.decisions
+      .slice(-7)
+      .reverse()
+      .map((decision) => {
+        const action = decision.action;
+        const symbol = decision.symbol ?? "strategy";
+        const reason = decision.reason ? ` - ${decision.reason}` : "";
+        const event = `${action} ${symbol}${reason}`;
+
+        return {
+          amount: event,
+          hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
+          explorerUrl: null,
+          status: action,
+          tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+        } satisfies ActivityRow;
+      }) ?? [];
+
+  if (decisions.length > 0) {
+    return decisions;
+  }
+
+  const lastLogLine = data?.health.lastLogLine?.trim();
+  if (lastLogLine) {
+    return [
+      {
+        amount: lastLogLine,
+        hash: "agent.log",
+        explorerUrl: null,
+        status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
+        tone: data?.health.agentRunning ? "green" : "red",
+      },
+    ];
+  }
+
+  const fileRows = [
+    { label: "agent.log", file: data?.files.agentLog },
+    { label: "decision_log.jsonl", file: data?.files.decisionLog },
+    { label: "execution_log.jsonl", file: data?.files.executionLog },
+  ].flatMap(({ label, file }) => {
+    if (!file) {
+      return [];
+    }
+
+    return [
+      {
+        amount: file.exists ? `${label} detected, waiting for records` : `${label} not found`,
+        hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
+        explorerUrl: null,
+        status: file.exists ? "READY" : "MISSING",
+        tone: file.exists ? "yellow" : "red",
+      } satisfies ActivityRow,
+    ];
+  });
+
+  if (fileRows.length > 0) {
+    return fileRows;
+  }
+
+  return [];
 }
 
 function systemView(data: StatusPayload | null, error: string | null, latencyMs: number | null): SystemView {
@@ -367,65 +490,52 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
       target="_blank"
       rel="noreferrer"
       className={cx(
-        "group block w-full text-left transition-colors",
-        compact ? "p-0 hover:opacity-90" : "border border-[#1A1A1A] bg-[#070707] p-3 hover:border-[#2A2A2A] hover:bg-[#0B0B0B]",
+        "group block w-full border border-[#1A1A1A] bg-[#070707] text-left transition-colors hover:border-[#2A2A2A] hover:bg-[#0B0B0B]",
+        compact ? "p-2" : "p-3",
       )}
       aria-label="Open cascade-ai project on GitHub"
     >
-      <span className={cx("flex min-w-0 justify-between", compact ? "items-center gap-2" : "items-start gap-3")}>
-        <span className={cx("flex min-w-0 items-center", compact ? "gap-2" : "gap-2.5")}>
-          <span
-            className={cx(
-              "grid shrink-0 place-items-center border border-[#242424] bg-[#111111] text-white",
-              compact ? "h-6 w-6" : "h-8 w-8",
-            )}
-          >
-            <Github size={compact ? 13 : 16} />
-          </span>
-          <span className="min-w-0">
-            <span
-              className={cx(
-                "block truncate font-mono uppercase tracking-[0.18em] text-[#777777]",
-                compact ? "text-[9px] leading-3" : "text-[10px] leading-4",
-              )}
-            >
-              {projectRepository.owner}
-            </span>
-            <span className={cx("block truncate font-semibold text-[#F2F2F2]", compact ? "text-xs leading-4" : "text-sm leading-5")}>
-              {projectRepository.name}
+        <span className={cx("flex min-w-0 justify-between", compact ? "items-center gap-2" : "items-start gap-3")}>
+          <span className={cx("flex min-w-0 items-center", compact ? "gap-2" : "gap-2.5")}>
+            <Github size={compact ? 13 : 16} className="shrink-0 text-white" />
+            <span className="min-w-0">
+              <span
+                className={cx(
+                  "block truncate font-mono uppercase tracking-[0.18em] text-[#777777]",
+                  compact ? "text-[9px] leading-3" : "text-[10px] leading-4",
+                )}
+              >
+                {projectRepository.owner}
+              </span>
+              <span className={cx("block truncate font-semibold text-[#F2F2F2]", compact ? "text-xs leading-4" : "text-sm leading-5")}>
+                {projectRepository.name}
+              </span>
             </span>
           </span>
+          <ExternalLink
+            size={compact ? 12 : 14}
+            className="shrink-0 text-[#8A8A8A] transition-colors group-hover:text-white"
+          />
         </span>
-        <span
-          className={cx(
-            "grid shrink-0 place-items-center border border-[#242424] bg-[#111111] text-[#8A8A8A] transition-colors group-hover:text-white",
-            compact ? "h-6 w-6" : "h-8 w-8",
-          )}
-        >
-          <ExternalLink size={compact ? 12 : 14} />
-        </span>
-      </span>
-      {compact ? (
-        <span className="mt-1.5 flex min-w-0 items-center gap-2">
-          <span className="inline-flex shrink-0 items-center gap-1 border border-[#202020] bg-black px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.18em] text-[#A8A8A8]">
-            <PythonLogo className="h-2.5 w-2.5 shrink-0" />
-            Python
+        {compact ? (
+          <span className="mt-1.5 flex min-w-0 items-center gap-2">
+            <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[8px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+              <PythonLogo className="h-2.5 w-2.5 shrink-0" />
+              Python
+            </span>
+            <span className="min-w-0 truncate text-[10px] leading-4 text-[#BDBDBD]">{projectRepository.description}</span>
           </span>
-          <span className="min-w-0 truncate text-[10px] leading-4 text-[#BDBDBD]">{projectRepository.description}</span>
-        </span>
-      ) : (
-        <>
-          <span className="mt-3 flex items-center">
-            <span className="inline-flex items-center gap-1.5 border border-[#202020] bg-black px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+        ) : (
+          <>
+            <span className="mt-3 inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
               <PythonLogo className="h-3 w-3 shrink-0" />
               Python
             </span>
-          </span>
-          <span className="mt-3 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-            {projectRepository.description}
-          </span>
-        </>
-      )}
+            <span className="mt-3 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+              {projectRepository.description}
+            </span>
+          </>
+        )}
     </a>
   );
 }
@@ -460,7 +570,13 @@ function DesktopSidebar() {
           );
         })}
       </nav>
-      <div className="mt-auto border-t border-[#1A1A1A] px-5 py-5">
+      <div className="mt-auto px-3 py-4">
+        <button className="flex h-12 w-full items-center gap-3 border border-[#333333] bg-[#171717] px-3 font-mono text-[13px] text-white transition-colors hover:border-[#4A4A4A] hover:bg-[#202020]">
+          <Download size={17} className="shrink-0 text-[#A3A3A3]" />
+          <span>Export CSV</span>
+        </button>
+      </div>
+      <div className="border-t border-[#1A1A1A] px-5 py-5">
         <div className="flex items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#2A2A2A] bg-[#0A0A0A] text-[#D8D8D8]">
             <CircleUserRound size={19} />
@@ -472,21 +588,6 @@ function DesktopSidebar() {
         </div>
       </div>
     </aside>
-  );
-}
-
-function DesktopHeader() {
-  return (
-    <header className="flex h-20 shrink-0 items-center justify-between border-b border-[#1A1A1A] bg-[#050505]/95 px-8">
-      <div className="min-w-0">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7A7A7A]">VibeCoded UI v0.3.1</div>
-        <div className="mt-1 truncate text-sm text-[#D4D4D4]">{projectRepository.title}</div>
-      </div>
-      <button className="inline-flex h-10 items-center gap-2 border border-[#333333] bg-[#171717] px-5 font-mono text-sm text-white transition-colors hover:border-[#4A4A4A] hover:bg-[#202020]">
-        <Download size={16} />
-        <span className="font-mono">Export CSV</span>
-      </button>
-    </header>
   );
 }
 
@@ -575,8 +676,8 @@ function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compac
       </colgroup>
       <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
         <tr>
-          <th className="px-4 py-4">Amount</th>
-          <th className="px-1 py-4">TX Hash</th>
+          <th className="px-4 py-4">Event</th>
+          <th className="px-1 py-4">Reference</th>
           <th className="px-4 py-4 text-right">Status</th>
         </tr>
       </thead>
@@ -584,7 +685,21 @@ function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compac
         {(compact ? rows.slice(0, 4) : rows).map((row, index) => (
           <tr key={`${row.hash}-${row.amount}-${index}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
             <td className="truncate px-4 py-5 font-mono text-[13px] font-bold tabular-nums">{row.amount}</td>
-            <td className="truncate px-1 py-5 font-mono text-[12px] font-bold text-[#D0D0D0]">{row.hash}</td>
+            <td className="truncate px-1 py-5 font-mono text-[12px] font-bold text-[#D0D0D0]">
+              {row.explorerUrl ? (
+                <a
+                  href={row.explorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#8FD9FF] transition-colors hover:text-white"
+                  title={row.explorerUrl}
+                >
+                  {row.hash}
+                </a>
+              ) : (
+                row.hash
+              )}
+            </td>
             <td className="px-4 py-4 text-right">
               <StatusBadge status={row.status} tone={row.tone} />
             </td>
@@ -656,8 +771,7 @@ function DesktopDashboard({ view }: { view: DashboardViewModel }) {
     <div className="hidden min-h-screen bg-black text-white lg:flex">
       <DesktopSidebar />
       <main className="technical-grid min-w-0 flex-1 pb-9">
-        <DesktopHeader />
-        <section className="grid min-h-[calc(100vh-116px)] grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,65fr)_minmax(330px,35fr)] 2xl:grid-cols-[minmax(0,65fr)_minmax(400px,35fr)]">
+        <section className="grid min-h-[calc(100vh-36px)] grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,65fr)_minmax(330px,35fr)] 2xl:grid-cols-[minmax(0,65fr)_minmax(400px,35fr)]">
           <DesktopPerformancePanel view={view} />
           <DesktopRecentActivity rows={view.activityRows} />
         </section>
