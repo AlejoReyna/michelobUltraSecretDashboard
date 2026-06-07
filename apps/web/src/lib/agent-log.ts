@@ -1,4 +1,5 @@
-import { decisionFactorSummary } from "@/lib/factor-scoring";
+import { decisionFactorSummary, resolveStrategyMode } from "@/lib/factor-scoring";
+import { scalpingFactorSummary } from "@/lib/scalping-scoring";
 import type { Decision, StatusPayload } from "@/lib/schemas";
 
 export type AgentLogView = {
@@ -53,7 +54,13 @@ export function resolveAgentLogLine(data: StatusPayload | null): AgentLogView {
 export function formatDecisionEvent(decision: Decision): string {
   const symbol = decision.symbol ?? "strategy";
   const reason = decision.reason ? ` — ${decision.reason}` : "";
-  const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
+  const strategyMode = resolveStrategyMode(decision);
+  const factors =
+    decision.factor_scores && Object.keys(decision.factor_scores).length > 0
+      ? strategyMode === "scalping"
+        ? ` (${scalpingFactorSummary(decision)})`
+        : ` (${decisionFactorSummary(decision)})`
+      : "";
 
   return `${symbol}${factors}${reason}`;
 }

@@ -8,8 +8,15 @@ import {
   ENTRY_FACTOR_COUNT,
   ENTRY_FACTOR_KEYS,
   entryFactorStats,
+  resolveStrategyMode,
   type EntryFactorKey,
 } from "@/lib/factor-scoring";
+import {
+  SCALPING_ENTRY_SCORE_MAX,
+  SCALPING_ENTRY_SCORE_MIN,
+  scalpingFactorStats,
+  type ScalpingFactorKey,
+} from "@/lib/scalping-scoring";
 import type { StatusPayload } from "@/lib/schemas";
 
 type FactorMeta = {
@@ -146,6 +153,44 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   true_factor_count: 5,
   estimated_slippage_pct: 0.11,
   reason: "Waiting for six hour high confirmation.",
+  priced_target_count: 149,
+};
+
+const SCALPING_FACTORS: Array<{
+  key: ScalpingFactorKey;
+  title: string;
+  weight: number;
+  plain: string;
+}> = [
+  { key: "micro_momentum", title: "Micro-momentum", weight: 30, plain: "Price above EMA(9) with elevated 5m volume." },
+  { key: "slippage_ok", title: "Slippage OK", weight: 25, plain: "Estimated slippage stays under 0.3%." },
+  { key: "regime_neutro", title: "Regime neutral", weight: 20, plain: "Market is not in risk-off mode." },
+  { key: "no_whale_dump", title: "No whale dump", weight: 15, plain: "Token is not down more than 2% in the last hour." },
+  { key: "gas_viable", title: "Gas viable", weight: 10, plain: "BSC gas is below 5 gwei." },
+];
+
+const SIMULATED_SCALPING_SIGNAL: ExampleDecision = {
+  timestamp: "2026-06-06T14:25:00.000Z",
+  cycle_number: 143,
+  mode: "paper",
+  portfolio_value_usdc: 1156.89,
+  position_count: 0,
+  entries_allowed: true,
+  action: "ENTER",
+  symbol: "CAKE",
+  position_size_usdc: 11.57,
+  strategy_mode: "scalping",
+  entry_score: 65,
+  factor_scores: {
+    micro_momentum: true,
+    slippage_ok: true,
+    regime_neutro: true,
+    no_whale_dump: true,
+    gas_viable: false,
+  },
+  true_factor_count: 3,
+  estimated_slippage_pct: 0.001,
+  reason: "scalping score 65/100 >= 60",
   priced_target_count: 149,
 };
 
@@ -297,6 +342,27 @@ function FactorScoreBar({ passed, total }: { passed: number; total: number }) {
   );
 }
 
+function ScalpingScoreBar({ score, max }: { score: number; max: number }) {
+  const filled = Math.max(0, Math.min(max, Math.round(score)));
+  return (
+    <div className="flex gap-1">
+      {Array.from({ length: max / 10 }).map((_, index) => {
+        const threshold = (index + 1) * 10;
+        const active = filled >= threshold;
+        return (
+          <div
+            key={threshold}
+            className={cx(
+              "h-1.5 flex-1 border",
+              active ? "border-[#444] bg-[#666]" : "border-[#1A1A1A] bg-[#0A0A0A]",
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function DecisionSnapshot({
   decision,
   heading = "Latest cycle snapshot",
@@ -306,8 +372,15 @@ function DecisionSnapshot({
   heading?: string;
   badge?: string;
 }) {
-  const stats = entryFactorStats(decision);
+  const strategyMode = resolveStrategyMode(decision);
+  const breakoutStats = entryFactorStats(decision);
+  const scalpingStats = scalpingFactorStats(decision);
   const action = String(decision.action ?? "WAIT").toUpperCase();
+  const resolvedBadge =
+    badge ??
+    (strategyMode === "scalping"
+      ? `${scalpingStats.score}/${scalpingStats.max} · ${action}`
+      : `${breakoutStats.passed}/${breakoutStats.total} · ${action}`);
 
   return (
     <div className="border border-[#2A2A2A] bg-black/88">
@@ -315,9 +388,12 @@ function DecisionSnapshot({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#757575]">{heading}</div>
-            {badge ? (
+            <span className="border border-[#2A2A2A] bg-[#0A0A0A] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#8A8A8A]">
+              {strategyMode}
+            </span>
+            {resolvedBadge ? (
               <span className="border border-[#2A2A2A] bg-[#0A0A0A] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#8A8A8A]">
-                {badge}
+                {resolvedBadge}
               </span>
             ) : null}
           </div>
@@ -330,37 +406,69 @@ function DecisionSnapshot({
       <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center justify-between font-mono text-[11px] text-[#A8A8A8]">
-            <span>Factor score</span>
+            <span>{strategyMode === "scalping" ? "Entry score" : "Factor score"}</span>
             <span className="text-white">
-              {stats.passed}/{stats.total} required
+              {strategyMode === "scalping"
+                ? `${scalpingStats.score}/${scalpingStats.max} required ${SCALPING_ENTRY_SCORE_MIN}+`
+                : `${breakoutStats.passed}/${breakoutStats.total} required`}
             </span>
           </div>
-          <FactorScoreBar passed={stats.passed} total={stats.total} />
+          {strategyMode === "scalping" ? (
+            <ScalpingScoreBar score={scalpingStats.score} max={SCALPING_ENTRY_SCORE_MAX} />
+          ) : (
+            <FactorScoreBar passed={breakoutStats.passed} total={breakoutStats.total} />
+          )}
         </div>
         <div className="font-mono text-[11px] leading-5 text-[#A8A8A8]">
           <span className="text-[#757575]">Reason: </span>
           <span className="text-[#DADADA]">{decision.reason?.trim() || "—"}</span>
+          {decision.exit_reason ? (
+            <div className="mt-2">
+              <span className="text-[#757575]">Exit: </span>
+              <span className="text-[#DADADA]">{decision.exit_reason}</span>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="grid gap-2 border-t border-[#1A1A1A] px-5 py-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ENTRY_FACTOR_KEYS.map((key) => {
-          const meta = ENTRY_FACTORS.find((f) => f.key === key);
-          const passed = Boolean(decision.factor_scores?.[key]);
-          return (
-            <div
-              key={key}
-              className={cx(
-                "flex items-start gap-2 border px-3 py-2 font-mono text-[11px]",
-                passed ? "border-[#333] bg-[#111] text-[#DADADA]" : "border-[#1A1A1A] text-[#666]",
-              )}
-            >
-              <span className={passed ? "text-[#8A8A8A]" : "text-[#333]"} aria-hidden>
-                {passed ? "—" : "·"}
-              </span>
-              <span>{meta?.title ?? key}</span>
-            </div>
-          );
-        })}
+        {strategyMode === "scalping"
+          ? SCALPING_FACTORS.map((factor) => {
+              const passed = Boolean(decision.factor_scores?.[factor.key]);
+              return (
+                <div
+                  key={factor.key}
+                  className={cx(
+                    "flex items-start gap-2 border px-3 py-2 font-mono text-[11px]",
+                    passed ? "border-[#333] bg-[#111] text-[#DADADA]" : "border-[#1A1A1A] text-[#666]",
+                  )}
+                >
+                  <span className={passed ? "text-[#8A8A8A]" : "text-[#333]"} aria-hidden>
+                    {passed ? "—" : "·"}
+                  </span>
+                  <span>
+                    {factor.title} ({factor.weight}%)
+                  </span>
+                </div>
+              );
+            })
+          : ENTRY_FACTOR_KEYS.map((key) => {
+              const meta = ENTRY_FACTORS.find((f) => f.key === key);
+              const passed = Boolean(decision.factor_scores?.[key]);
+              return (
+                <div
+                  key={key}
+                  className={cx(
+                    "flex items-start gap-2 border px-3 py-2 font-mono text-[11px]",
+                    passed ? "border-[#333] bg-[#111] text-[#DADADA]" : "border-[#1A1A1A] text-[#666]",
+                  )}
+                >
+                  <span className={passed ? "text-[#8A8A8A]" : "text-[#333]"} aria-hidden>
+                    {passed ? "—" : "·"}
+                  </span>
+                  <span>{meta?.title ?? key}</span>
+                </div>
+              );
+            })}
       </div>
     </div>
   );
@@ -412,6 +520,7 @@ export function DecisionAlgorithmPanel({
   const wideLayout = desktop || !compact;
   const chapterGap = compact ? "mt-8" : desktop ? "mt-10" : "mt-12";
   const panelClass = "border border-[#2A2A2A] bg-black/88 p-4";
+  const activeStrategy = latestDecision ? resolveStrategyMode(latestDecision) : "breakout";
 
   return (
     <section
@@ -542,22 +651,44 @@ export function DecisionAlgorithmPanel({
         <ViewportReveal variant={chapterRevealVariant(2)} delay={40} duration="slow">
           <ChapterDivider
             number="03"
-            title="The six factors"
-            subtitle="Each factor is a yes/no gate. Expand decision rows in Activity to see these same flags."
+            title={activeStrategy === "scalping" ? "Scalping score factors" : "The six factors"}
+            subtitle={
+              activeStrategy === "scalping"
+                ? "Weighted score 0–100. Entry when score ≥ 60. Fixed TP +1.5%, SL −0.8%, max hold 30 min."
+                : "Each factor is a yes/no gate. Expand decision rows in Activity to see these same flags."
+            }
             chapterIndex={2}
           />
         </ViewportReveal>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ENTRY_FACTORS.map((factor, index) => (
-            <ViewportReveal
-              key={factor.key}
-              variant={factorRevealVariant(index)}
-              delay={80 + index * 50}
-              duration={index % 2 === 0 ? "normal" : "slow"}
-            >
-              <FactorCard factor={factor} index={index} />
-            </ViewportReveal>
-          ))}
+          {activeStrategy === "scalping"
+            ? SCALPING_FACTORS.map((factor, index) => (
+                <ViewportReveal
+                  key={factor.key}
+                  variant={factorRevealVariant(index)}
+                  delay={80 + index * 50}
+                  duration={index % 2 === 0 ? "normal" : "slow"}
+                >
+                  <article className="flex flex-col border border-[#2A2A2A] bg-black/88">
+                    <div className="border-b border-[#1A1A1A] px-4 py-3">
+                      <h3 className="font-mono text-sm font-semibold text-white">
+                        {factor.title} · {factor.weight}%
+                      </h3>
+                      <p className="mt-1 font-mono text-[12px] leading-5 text-[#A8A8A8]">{factor.plain}</p>
+                    </div>
+                  </article>
+                </ViewportReveal>
+              ))
+            : ENTRY_FACTORS.map((factor, index) => (
+                <ViewportReveal
+                  key={factor.key}
+                  variant={factorRevealVariant(index)}
+                  delay={80 + index * 50}
+                  duration={index % 2 === 0 ? "normal" : "slow"}
+                >
+                  <FactorCard factor={factor} index={index} />
+                </ViewportReveal>
+              ))}
         </div>
       </div>
 
@@ -695,11 +826,15 @@ export function DecisionAlgorithmPanel({
           </ViewportReveal>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <ViewportReveal variant="scale" delay={100}>
-              <DecisionSnapshot
-                decision={SIMULATED_PASSING_SIGNAL}
-                heading="Passing signal"
-                badge="6/6 · ENTER"
-              />
+              {activeStrategy === "scalping" ? (
+                <DecisionSnapshot decision={SIMULATED_SCALPING_SIGNAL} heading="Scalping entry" />
+              ) : (
+                <DecisionSnapshot
+                  decision={SIMULATED_PASSING_SIGNAL}
+                  heading="Passing signal"
+                  badge="6/6 · ENTER"
+                />
+              )}
             </ViewportReveal>
             <ViewportReveal variant="blur" delay={180} duration="slow">
               <DecisionSnapshot

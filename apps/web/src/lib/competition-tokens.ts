@@ -1,3 +1,4 @@
+import { COMPETITION_TOKEN_LOGOS } from "@/lib/competition-token-logos";
 import type { StatusPayload } from "@/lib/schemas";
 
 // BNB Hack Track 1 eligible BEP-20 tokens (149-token allowlist).
@@ -323,6 +324,10 @@ export function competitionTokenKey(symbol: string) {
   }
 
   return trimmed;
+}
+
+export function competitionTokenLogoUrl(symbol: string): string | null {
+  return COMPETITION_TOKEN_LOGOS[competitionTokenKey(symbol)] ?? null;
 }
 
 export function isCompetitionToken(symbol: string) {

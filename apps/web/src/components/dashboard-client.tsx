@@ -3,6 +3,7 @@
 import {
   Fragment,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -23,7 +24,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
-import { TypewriterText } from "@/components/typewriter-text";
 import {
   ViewportReveal,
   activityCellDelay,
@@ -50,10 +50,16 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
-  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
+import {
+  cycleCountdownMs,
+  formatCycleCountdown,
+  inferCycleIntervalMs,
+  nextCycleAt,
+} from "@/lib/cycle-timing";
+import { resolveStrategyMode } from "@/lib/factor-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -132,6 +138,9 @@ type ActivityRow = {
   tone: "green" | "yellow" | "red";
   details?: LogEventDetails;
 };
+
+const ACTIVITY_ROWS_PER_PAGE = 10;
+const ACTIVITY_ROWS_PER_PAGE_MOBILE = 7;
 
 type PositionRow = {
   id: string;
@@ -830,49 +839,6 @@ function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" 
   );
 }
 
-function decisionAccentBarClass(tone: "green" | "yellow" | "red") {
-  if (tone === "green") {
-    return "bg-[#00FF66]/70";
-  }
-
-  if (tone === "red") {
-    return "bg-[#FF3737]/70";
-  }
-
-  return "bg-[#FFD21A]/70";
-}
-
-function LatestDecisionLogEntry({
-  decision,
-  compact = false,
-}: {
-  decision: NonNullable<StatusPayload["latestDecision"]>;
-  compact?: boolean;
-}) {
-  const tone = decisionActionTone(decision.action);
-  const decisionText = formatDecisionEvent(decision);
-
-  return (
-    <div className="flex border border-[#2A2A2A]">
-      <div className={cx("w-0.5 shrink-0", decisionAccentBarClass(tone))} aria-hidden="true" />
-      <ViewportReveal
-        variant="scale"
-        duration="slow"
-        className={cx("min-w-0 flex-1 bg-black/88", compact ? "px-4 py-4" : "px-5 py-4")}
-      >
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-          Last decision
-        </div>
-        <TypewriterText
-          text={decisionText}
-          className="break-words font-mono text-[12px] leading-5 text-[#DADADA]"
-          startDelay={520}
-        />
-      </ViewportReveal>
-    </div>
-  );
-}
-
 function formatTokenAmount(value: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "N/A";
@@ -1016,7 +982,6 @@ function WalletPanel({
   const paperMode = agentMode === "PAPER";
   const totalValue = balances.reduce((sum, balance) => sum + (balance.valueUsd ?? 0), 0);
   const flat = panelUsesFlatChrome(compact, desktop);
-  const headerPadding = compact ? "px-4 py-4" : desktop ? "px-0 py-0 pb-4" : "px-5 py-5";
   const tableCompact = flat;
 
   useEffect(() => {
@@ -1026,45 +991,41 @@ function WalletPanel({
   return (
     <section
       className={cx(
-        compact && "flex min-h-0 flex-1 flex-col px-4 pt-4",
-        desktop && "flex min-h-0 flex-1 flex-col px-8 pt-6",
+        "flex min-h-0 flex-col",
+        compact && "flex-1 px-4 pt-4",
+        desktop && "flex-1 px-8 pt-6",
         !flat && "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
       )}
     >
-      <div className={cx("border-b border-[#1A1A1A]", headerPadding, flat && "shrink-0")}>
-        <div className="flex items-start justify-between gap-4">
-          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
-              <h1
-                className={cx(
-                  "mt-1 font-mono font-semibold leading-tight text-white",
-                  flat ? "text-[28px]" : "text-[32px]",
-                )}
-              >
-                Live Holdings
-              </h1>
-            </div>
-          </ViewportReveal>
-          <div className="shrink-0 text-right font-mono">
-            <ViewportReveal variant="fade" delay={70} duration="fast">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
-                {balances.length} {balances.length === 1 ? "token" : "tokens"}
-              </div>
-            </ViewportReveal>
-            <ViewportReveal variant="scale" delay={130} duration="slow">
-              <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
-            </ViewportReveal>
-            {paperMode ? (
-              <ViewportReveal variant="down" delay={190} duration="fast">
-                <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "border-b border-[#1A1A1A] px-5 py-5")}>
+        <ViewportReveal variant="blur" duration="slow">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
+          <div className="mt-2 flex items-start justify-between gap-4">
+            <h1
+              className={cx(
+                "font-mono font-semibold leading-tight text-white",
+                flat ? "text-[28px]" : "text-[32px]",
+              )}
+            >
+              Live Holdings
+            </h1>
+            <div className="shrink-0 text-right font-mono">
+              <ViewportReveal variant="fade" delay={70} duration="fast">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+                  {balances.length} {balances.length === 1 ? "token" : "tokens"}
+                </div>
               </ViewportReveal>
-            ) : null}
+              <ViewportReveal variant="scale" delay={130} duration="slow">
+                <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
+              </ViewportReveal>
+              {paperMode ? (
+                <ViewportReveal variant="down" delay={190} duration="fast">
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+                </ViewportReveal>
+              ) : null}
+            </div>
           </div>
-        </div>
-        {flat ? (
-          <ViewportReveal variant="expand" delay={220} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
-        ) : null}
+        </ViewportReveal>
       </div>
 
       <div
@@ -1212,6 +1173,7 @@ function ActivityTableRow({
   row,
   index,
   compact,
+  dense = false,
   expandable,
   expanded,
   mode,
@@ -1221,6 +1183,7 @@ function ActivityTableRow({
   row: ActivityRow;
   index: number;
   compact: boolean;
+  dense?: boolean;
   expandable: boolean;
   expanded: boolean;
   mode: ActivityFeedMode;
@@ -1240,7 +1203,12 @@ function ActivityTableRow({
         )}
         onClick={canExpand ? onToggle : undefined}
       >
-        <td className={cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-4 py-5")}>
+        <td
+          className={cx(
+            "font-mono font-bold text-[#F2F2F2]",
+            dense ? "px-1 py-1.5 text-[9px] leading-4" : compact ? "px-3 py-2 text-[13px]" : "px-4 py-5 text-[13px]",
+          )}
+        >
           <ViewportReveal
             as="span"
             variant={activityLeadEventVariant(index, mode)}
@@ -1265,7 +1233,12 @@ function ActivityTableRow({
             <span className="truncate">{row.amount}</span>
           </ViewportReveal>
         </td>
-        <td className={cx("truncate font-mono text-[12px] text-[#D0D0D0]", compact ? "px-2 py-2" : "px-1 py-5")}>
+        <td
+          className={cx(
+            "truncate font-mono text-[#D0D0D0]",
+            dense ? "px-1 py-1.5 text-[8px] leading-4" : compact ? "px-2 py-2 text-[12px]" : "px-1 py-5 text-[12px]",
+          )}
+        >
           <ViewportReveal
             as="span"
             variant={activityReferenceVariant(mode)}
@@ -1289,18 +1262,19 @@ function ActivityTableRow({
             )}
           </ViewportReveal>
         </td>
-        <td className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>
+        <td className={cx(dense ? "px-1 py-1.5" : compact ? "px-2 py-2" : "px-3 py-4")}>
           <ViewportReveal
             as="span"
             variant={activityStatusVariant(row.tone)}
             delay={activityCellDelay(index, "status")}
             root={scrollRoot}
-            className="flex min-w-0 items-center gap-1.5"
+            className="flex min-w-0 items-center gap-1"
           >
             <StatusDot status={row.status} tone={row.tone} />
             <span
               className={cx(
-                "truncate font-mono text-[10px] font-bold uppercase tracking-[0.06em]",
+                "truncate font-mono font-bold uppercase tracking-[0.06em]",
+                dense ? "text-[8px]" : "text-[10px]",
                 statusToneTextClass(row.tone),
               )}
             >
@@ -1322,20 +1296,113 @@ function ActivityTableRow({
   );
 }
 
+function RowPaginator({
+  page,
+  totalPages,
+  totalRows,
+  pageSize,
+  onPageChange,
+  compact = false,
+}: {
+  page: number;
+  totalPages: number;
+  totalRows: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  compact?: boolean;
+}) {
+  if (totalRows <= pageSize) {
+    return null;
+  }
+
+  const start = page * pageSize + 1;
+  const end = Math.min(totalRows, (page + 1) * pageSize);
+
+  return (
+    <div
+      className={cx(
+        "flex shrink-0 items-center justify-between gap-3 border-t border-[#1A1A1A] bg-black/88 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8A8A8A]",
+        compact ? "px-3 py-2" : "px-4 py-3",
+      )}
+    >
+      <span className="tabular-nums">
+        {start}–{end} of {totalRows}
+      </span>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page === 0}
+          aria-label="Previous page"
+          className={cx(
+            "transition-colors",
+            page === 0 ? "cursor-not-allowed text-[#444444]" : "text-[#B8B8B8] hover:text-white",
+          )}
+        >
+          Prev
+        </button>
+        <span className="tabular-nums text-[#B8B8B8]">
+          {page + 1} / {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages - 1}
+          aria-label="Next page"
+          className={cx(
+            "transition-colors",
+            page >= totalPages - 1 ? "cursor-not-allowed text-[#444444]" : "text-[#B8B8B8] hover:text-white",
+          )}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RecentActivity({
   rows,
   compact = false,
+  dense = false,
   expandable = false,
   mode = "logs",
   scrollRoot = null,
+  scrollContainerRef,
+  className,
+  rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
   compact?: boolean;
+  dense?: boolean;
   expandable?: boolean;
   mode?: ActivityFeedMode;
   scrollRoot?: Element | null;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  className?: string;
+  rowsPerPage?: number;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedRows = rows.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+
+  useEffect(() => {
+    if (page !== safePage) {
+      setPage(safePage);
+    }
+  }, [page, safePage]);
+
+  useEffect(() => {
+    setPage(0);
+    setExpandedIds(new Set());
+  }, [rowsPerPage]);
+
+  const goToPage = (nextPage: number) => {
+    setPage(Math.max(0, Math.min(nextPage, totalPages - 1)));
+    setExpandedIds(new Set());
+  };
 
   const toggleRow = (id: string) => {
     setExpandedIds((current) => {
@@ -1350,68 +1417,91 @@ function RecentActivity({
   };
 
   return (
-    <table className="w-full table-fixed border-collapse text-left">
-      <colgroup>
-        <col className={expandable ? "w-[36%]" : "w-[34%]"} />
-        <col className="w-[32%]" />
-        <col className="w-[32%]" />
-      </colgroup>
-      <thead
+    <div className={cx("flex min-h-0 flex-col", className)}>
+      <div
+        ref={scrollContainerRef}
         className={cx(
-          "font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
-          compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+          "console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto",
+          !compact && "max-h-[min(70vh,720px)]",
         )}
       >
-        <tr>
-          <ActivityHeaderCell
-            column="event"
-            label="Event"
-            mode={mode}
-            expandable={expandable}
-            className={cx(compact ? "px-3 py-2" : "px-4 py-4")}
-          />
-          <ActivityHeaderCell
-            column="reference"
-            label="Reference"
-            mode={mode}
-            className={cx(compact ? "px-2 py-2" : "px-1 py-4")}
-          />
-          <ActivityHeaderCell
-            column="status"
-            label="Status"
-            mode={mode}
-            className={cx(compact ? "px-2 py-2" : "px-3 py-4")}
-          />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <ActivityTableRow
-            key={row.id}
-            row={row}
-            index={index}
-            compact={compact}
-            expandable={expandable}
-            expanded={expandable && expandedIds.has(row.id)}
-            mode={mode}
-            scrollRoot={scrollRoot}
-            onToggle={() => toggleRow(row.id)}
-          />
-        ))}
-        {rows.length === 0 ? (
-          <tr className="border-b border-[#1A1A1A]">
-            <td
-              className={cx("font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3 py-4" : "px-4 py-5")}
-              colSpan={3}
-            >
-              <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
-                Waiting for telemetry
-              </ViewportReveal>
-            </td>
-          </tr>
-        ) : null}
-      </tbody>
-    </table>
+        <table className="w-full table-fixed border-collapse text-left">
+          <colgroup>
+            <col className={expandable ? "w-[36%]" : "w-[34%]"} />
+            <col className="w-[32%]" />
+            <col className="w-[32%]" />
+          </colgroup>
+          <thead
+            className={cx(
+              "font-mono font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
+              dense ? "text-[8px]" : "text-[10px]",
+              compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+            )}
+          >
+            <tr>
+              <ActivityHeaderCell
+                column="event"
+                label="Event"
+                mode={mode}
+                expandable={expandable}
+                className={cx(dense ? "px-1 py-1.5" : compact ? "px-3 py-2" : "px-4 py-4")}
+              />
+              <ActivityHeaderCell
+                column="reference"
+                label="Reference"
+                mode={mode}
+                className={cx(dense ? "px-1 py-1.5" : compact ? "px-2 py-2" : "px-1 py-4")}
+              />
+              <ActivityHeaderCell
+                column="status"
+                label="Status"
+                mode={mode}
+                className={cx(dense ? "px-1 py-1.5" : compact ? "px-2 py-2" : "px-3 py-4")}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {pagedRows.map((row, index) => (
+              <ActivityTableRow
+                key={row.id}
+                row={row}
+                index={index}
+                compact={compact}
+                dense={dense}
+                expandable={expandable}
+                expanded={expandable && expandedIds.has(row.id)}
+                mode={mode}
+                scrollRoot={scrollRoot}
+                onToggle={() => toggleRow(row.id)}
+              />
+            ))}
+            {rows.length === 0 ? (
+              <tr className="border-b border-[#1A1A1A]">
+                <td
+                  className={cx(
+                    "font-mono text-[#8A8A8A]",
+                    dense ? "px-1 py-3 text-[9px]" : compact ? "px-3 py-4 text-[12px]" : "px-4 py-5 text-[12px]",
+                  )}
+                  colSpan={3}
+                >
+                  <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                    Waiting for telemetry
+                  </ViewportReveal>
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+      <RowPaginator
+        page={safePage}
+        totalPages={totalPages}
+        totalRows={rows.length}
+        pageSize={rowsPerPage}
+        onPageChange={goToPage}
+        compact={compact || dense}
+      />
+    </div>
   );
 }
 
@@ -1729,6 +1819,195 @@ function ActivePositionsPanel({
   );
 }
 
+function useNow(tickMs = 1000) {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const interval = window.setInterval(onStoreChange, tickMs);
+      return () => window.clearInterval(interval);
+    },
+    () => Date.now(),
+    () => Date.now(),
+  );
+}
+
+function LiveScanPanel({
+  latestDecision,
+  decisions,
+  agentRunning,
+  compact = false,
+  mobileFit = false,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  decisions: StatusPayload["decisions"];
+  agentRunning: boolean;
+  compact?: boolean;
+  mobileFit?: boolean;
+}) {
+  const now = useNow();
+  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
+  const nextAt = useMemo(
+    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
+    [intervalMs, latestDecision?.timestamp],
+  );
+  const remainingMs = cycleCountdownMs(nextAt, now);
+  const countdownLabel =
+    remainingMs === null
+      ? "N/A"
+      : remainingMs <= 0
+        ? agentRunning
+          ? "Scanning…"
+          : "Due now"
+        : formatCycleCountdown(remainingMs);
+
+  const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
+  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
+  const symbol = latestDecision?.symbol ?? null;
+  const sectionGap = mobileFit ? "mt-2 border-t border-[#1A1A1A] pt-2" : cx("mt-4 border-t border-[#1A1A1A] pt-4", compact && "mt-3 pt-3");
+  const labelClass = mobileFit
+    ? "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]"
+    : "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]";
+
+  return (
+    <div
+      className={cx(
+        "border border-[#2A2A2A] bg-black/88",
+        mobileFit && "flex min-h-0 flex-col overflow-hidden px-4 py-4",
+        !mobileFit && compact && "px-4 py-4",
+        !mobileFit && !compact && "px-5 py-5",
+      )}
+    >
+      {mobileFit && latestDecision?.cycle_number != null ? (
+        <div className="shrink-0 pb-2 font-mono text-[11px] leading-none text-[#8A8A8A]">
+          Cycle #{latestDecision.cycle_number}
+        </div>
+      ) : null}
+      {mobileFit ? (
+        <div className="flex shrink-0 items-stretch border-b border-[#1A1A1A] pb-2">
+          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center text-center">
+            <div className={labelClass}>Next query</div>
+            <div
+              className={cx(
+                "mt-1 font-mono text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#FFD21A]" : "text-white",
+              )}
+            >
+              {countdownLabel}
+            </div>
+          </div>
+          {symbol ? (
+            <>
+              <div className="w-px shrink-0 self-stretch bg-[#1A1A1A]" aria-hidden="true" />
+              <div className="flex min-w-0 flex-1 basis-0 items-center justify-center">
+                <div className="flex max-w-full items-start gap-2">
+                  <TokenIcon symbol={symbol} size={40} />
+                  <div className="min-w-0 text-center">
+                    <div className="truncate font-mono text-[18px] font-semibold leading-tight text-white">{symbol}</div>
+                    {latestDecision?.priced_target_count != null ? (
+                      <div className="mt-1 truncate font-mono text-[11px] leading-tight text-[#8A8A8A]">
+                        {latestDecision.priced_target_count} targets priced
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-px shrink-0 self-stretch bg-[#1A1A1A]" aria-hidden="true" />
+              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center text-center font-mono text-[10px] leading-4 text-[#8A8A8A]">
+                Waiting for decision…
+              </p>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div>
+            <div className={labelClass}>Next query</div>
+            <div
+              className={cx(
+                "mt-1 font-mono text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#FFD21A]" : "text-white",
+              )}
+            >
+              {countdownLabel}
+            </div>
+          </div>
+
+          <div className={sectionGap}>
+            <div className={labelClass}>Detected asset</div>
+            {symbol ? (
+              <div className="mt-3 flex items-center gap-3.5">
+                <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
+                <div className="min-w-0">
+                  <div className="font-mono text-[18px] font-semibold leading-none text-white">{symbol}</div>
+                  <div className="mt-1 font-mono text-[11px] text-[#8A8A8A]">
+                    Cycle #{latestDecision?.cycle_number ?? "N/A"}
+                    {latestDecision?.priced_target_count != null
+                      ? ` · ${latestDecision.priced_target_count} targets priced`
+                      : ""}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className={mobileFit ? "flex shrink-0 flex-col gap-1 pt-1.5" : sectionGap}>
+        {!mobileFit ? (
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className={labelClass}>Variables to analyze</div>
+            {strategyMode ? (
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#666666]">{strategyMode}</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {analysis?.factors && analysis.factors.length > 0 ? (
+          <ul
+            className={cx(
+              mobileFit ? "grid grid-cols-2 justify-items-center gap-x-2 gap-y-1" : "space-y-1.5",
+            )}
+          >
+            {analysis.factors.map((factor) => (
+              <li
+                key={factor.key}
+                className={cx(
+                  "flex min-w-0 items-start font-mono text-[#8A8A8A]",
+                  mobileFit ? "justify-center gap-1.5 text-[11px] leading-5" : "gap-2 text-[11px] leading-5",
+                )}
+              >
+                <span className="mt-px shrink-0" aria-hidden="true">
+                  {factor.passed ? "✓" : "✗"}
+                </span>
+                <span className="uppercase tracking-[0.04em]">{factor.label}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={cx("font-mono leading-5 text-[#8A8A8A]", mobileFit ? "text-center text-[12px]" : "text-[12px]")}>
+            Factor scores will appear after the agent completes a scan cycle.
+          </p>
+        )}
+
+        {latestDecision?.reason ? (
+          <p
+            className={cx(
+              "break-words font-mono text-[#A8A8A8]",
+              mobileFit ? "shrink-0 text-center text-[11px] font-semibold leading-5" : "mt-3 text-[11px] leading-5",
+            )}
+          >
+            {latestDecision.reason}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function ActivityTabSelector({
   value,
   onChange,
@@ -1851,27 +2130,33 @@ function ActivityViewTransition({
 function SysLogsPanel({
   rows,
   agentLog,
-  latestDecision,
   agentRunning,
   compact = false,
+  feedOnly = false,
+  mobileSplit = false,
+  fillHeight = false,
+  rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
   agentLog: ReturnType<typeof resolveAgentLogLine>;
-  latestDecision: StatusPayload["latestDecision"];
+  latestDecision?: StatusPayload["latestDecision"];
   agentRunning: boolean;
   compact?: boolean;
+  feedOnly?: boolean;
+  mobileSplit?: boolean;
+  fillHeight?: boolean;
+  rowsPerPage?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
-  const showLatestDecision = Boolean(latestDecision && !agentLog.line);
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
   }, []);
 
   return (
-    <div className={cx(compact && "flex min-h-0 flex-1 flex-col")}>
-      {agentLog.line ? (
+    <div className={cx(compact && "flex h-full min-h-0 flex-col", fillHeight && "overflow-hidden")}>
+      {!feedOnly && agentLog.line ? (
         <ViewportReveal variant="blur" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
           <div
             className={cx(
@@ -1891,16 +2176,20 @@ function SysLogsPanel({
             </ViewportReveal>
           </div>
         </ViewportReveal>
-      ) : showLatestDecision && latestDecision ? (
-        <div className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
-          <LatestDecisionLogEntry decision={latestDecision} compact={compact} />
-        </div>
       ) : null}
 
       {compact ? (
-        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <RecentActivity rows={rows} expandable compact mode="logs" scrollRoot={scrollRoot} />
-        </div>
+        <RecentActivity
+          rows={rows}
+          expandable
+          compact
+          dense={mobileSplit}
+          mode="logs"
+          scrollRoot={scrollRoot}
+          scrollContainerRef={scrollRef}
+          className={cx("min-h-0 flex-1", fillHeight && "h-full")}
+          rowsPerPage={rowsPerPage}
+        />
       ) : (
         <ViewportReveal variant="fade" delay={80}>
           <div className="border border-[#2A2A2A] bg-black/88">
@@ -1909,9 +2198,13 @@ function SysLogsPanel({
                 <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
               </ViewportReveal>
             </div>
-            <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-              <RecentActivity rows={rows} expandable mode="logs" scrollRoot={scrollRoot} />
-            </div>
+            <RecentActivity
+              rows={rows}
+              expandable
+              mode="logs"
+              scrollRoot={scrollRoot}
+              scrollContainerRef={scrollRef}
+            />
           </div>
         </ViewportReveal>
       )}
@@ -1922,9 +2215,15 @@ function SysLogsPanel({
 function TxActivityPanel({
   rows,
   compact = false,
+  mobileSplit = false,
+  fillHeight = false,
+  rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
   compact?: boolean;
+  mobileSplit?: boolean;
+  fillHeight?: boolean;
+  rowsPerPage?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
@@ -1934,7 +2233,7 @@ function TxActivityPanel({
   }, []);
 
   return (
-    <div className={cx("flex min-h-0 flex-1 flex-col", !compact && "gap-0")}>
+    <div className={cx("flex min-h-0 flex-col", fillHeight ? "h-full overflow-hidden" : "flex-1", !compact && "gap-0")}>
       {!compact ? (
         <ViewportReveal variant="right" delay={60} duration="fast" className="mb-6 max-w-3xl">
           <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
@@ -1944,9 +2243,17 @@ function TxActivityPanel({
       ) : null}
 
       {compact ? (
-        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <RecentActivity rows={rows} expandable compact mode="txs" scrollRoot={scrollRoot} />
-        </div>
+        <RecentActivity
+          rows={rows}
+          expandable
+          compact
+          dense={mobileSplit}
+          mode="txs"
+          scrollRoot={scrollRoot}
+          scrollContainerRef={scrollRef}
+          className={cx("min-h-0 flex-1", fillHeight && "h-full")}
+          rowsPerPage={rowsPerPage}
+        />
       ) : (
         <ViewportReveal variant="fade" delay={100}>
           <div className="border border-[#2A2A2A] bg-black/88">
@@ -1955,9 +2262,13 @@ function TxActivityPanel({
                 <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
               </ViewportReveal>
             </div>
-            <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-              <RecentActivity rows={rows} expandable mode="txs" scrollRoot={scrollRoot} />
-            </div>
+            <RecentActivity
+              rows={rows}
+              expandable
+              mode="txs"
+              scrollRoot={scrollRoot}
+              scrollContainerRef={scrollRef}
+            />
           </div>
         </ViewportReveal>
       )}
@@ -1970,6 +2281,7 @@ function ActivityPanel({
   logRows,
   agentLog,
   latestDecision,
+  decisions,
   agentRunning,
   compact = false,
   desktop = false,
@@ -1978,6 +2290,7 @@ function ActivityPanel({
   logRows: ActivityRow[];
   agentLog: ReturnType<typeof resolveAgentLogLine>;
   latestDecision: StatusPayload["latestDecision"];
+  decisions: StatusPayload["decisions"];
   agentRunning: boolean;
   compact?: boolean;
   desktop?: boolean;
@@ -1989,30 +2302,41 @@ function ActivityPanel({
     return (
       <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
         <div className="shrink-0 border-b border-[#1A1A1A] pb-4">
-          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-            <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
-          </ViewportReveal>
+          <div className="flex items-end justify-between gap-4">
+            <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+              <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
+            </ViewportReveal>
+            <ActivityTabSelector value={view} onChange={setView} compact />
+          </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-x-8 pt-5">
-          <div className="flex min-h-0 flex-col border-r border-[#1A1A1A] pr-8">
-            <div className="mb-3 shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#757575]">
-              Logs
-            </div>
-            <SysLogsPanel
-              rows={logRows}
-              agentLog={agentLog}
+        <div className="grid min-h-0 flex-1 grid-cols-[3fr_2fr] gap-x-8 pt-5">
+          <div className="flex min-h-0 flex-col">
+            <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
+              {(activeView) =>
+                activeView === "txs" ? (
+                  <TxActivityPanel rows={activityRows} compact />
+                ) : (
+                  <SysLogsPanel
+                    rows={logRows}
+                    agentLog={agentLog}
+                    latestDecision={latestDecision}
+                    agentRunning={agentRunning}
+                    compact
+                  />
+                )
+              }
+            </ActivityViewTransition>
+          </div>
+
+          <div className="flex min-h-0 flex-col">
+            <LiveScanPanel
               latestDecision={latestDecision}
+              decisions={decisions}
               agentRunning={agentRunning}
               compact
             />
-          </div>
-          <div className="flex min-h-0 flex-col">
-            <div className="mb-3 shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#757575]">
-              Tx
-            </div>
-            <TxActivityPanel rows={activityRows} compact />
           </div>
         </div>
       </section>
@@ -2022,15 +2346,16 @@ function ActivityPanel({
   return (
     <section
       className={cx(
-        "flex min-h-0 flex-col",
+        "flex min-h-0 flex-col overflow-hidden",
         compact && "flex-1 px-4 pt-4",
+        desktop && "flex-1 px-8 pt-6",
         !flat && "px-10 py-9",
       )}
     >
       <div
         className={cx(
-          "flex justify-between gap-4",
-          flat ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
+          "flex shrink-0 justify-between gap-4",
+          flat ? "items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
         )}
       >
         <ViewportReveal variant="blur" duration="slow" className="min-w-0">
@@ -2049,25 +2374,71 @@ function ActivityPanel({
         <ActivityTabSelector value={view} onChange={setView} compact={flat} />
       </div>
 
-      {!flat ? (
-        <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#1A1A1A]" />
-      ) : null}
-
-      <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
-        {(activeView) =>
-          activeView === "txs" ? (
-            <TxActivityPanel rows={activityRows} compact={flat} />
-          ) : (
-            <SysLogsPanel
-              rows={logRows}
-              agentLog={agentLog}
+      {compact ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 overflow-hidden">
+            <LiveScanPanel
               latestDecision={latestDecision}
+              decisions={decisions}
               agentRunning={agentRunning}
-              compact={flat}
+              mobileFit
             />
-          )
-        }
-      </ActivityViewTransition>
+          </div>
+          <div className="min-h-0 flex-1 basis-0 overflow-hidden">
+            <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
+              {(activeView) =>
+                activeView === "txs" ? (
+                  <TxActivityPanel
+                    rows={activityRows}
+                    compact
+                    fillHeight
+                    rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
+                  />
+                ) : (
+                  <SysLogsPanel
+                    rows={logRows}
+                    agentLog={agentLog}
+                    agentRunning={agentRunning}
+                    compact
+                    feedOnly
+                    fillHeight
+                    rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
+                  />
+                )
+              }
+            </ActivityViewTransition>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="mb-6 shrink-0">
+            <ViewportReveal variant="fade" delay={120}>
+              <LiveScanPanel
+                latestDecision={latestDecision}
+                decisions={decisions}
+                agentRunning={agentRunning}
+              />
+            </ViewportReveal>
+          </div>
+
+          <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#1A1A1A]" />
+
+          <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
+            {(activeView) =>
+              activeView === "txs" ? (
+                <TxActivityPanel rows={activityRows} compact={flat} />
+              ) : (
+                <SysLogsPanel
+                  rows={logRows}
+                  agentLog={agentLog}
+                  agentRunning={agentRunning}
+                  compact={flat}
+                />
+              )
+            }
+          </ActivityViewTransition>
+        </>
+      )}
     </section>
   );
 }
@@ -2108,6 +2479,7 @@ function DesktopDashboard({
                 logRows={view.logRows}
                 agentLog={resolveAgentLogLine(data)}
                 latestDecision={data?.latestDecision ?? null}
+                decisions={data?.decisions ?? []}
                 agentRunning={Boolean(data?.health.agentRunning)}
                 desktop
               />
@@ -2530,6 +2902,7 @@ function MobileDashboard({
                 logRows={view.logRows}
                 agentLog={resolveAgentLogLine(data)}
                 latestDecision={data?.latestDecision ?? null}
+                decisions={data?.decisions ?? []}
                 agentRunning={Boolean(data?.health.agentRunning)}
                 compact
               />

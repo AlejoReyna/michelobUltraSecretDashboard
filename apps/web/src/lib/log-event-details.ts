@@ -1,10 +1,11 @@
 import type { StatusPayload } from "@/lib/schemas";
 import {
-  ENTRY_FACTOR_COUNT,
   ENTRY_FACTOR_KEYS,
   entryFactorStats,
   parseRequiredFactorCount,
+  resolveStrategyMode,
 } from "@/lib/factor-scoring";
+import { SCALPING_FACTOR_KEYS, scalpingFactorStats } from "@/lib/scalping-scoring";
 
 export type ActivityDetail = {
   label: string;
@@ -30,6 +31,14 @@ const FACTOR_LABELS: Record<string, string> = {
   slippage_under_cap: "Slippage under cap",
   rsi_in_range: "RSI in range",
   derivatives_risk_clear: "Derivatives risk clear",
+};
+
+const SCALPING_FACTOR_LABELS: Record<string, string> = {
+  micro_momentum: "Micro-momentum",
+  slippage_ok: "Slippage OK",
+  regime_neutro: "Regime neutral",
+  no_whale_dump: "No whale dump",
+  gas_viable: "Gas viable",
 };
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
@@ -89,21 +98,50 @@ function stringFromUnknown(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
-function factorDetails(scores: StatusPayload["decisions"][number]["factor_scores"]): FactorScoreDetail[] {
-  return ENTRY_FACTOR_KEYS.filter((key) => key in (scores ?? {})).map((key) => ({
+function factorDetails(
+  scores: StatusPayload["decisions"][number]["factor_scores"],
+  strategyMode: "breakout" | "scalping",
+): FactorScoreDetail[] {
+  const keys = strategyMode === "scalping" ? SCALPING_FACTOR_KEYS : ENTRY_FACTOR_KEYS;
+  const labels = strategyMode === "scalping" ? SCALPING_FACTOR_LABELS : FACTOR_LABELS;
+
+  return keys.filter((key) => key in (scores ?? {})).map((key) => ({
     key,
-    label: FACTOR_LABELS[key] ?? key.replaceAll("_", " "),
+    label: labels[key] ?? key.replaceAll("_", " "),
     passed: Boolean(scores?.[key]),
   }));
 }
 
 export function detailsFromDecision(decision: StatusPayload["decisions"][number]): LogEventDetails {
-  const factors = entryFactorStats(decision);
-  const required = parseRequiredFactorCount(decision.reason) ?? factors.required;
+  const strategyMode = resolveStrategyMode(decision);
+  const breakoutFactors = entryFactorStats(decision);
+  const scalpingFactors = scalpingFactorStats(decision);
+  const required = parseRequiredFactorCount(decision.reason) ?? breakoutFactors.required;
+
+  const scoreItem =
+    strategyMode === "scalping"
+      ? {
+          label: "Entry score",
+          value: `${scalpingFactors.score}/${scalpingFactors.max} (need ${scalpingFactors.required}+)`,
+          tone: (scalpingFactors.met ? "green" : scalpingFactors.score >= scalpingFactors.required - 10 ? "yellow" : "red") as
+            | "green"
+            | "yellow"
+            | "red",
+        }
+      : {
+          label: "Factors passed",
+          value: `${breakoutFactors.passed}/${breakoutFactors.total} (need ${required} to enter)`,
+          tone: (breakoutFactors.passed >= required
+            ? "green"
+            : breakoutFactors.passed >= required - 1
+              ? "yellow"
+              : "red") as "green" | "yellow" | "red",
+        };
 
   return {
     items: [
       { label: "Timestamp", value: formatTimestamp(decision.timestamp) },
+      { label: "Strategy", value: strategyMode },
       { label: "Cycle", value: decision.cycle_number != null ? String(decision.cycle_number) : "N/A" },
       { label: "Mode", value: decision.mode ? String(decision.mode).toUpperCase() : "N/A" },
       { label: "Portfolio", value: formatUsd(decision.portfolio_value_usdc) },
@@ -116,10 +154,14 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       },
       { label: "Position size", value: formatUsd(decision.position_size_usdc) },
       { label: "Slippage est.", value: formatPercent(decision.estimated_slippage_pct) },
+      scoreItem,
+      { label: "Exit reason", value: decision.exit_reason?.trim() || "—" },
       {
-        label: "Factors passed",
-        value: `${factors.passed}/${factors.total} (need ${required} to enter)`,
-        tone: factors.passed >= required ? "green" : factors.passed >= required - 1 ? "yellow" : "red",
+        label: "Hold time",
+        value:
+          typeof decision.hold_time_seconds === "number"
+            ? `${Math.round(decision.hold_time_seconds / 60)} min`
+            : "—",
       },
       {
         label: "Priced targets",
@@ -127,7 +169,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       },
       { label: "Reason", value: decision.reason?.trim() || "—" },
     ],
-    factors: factorDetails(decision.factor_scores),
+    factors: factorDetails(decision.factor_scores, strategyMode),
   };
 }
 

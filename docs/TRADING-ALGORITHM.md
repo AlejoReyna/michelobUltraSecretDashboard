@@ -1295,6 +1295,7 @@ sequenceDiagram
 |----------|----------|
 | Strategy explainer UI | `apps/web/src/components/decision-algorithm-panel.tsx` |
 | Client scoring logic | `apps/web/src/lib/factor-scoring.ts` |
+| Scalping scoring logic | `apps/web/src/lib/scalping-scoring.ts` |
 | Zod schemas (web) | `apps/web/src/lib/schemas.ts` |
 | Zod schemas (exporter) | `agent-exporter/src/schemas.ts` |
 | Decision fixtures | `agent-exporter/fixtures/decision_log.jsonl` |
@@ -1303,6 +1304,45 @@ sequenceDiagram
 | Competition allowlist | `apps/web/src/lib/competition-tokens.ts` |
 | Operational README | [`README.md`](../README.md) |
 | Spanish version (stub) | [`ALGORITMO-DE-TRADING.md`](./ALGORITMO-DE-TRADING.md) |
+
+---
+
+## 26. Scalping v1.0 (alternative strategy mode)
+
+The bot supports a second strategy selectable via `STRATEGY_MODE=scalping` in the Python repo (`cascade-ai`). The legacy six-factor breakout lives under `src/strategy/6falgorithm/` and remains available with `STRATEGY_MODE=breakout` (default).
+
+### Scoring model
+
+| Factor | Weight | Entry threshold |
+|--------|--------|-----------------|
+| Micro-momentum (price > EMA9, volume spike) | 30% | |
+| Slippage OK (< 0.3%) | 25% | |
+| Regime not risk-off | 20% | **Score ≥ 60 / 100** |
+| No whale dump (1h change > −2%) | 15% | |
+| Gas viable (< 5 gwei) | 10% | |
+
+### Position rules
+
+- **Sizing:** 1% of portfolio per trade
+- **Max open positions:** 1
+- **Take profit:** +1.5% (fixed)
+- **Stop loss:** −0.8% (fixed, no trailing)
+- **Time stop:** 20 min if PnL within ±0.5%
+- **Max hold:** 30 min absolute
+- **Symbol cooldown:** 15 min after close
+- **Daily loss cap:** −2% pauses entries until next UTC day
+- **Consecutive SL cooldown:** 3 stops → 1 hour pause
+
+### Extended telemetry fields (schema 2.6.0)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `strategy_mode` | `"breakout"` \| `"scalping"` | Active strategy |
+| `entry_score` | number | Weighted score 0–100 (scalping) |
+| `exit_reason` | string | `tp`, `sl`, `time_stop`, `max_hold` |
+| `hold_time_seconds` | number | Position duration at exit |
+
+Dashboard detection: [`apps/web/src/lib/scalping-scoring.ts`](../apps/web/src/lib/scalping-scoring.ts) and [`resolveStrategyMode()`](../apps/web/src/lib/factor-scoring.ts).
 
 ---
 

@@ -32,6 +32,10 @@ export const decisionSchema = z
     estimated_slippage_pct: nullableNumber,
     reason: z.string().nullable().optional(),
     priced_target_count: nullableNumber,
+    strategy_mode: z.enum(["breakout", "scalping"]).nullable().optional(),
+    entry_score: nullableNumber,
+    exit_reason: z.string().nullable().optional(),
+    hold_time_seconds: nullableNumber,
   })
   .passthrough();
 

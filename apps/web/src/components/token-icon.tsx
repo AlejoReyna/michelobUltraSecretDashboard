@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { competitionTokenLogoUrl } from "@/lib/competition-tokens";
 
 const SYMBOL_ALIASES: Record<string, string> = {
   WBNB: "bnb",
@@ -17,11 +18,28 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number }) {
-  const [failed, setFailed] = useState(false);
-  const slug = iconSlug(symbol);
+function tokenIconSources(symbol: string) {
+  const sources: string[] = [];
+  const listedLogo = competitionTokenLogoUrl(symbol);
 
-  if (failed) {
+  if (listedLogo) {
+    sources.push(listedLogo);
+  }
+
+  sources.push(`https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${iconSlug(symbol)}.png`);
+
+  return sources;
+}
+
+export function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number }) {
+  const sources = useMemo(() => tokenIconSources(symbol), [symbol]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [sources]);
+
+  if (sourceIndex >= sources.length) {
     return (
       <span
         className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#1A1A1A] font-mono font-bold uppercase text-[#8A8A8A]"
@@ -35,12 +53,12 @@ export function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number
 
   return (
     <img
-      src={`https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${slug}.png`}
+      src={sources[sourceIndex]}
       alt=""
       width={size}
       height={size}
       className={cx("shrink-0 rounded-full bg-[#0A0A0A]")}
-      onError={() => setFailed(true)}
+      onError={() => setSourceIndex((current) => current + 1)}
     />
   );
 }

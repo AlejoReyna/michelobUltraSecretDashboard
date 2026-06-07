@@ -1,4 +1,5 @@
 import type { StatusPayload } from "@/lib/schemas";
+import { SCALPING_FACTOR_KEYS } from "@/lib/scalping-scoring";
 
 export const ENTRY_FACTOR_KEYS = [
   "volume_breakout",
@@ -12,6 +13,21 @@ export const ENTRY_FACTOR_KEYS = [
 export const ENTRY_FACTOR_COUNT = ENTRY_FACTOR_KEYS.length;
 
 export type EntryFactorKey = (typeof ENTRY_FACTOR_KEYS)[number];
+
+export type StrategyMode = "breakout" | "scalping";
+
+export function resolveStrategyMode(decision: StatusPayload["decisions"][number]): StrategyMode {
+  if (decision.strategy_mode === "scalping" || decision.strategy_mode === "breakout") {
+    return decision.strategy_mode;
+  }
+
+  const factorKeys = Object.keys(decision.factor_scores ?? {});
+  if (factorKeys.some((key) => SCALPING_FACTOR_KEYS.includes(key as (typeof SCALPING_FACTOR_KEYS)[number]))) {
+    return "scalping";
+  }
+
+  return "breakout";
+}
 
 export function countPassedFactors(
   scores: StatusPayload["decisions"][number]["factor_scores"],
