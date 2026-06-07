@@ -47,7 +47,7 @@ export function PortfolioChart({
   const chart = useMemo(() => buildChartPaths(data), [data]);
   const isMobile = variant === "mobile";
   const gridColumns = isMobile ? 6 : 12;
-  const gridRows = isMobile ? 4 : 7;
+  const gridRows = isMobile ? 8 : 7;
 
   const chartSvg = (
     <svg

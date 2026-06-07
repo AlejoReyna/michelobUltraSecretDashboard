@@ -1,4 +1,10 @@
 import {
+  ViewportReveal,
+  chapterRevealVariant,
+  factorRevealVariant,
+  outcomeRevealVariant,
+} from "@/components/viewport-reveal";
+import {
   ENTRY_FACTOR_COUNT,
   ENTRY_FACTOR_KEYS,
   entryFactorStats,
@@ -143,36 +149,33 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   priced_target_count: 149,
 };
 
+const CYCLE_INPUTS = [
+  "Market data (CMC / x402)",
+  "6-factor checklist",
+  "Guardrails & limits",
+  "TWAK swap execution",
+  "Position tracking",
+  "Decision log",
+];
+
 const OUTCOMES = [
   {
     action: "ENTER",
-    color: "text-[#00FF00]",
-    border: "border-[#00FF00]/40",
-    bg: "bg-[#00FF00]/8",
     summary: "Buy approved",
     body: "All 6/6 factors passed and guardrails allow new entries. The agent sizes the position, quotes slippage, and executes a USDC → token swap.",
   },
   {
     action: "WAIT",
-    color: "text-[#FACC15]",
-    border: "border-[#FACC15]/40",
-    bg: "bg-[#FACC15]/8",
     summary: "Keep watching",
     body: "One or more factors failed, or the bot wants stronger confirmation. No money moves— it logs the reason and tries again next cycle.",
   },
   {
     action: "BLOCKED",
-    color: "text-[#FF8C42]",
-    border: "border-[#FF8C42]/40",
-    bg: "bg-[#FF8C42]/8",
     summary: "Guardrail stop",
     body: "Technical signals may look good, but a safety rule vetoed the trade—e.g. risk-off regime, daily loss budget, or entries disabled.",
   },
   {
     action: "HALT",
-    color: "text-[#FF3737]",
-    border: "border-[#FF3737]/40",
-    bg: "bg-[#FF3737]/8",
     summary: "Full stop",
     body: "Critical failure or manual halt. The agent stops opening new positions until the condition clears.",
   },
@@ -182,184 +185,99 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function MindMapDiagram() {
-  const branches = [
-    { label: "Market data\n(CMC / x402)", angle: -90, color: "#2F8CFF" },
-    { label: "6-factor\nchecklist", angle: -30, color: "#00FF00" },
-    { label: "Guardrails\n& limits", angle: 30, color: "#FACC15" },
-    { label: "TWAK swap\nexecution", angle: 90, color: "#FF8C42" },
-    { label: "Position\ntracking", angle: 150, color: "#A78BFA" },
-    { label: "Decision\nlog", angle: 210, color: "#8A8A8A" },
-  ];
-
-  const cx = 220;
-  const cy = 200;
-  const radius = 118;
-
+function ChapterDivider({
+  number,
+  title,
+  subtitle,
+  chapterIndex,
+}: {
+  number: string;
+  title: string;
+  subtitle?: string;
+  chapterIndex: number;
+}) {
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox="0 0 440 400" className="mx-auto w-full max-w-[440px]" aria-label="Decision algorithm mind map">
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {branches.map((branch) => {
-          const rad = (branch.angle * Math.PI) / 180;
-          const x2 = cx + Math.cos(rad) * radius;
-          const y2 = cy + Math.sin(rad) * radius;
-          const labelX = cx + Math.cos(rad) * (radius + 52);
-          const labelY = cy + Math.sin(rad) * (radius + 52);
-
-          return (
-            <g key={branch.label}>
-              <line
-                x1={cx}
-                y1={cy}
-                x2={x2}
-                y2={y2}
-                stroke={branch.color}
-                strokeWidth="1.5"
-                strokeOpacity="0.55"
-                strokeDasharray="4 3"
-              />
-              <circle cx={x2} cy={y2} r="5" fill={branch.color} fillOpacity="0.85" />
-              {branch.label.split("\n").map((line, i) => (
-                <text
-                  key={line}
-                  x={labelX}
-                  y={labelY + i * 14 - (branch.label.split("\n").length - 1) * 7}
-                  textAnchor="middle"
-                  fill="#CFCFCF"
-                  fontSize="11"
-                  fontFamily="Geist Mono, monospace"
-                >
-                  {line}
-                </text>
-              ))}
-            </g>
-          );
-        })}
-
-        <circle cx={cx} cy={cy} r="54" fill="#0A0A0A" stroke="#00FF00" strokeWidth="1.5" filter="url(#glow)" />
-        <text x={cx} y={cy - 8} textAnchor="middle" fill="#00FF00" fontSize="11" fontFamily="Geist Mono, monospace">
-          Every
-        </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="white" fontSize="13" fontWeight="600" fontFamily="Geist Mono, monospace">
-          Trading Cycle
-        </text>
-      </svg>
+    <div className="guide-chapter-divider" role="separator" aria-label={`Chapter ${number}: ${title}`}>
+      <div className="guide-chapter-divider__meta">
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.22em] text-[#555]">
+          Ch. {number}
+        </span>
+        <ViewportReveal variant="expand" duration="slow" delay={60} className="guide-chapter-divider__line" />
+      </div>
+      <div>
+        <h2 className="font-mono text-sm font-semibold text-white">{title}</h2>
+        {subtitle ? (
+          <p className="mt-1 font-mono text-[11px] leading-5 text-[#757575]">{subtitle}</p>
+        ) : null}
+      </div>
+      <ViewportReveal
+        variant="expand"
+        duration="slow"
+        delay={100 + chapterIndex * 20}
+        className="guide-chapter-divider__rule"
+      />
     </div>
   );
 }
 
-function DecisionFlowChart() {
-  const nodes = [
-    { id: "start", label: "New cycle", sub: "Read wallet & positions", x: 0 },
-    { id: "scan", label: "Scan allowlist", sub: "~149 BEP-20 tokens", x: 1 },
-    { id: "score", label: "Score 6 factors", sub: "Per candidate token", x: 2 },
-    { id: "guard", label: "Guardrails OK?", sub: "Loss / regime / caps", x: 3 },
-    { id: "enter", label: "ENTER", sub: "6/6 + allowed", x: 4, highlight: "green" as const },
-    { id: "wait", label: "WAIT / BLOCKED", sub: "Log & retry later", x: 4, y: 1, highlight: "yellow" as const },
-  ];
-
-  const boxW = 128;
-  const boxH = 52;
-  const gapX = 24;
-  const startX = 8;
-  const startY = 20;
+function CycleOverviewList() {
+  const itemVariants = ["right", "fade", "left", "up", "down", "scale"] as const;
 
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox="0 0 720 130" className="min-w-[640px] w-full" aria-label="Buy decision flow chart">
-        {nodes
-          .filter((n) => n.x < 4)
-          .map((node, i, arr) => {
-            if (i === arr.length - 1) return null;
-            const x1 = startX + node.x * (boxW + gapX) + boxW;
-            const y1 = startY + boxH / 2;
-            const x2 = startX + arr[i + 1]!.x * (boxW + gapX);
-            const y2 = startY + boxH / 2;
-            return (
-              <g key={`arrow-${node.id}`}>
-                <line x1={x1} y1={y1} x2={x2 - 6} y2={y2} stroke="#333" strokeWidth="1.5" />
-                <polygon points={`${x2 - 6},${y2 - 4} ${x2},${y2} ${x2 - 6},${y2 + 4}`} fill="#555" />
-              </g>
-            );
-          })}
+    <ol className="space-y-2">
+      {CYCLE_INPUTS.map((item, index) => (
+        <ViewportReveal
+          key={item}
+          as="li"
+          variant={itemVariants[index % itemVariants.length]}
+          delay={index * 45}
+          duration="fast"
+          className="list-none"
+        >
+          <div className="flex items-start gap-3 border border-[#1A1A1A] bg-black/60 px-3 py-2.5">
+            <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#555]">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="font-mono text-[11px] leading-5 text-[#CFCFCF]">{item}</span>
+          </div>
+        </ViewportReveal>
+      ))}
+    </ol>
+  );
+}
 
-        {/* fork from guard to enter / wait */}
-        <line
-          x1={startX + 3 * (boxW + gapX) + boxW / 2}
-          y1={startY + boxH}
-          x2={startX + 3 * (boxW + gapX) + boxW / 2}
-          y2={startY + boxH + 16}
-          stroke="#333"
-          strokeWidth="1.5"
-        />
-        <line
-          x1={startX + 3 * (boxW + gapX) + boxW / 2}
-          y1={startY + boxH + 16}
-          x2={startX + 4 * (boxW + gapX) + boxW / 2}
-          y2={startY + boxH + 16}
-          stroke="#333"
-          strokeWidth="1.5"
-        />
-        <line
-          x1={startX + 4 * (boxW + gapX) + boxW / 2}
-          y1={startY + boxH + 16}
-          x2={startX + 4 * (boxW + gapX) + boxW / 2}
-          y2={startY + boxH + 22}
-          stroke="#333"
-          strokeWidth="1.5"
-        />
-        <line
-          x1={startX + 4 * (boxW + gapX) + boxW / 2}
-          y1={startY + boxH + 16}
-          x2={startX + 4 * (boxW + gapX) + boxW / 2}
-          y2={startY + 78}
-          stroke="#333"
-          strokeWidth="1.5"
-        />
+function DecisionFlowList() {
+  const steps = [
+    { label: "New cycle", sub: "Read wallet & positions" },
+    { label: "Scan allowlist", sub: "~149 BEP-20 tokens" },
+    { label: "Score 6 factors", sub: "Per candidate token" },
+    { label: "Guardrails OK?", sub: "Loss / regime / caps" },
+    { label: "ENTER or WAIT", sub: "Swap or log & retry" },
+  ];
+  const stepVariants = ["down", "fade", "up", "left", "scale"] as const;
 
-        {nodes.map((node) => {
-          const x = startX + node.x * (boxW + gapX);
-          const y = startY + (node.y ?? 0) * 58;
-          const stroke =
-            node.highlight === "green" ? "#00FF00" : node.highlight === "yellow" ? "#FACC15" : "#2A2A2A";
-          const fill =
-            node.highlight === "green"
-              ? "rgba(0,255,0,0.06)"
-              : node.highlight === "yellow"
-                ? "rgba(250,204,21,0.06)"
-                : "#0A0A0A";
-
-          return (
-            <g key={node.id}>
-              <rect x={x} y={y} width={boxW} height={boxH} fill={fill} stroke={stroke} strokeWidth="1" rx="0" />
-              <text x={x + boxW / 2} y={y + 22} textAnchor="middle" fill="white" fontSize="11" fontWeight="600" fontFamily="Geist Mono, monospace">
-                {node.label}
-              </text>
-              <text x={x + boxW / 2} y={y + 38} textAnchor="middle" fill="#8A8A8A" fontSize="9" fontFamily="Geist Mono, monospace">
-                {node.sub}
-              </text>
-            </g>
-          );
-        })}
-
-        <text x={startX + 3 * (boxW + gapX) + boxW + 12} y={startY + boxH / 2 + 4} fill="#00FF00" fontSize="10" fontFamily="Geist Mono, monospace">
-          yes
-        </text>
-        <text x={startX + 3 * (boxW + gapX) + boxW + 12} y={startY + 78 + 4} fill="#FACC15" fontSize="10" fontFamily="Geist Mono, monospace">
-          no
-        </text>
-      </svg>
-    </div>
+  return (
+    <ol className="space-y-2">
+      {steps.map((step, index) => (
+        <ViewportReveal
+          key={step.label}
+          as="li"
+          variant={stepVariants[index % stepVariants.length]}
+          delay={index * 50}
+          className="list-none"
+        >
+          <div className="flex items-start gap-3 border border-[#1A1A1A] bg-[#0A0A0A] px-3 py-2.5">
+            <span className="shrink-0 font-mono text-[10px] tabular-nums text-[#555]">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div className="min-w-0">
+              <div className="font-mono text-[12px] font-semibold text-white">{step.label}</div>
+              <p className="mt-0.5 font-mono text-[10px] leading-4 text-[#757575]">{step.sub}</p>
+            </div>
+          </div>
+        </ViewportReveal>
+      ))}
+    </ol>
   );
 }
 
@@ -369,7 +287,10 @@ function FactorScoreBar({ passed, total }: { passed: number; total: number }) {
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}
-          className={cx("h-2 flex-1 border", i < passed ? "border-[#00FF00] bg-[#00FF00]/70" : "border-[#2A2A2A] bg-[#111]")}
+          className={cx(
+            "h-1.5 flex-1 border",
+            i < passed ? "border-[#444] bg-[#666]" : "border-[#1A1A1A] bg-[#0A0A0A]",
+          )}
         />
       ))}
     </div>
@@ -387,23 +308,15 @@ function DecisionSnapshot({
 }) {
   const stats = entryFactorStats(decision);
   const action = String(decision.action ?? "WAIT").toUpperCase();
-  const actionTone =
-    action === "ENTER"
-      ? "text-[#00FF00]"
-      : action === "BLOCKED"
-        ? "text-[#FF8C42]"
-        : action === "HALT"
-          ? "text-[#FF3737]"
-          : "text-[#FACC15]";
 
   return (
-    <div className="border border-[#2A2A2A] bg-[#0A0A0A]">
+    <div className="border border-[#2A2A2A] bg-black/88">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-5 py-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#757575]">{heading}</div>
             {badge ? (
-              <span className="border border-[#333] bg-[#111] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#8A8A8A]">
+              <span className="border border-[#2A2A2A] bg-[#0A0A0A] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#8A8A8A]">
                 {badge}
               </span>
             ) : null}
@@ -412,7 +325,7 @@ function DecisionSnapshot({
             {decision.symbol ?? "—"} · cycle #{decision.cycle_number ?? "?"}
           </div>
         </div>
-        <span className={cx("font-mono text-lg font-semibold", actionTone)}>{action}</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#A8A8A8]">{action}</span>
       </div>
       <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
         <div>
@@ -438,10 +351,12 @@ function DecisionSnapshot({
               key={key}
               className={cx(
                 "flex items-start gap-2 border px-3 py-2 font-mono text-[11px]",
-                passed ? "border-[#00FF00]/30 bg-[#00FF00]/5 text-[#DADADA]" : "border-[#2A2A2A] text-[#666]",
+                passed ? "border-[#333] bg-[#111] text-[#DADADA]" : "border-[#1A1A1A] text-[#666]",
               )}
             >
-              <span className={passed ? "text-[#00FF00]" : "text-[#444]"}>{passed ? "✓" : "○"}</span>
+              <span className={passed ? "text-[#8A8A8A]" : "text-[#333]"} aria-hidden>
+                {passed ? "—" : "·"}
+              </span>
               <span>{meta?.title ?? key}</span>
             </div>
           );
@@ -465,14 +380,14 @@ function LiveSnapshot({ decision }: { decision: StatusPayload["latestDecision"] 
 
 function FactorCard({ factor, index }: { factor: FactorMeta; index: number }) {
   return (
-    <article className="flex flex-col border border-[#2A2A2A] bg-[#0A0A0A]">
+    <article className="flex flex-col border border-[#2A2A2A] bg-black/88">
       <div className="flex items-start gap-3 border-b border-[#1A1A1A] px-4 py-3">
-        <span className="grid h-7 w-7 shrink-0 place-items-center border border-[#333] bg-[#111] font-mono text-[11px] text-[#00FF00]">
+        <span className="grid h-7 w-7 shrink-0 place-items-center border border-[#2A2A2A] bg-[#0A0A0A] font-mono text-[11px] text-[#757575]">
           {index + 1}
         </span>
         <div>
           <h3 className="font-mono text-sm font-semibold text-white">{factor.title}</h3>
-          <p className="mt-1 font-mono text-[12px] leading-5 text-[#00FF00]/90">{factor.plain}</p>
+          <p className="mt-1 font-mono text-[12px] leading-5 text-[#A8A8A8]">{factor.plain}</p>
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-3 px-4 py-3">
@@ -492,190 +407,301 @@ export function DecisionAlgorithmPanel({
   latestDecision: StatusPayload["latestDecision"];
   compact?: boolean;
 }) {
+  const chapterGap = compact ? "mt-8" : "mt-12";
+  const panelClass = "border border-[#2A2A2A] bg-black/88 p-4";
+
   return (
-    <section className={cx("console-scroll flex min-h-0 flex-col overflow-y-auto", compact ? "mx-4 mt-9" : "px-10 py-9")}>
-      <header className="mb-8 max-w-3xl">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy explainer</div>
-        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">How Buy Decisions Work</h1>
-        <p className="mt-3 font-mono text-[13px] leading-6 text-[#A8A8A8]">
-          The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety
-          guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch.
-        </p>
-      </header>
-
-      <div className="mb-10 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <div className="border border-[#2A2A2A] bg-black/80 p-5">
-          <h2 className="mb-1 font-mono text-sm font-semibold text-white">Big picture</h2>
-          <p className="mb-4 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-            Six inputs feed one decision. All must agree before money moves.
+    <section
+      className={cx(
+        "console-scroll flex min-h-0 flex-col overflow-y-auto",
+        compact ? "flex-1 px-4 pt-4 pb-8" : "px-10 py-9",
+      )}
+    >
+      <ViewportReveal variant="blur" duration="slow">
+        <header className={cx("max-w-3xl", compact ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "pb-2")}>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy explainer</div>
+          <h1
+            className={cx(
+              "mt-2 font-mono font-semibold leading-tight text-white",
+              compact ? "text-[28px]" : "text-[32px]",
+            )}
+          >
+            How Buy Decisions Work
+          </h1>
+          <p className="mt-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
+            The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety
+            guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch.
           </p>
-          <MindMapDiagram />
-        </div>
+        </header>
+      </ViewportReveal>
 
-        <div className="border border-[#2A2A2A] bg-black/80 p-5">
-          <h2 className="mb-1 font-mono text-sm font-semibold text-white">The rule in one line</h2>
-          <div className="mt-4 border border-[#00FF00]/30 bg-[#00FF00]/5 px-4 py-5">
-            <p className="font-mono text-[22px] font-semibold leading-snug text-white">
-              All <span className="text-[#00FF00]">{ENTRY_FACTOR_COUNT}/{ENTRY_FACTOR_COUNT}</span> factors must pass
-            </p>
-            <p className="mt-2 font-mono text-[12px] leading-5 text-[#A8A8A8]">
-              Partial scores (e.g. 5/6) always result in WAIT—never a partial buy. Safety guardrails can still block
-              even a perfect score.
-            </p>
-          </div>
-          <div className="mt-4 space-y-2">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">Example score bars</div>
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                  <span>5/6 — WAIT</span>
-                  <span className="text-[#FACC15]">Missing one signal</span>
-                </div>
-                <FactorScoreBar passed={5} total={6} />
+      <div className={chapterGap}>
+        <ViewportReveal variant={chapterRevealVariant(0)} delay={40} duration="slow">
+          <ChapterDivider
+            number="01"
+            title="Overview"
+            subtitle="Six inputs feed one decision. All must agree before money moves."
+            chapterIndex={0}
+          />
+        </ViewportReveal>
+        <div className={cx("mt-5 grid gap-4", !compact && "xl:grid-cols-2")}>
+          <ViewportReveal variant="right" delay={80}>
+            <div className={panelClass}>
+              <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">Big picture</h3>
+              <CycleOverviewList />
+            </div>
+          </ViewportReveal>
+          <ViewportReveal variant="left" delay={140}>
+            <div className={panelClass}>
+              <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">
+                The rule in one line
+              </h3>
+              <div className="border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-4">
+                <p className="font-mono text-[18px] font-semibold leading-snug text-white">
+                  All {ENTRY_FACTOR_COUNT}/{ENTRY_FACTOR_COUNT} factors must pass
+                </p>
+                <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
+                  Partial scores (e.g. 5/6) always result in WAIT—never a partial buy. Safety guardrails can still block
+                  even a perfect score.
+                </p>
               </div>
-              <div>
-                <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                  <span>6/6 — eligible for ENTER</span>
-                  <span className="text-[#00FF00]">Full checklist</span>
+              <div className="mt-4 space-y-2">
+                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">
+                  Example score bars
                 </div>
-                <FactorScoreBar passed={6} total={6} />
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                      <span>5/6 — WAIT</span>
+                      <span>Missing one signal</span>
+                    </div>
+                    <FactorScoreBar passed={5} total={6} />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                      <span>6/6 — eligible for ENTER</span>
+                      <span>Full checklist</span>
+                    </div>
+                    <FactorScoreBar passed={6} total={6} />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          </ViewportReveal>
         </div>
       </div>
 
-      <div className="mb-10 border border-[#2A2A2A] bg-black/80 p-5">
-        <h2 className="mb-1 font-mono text-sm font-semibold text-white">Cycle flow</h2>
-        <p className="mb-4 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-          From wake-up to swap—or to a logged wait state.
-        </p>
-        <DecisionFlowChart />
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {CYCLE_STEPS.map((step) => (
-            <div key={step.step} className="border border-[#1A1A1A] bg-[#0A0A0A] px-3 py-3">
-              <div className="font-mono text-[10px] text-[#00FF00]">{step.step}</div>
-              <div className="mt-1 font-mono text-[12px] font-semibold text-white">{step.title}</div>
-              <p className="mt-1 font-mono text-[10px] leading-4 text-[#8A8A8A]">{step.body}</p>
+      <div className={chapterGap}>
+        <ViewportReveal variant={chapterRevealVariant(1)} delay={40} duration="slow">
+          <ChapterDivider
+            number="02"
+            title="Cycle flow"
+            subtitle="From wake-up to swap—or to a logged wait state."
+            chapterIndex={1}
+          />
+        </ViewportReveal>
+        <ViewportReveal className="mt-5" variant="fade" delay={100} duration="slow">
+          <div className={panelClass}>
+            <div className={cx(!compact && "grid gap-6 lg:grid-cols-[minmax(0,220px)_1fr]")}>
+              <DecisionFlowList />
+              {!compact ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:mt-0 lg:grid-cols-1">
+                  {CYCLE_STEPS.map((step, index) => (
+                    <ViewportReveal
+                      key={step.step}
+                      variant={index % 2 === 0 ? "left" : "right"}
+                      delay={160 + index * 55}
+                    >
+                      <div className="border border-[#1A1A1A] bg-[#0A0A0A] px-3 py-3">
+                        <div className="font-mono text-[10px] text-[#555]">{step.step}</div>
+                        <div className="mt-1 font-mono text-[12px] font-semibold text-white">{step.title}</div>
+                        <p className="mt-1 font-mono text-[10px] leading-4 text-[#757575]">{step.body}</p>
+                      </div>
+                    </ViewportReveal>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ))}
-        </div>
+          </div>
+        </ViewportReveal>
       </div>
 
-      <div className="mb-10">
-        <h2 className="mb-1 font-mono text-sm font-semibold text-white">The six factors (explained simply)</h2>
-        <p className="mb-5 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-          Each factor is a yes/no gate. Hover the dashboard logs to see these same flags on every decision row.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={chapterGap}>
+        <ViewportReveal variant={chapterRevealVariant(2)} delay={40} duration="slow">
+          <ChapterDivider
+            number="03"
+            title="The six factors"
+            subtitle="Each factor is a yes/no gate. Expand decision rows in Activity to see these same flags."
+            chapterIndex={2}
+          />
+        </ViewportReveal>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {ENTRY_FACTORS.map((factor, index) => (
-            <FactorCard key={factor.key} factor={factor} index={index} />
+            <ViewportReveal
+              key={factor.key}
+              variant={factorRevealVariant(index)}
+              delay={80 + index * 50}
+              duration={index % 2 === 0 ? "normal" : "slow"}
+            >
+              <FactorCard factor={factor} index={index} />
+            </ViewportReveal>
           ))}
         </div>
       </div>
 
-      <div className="mb-10 grid gap-6 lg:grid-cols-2">
-        <div className="border border-[#2A2A2A] bg-black/80 p-5">
-          <h2 className="mb-1 font-mono text-sm font-semibold text-white">Safety guardrails</h2>
-          <p className="mb-4 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-            Even when all six factors pass, these limits can set{" "}
-            <span className="text-[#FF8C42]">entries_allowed = false</span> and force BLOCKED.
-          </p>
-          <ul className="space-y-3">
-            {[
-              {
-                title: "Risk-off regime",
-                body: "Macro conditions turn defensive. New buys pause until the regime clears—even if a single token looks strong.",
-              },
-              {
-                title: "Daily loss budget",
-                body: "Tracks realized losses for the day (`daily_realized_loss`). Prevents revenge trading after a bad session.",
-              },
-              {
-                title: "Daily trade cap",
-                body: "Limits how many entries can fire in one day (`daily_trade_count`) to avoid over-trading in choppy markets.",
-              },
-              {
-                title: "Portfolio ATH tracking",
-                body: "Monitors all-time-high portfolio value (`portfolio_ath`) for drawdown-aware position sizing.",
-              },
-            ].map((item) => (
-              <li key={item.title} className="border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
-                <div className="font-mono text-[12px] font-semibold text-[#FACC15]">{item.title}</div>
-                <p className="mt-1 font-mono text-[11px] leading-5 text-[#A8A8A8]">{item.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="border border-[#2A2A2A] bg-black/80 p-5">
-          <h2 className="mb-1 font-mono text-sm font-semibold text-white">What happens after ENTER</h2>
-          <p className="mb-4 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-            A buy is not the end—it starts position management.
-          </p>
-          <ol className="space-y-3 font-mono text-[11px] leading-5 text-[#A8A8A8]">
-            <li className="flex gap-3 border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
-              <span className="text-[#00FF00]">1</span>
-              <span>
-                <strong className="text-white">Size the trade</strong> — position size in USDC is computed from portfolio
-                value and risk rules (`position_size_usdc`).
-              </span>
-            </li>
-            <li className="flex gap-3 border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
-              <span className="text-[#00FF00]">2</span>
-              <span>
-                <strong className="text-white">Quote & swap</strong> — TWAK routes through LiquidMesh on BSC with a max
-                slippage cap (`max_slippage_pct`).
-              </span>
-            </li>
-            <li className="flex gap-3 border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
-              <span className="text-[#00FF00]">3</span>
-              <span>
-                <strong className="text-white">Track the position</strong> — entry price, trailing stop, and take-profit
-                levels are written to `positions.json` and shown on the Active Positions tab.
-              </span>
-            </li>
-          </ol>
-        </div>
-      </div>
-
-      <div className="mb-10">
-        <h2 className="mb-4 font-mono text-sm font-semibold text-white">Possible outcomes each cycle</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {OUTCOMES.map((outcome) => (
-            <div key={outcome.action} className={cx("border px-4 py-4", outcome.border, outcome.bg)}>
-              <div className={cx("font-mono text-lg font-bold", outcome.color)}>{outcome.action}</div>
-              <div className="mt-1 font-mono text-[12px] font-semibold text-white">{outcome.summary}</div>
-              <p className="mt-2 font-mono text-[11px] leading-5 text-[#A8A8A8]">{outcome.body}</p>
+      <div className={chapterGap}>
+        <ViewportReveal variant={chapterRevealVariant(3)} delay={40} duration="slow">
+          <ChapterDivider
+            number="04"
+            title="Safety & execution"
+            subtitle="Guardrails can veto a perfect score. A buy starts position management."
+            chapterIndex={3}
+          />
+        </ViewportReveal>
+        <div className={cx("mt-5 grid gap-4", !compact && "lg:grid-cols-2")}>
+          <ViewportReveal variant="right" delay={90}>
+            <div className={panelClass}>
+              <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">
+                Safety guardrails
+              </h3>
+              <ul className="space-y-2">
+                {[
+                  {
+                    title: "Risk-off regime",
+                    body: "Macro conditions turn defensive. New buys pause until the regime clears—even if a single token looks strong.",
+                  },
+                  {
+                    title: "Daily loss budget",
+                    body: "Tracks realized losses for the day (`daily_realized_loss`). Prevents revenge trading after a bad session.",
+                  },
+                  {
+                    title: "Daily trade cap",
+                    body: "Limits how many entries can fire in one day (`daily_trade_count`) to avoid over-trading in choppy markets.",
+                  },
+                  {
+                    title: "Portfolio ATH tracking",
+                    body: "Monitors all-time-high portfolio value (`portfolio_ath`) for drawdown-aware position sizing.",
+                  },
+                ].map((item, index) => (
+                  <ViewportReveal
+                    key={item.title}
+                    as="li"
+                    variant={index % 2 === 0 ? "left" : "fade"}
+                    delay={120 + index * 50}
+                    duration="fast"
+                    className="list-none"
+                  >
+                    <div className="border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
+                      <div className="font-mono text-[12px] font-semibold text-white">{item.title}</div>
+                      <p className="mt-1 font-mono text-[11px] leading-5 text-[#8A8A8A]">{item.body}</p>
+                    </div>
+                  </ViewportReveal>
+                ))}
+              </ul>
             </div>
+          </ViewportReveal>
+          <ViewportReveal variant="left" delay={150}>
+            <div className={panelClass}>
+              <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">
+                What happens after ENTER
+              </h3>
+              <ol className="space-y-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
+                {[
+                  {
+                    step: "01",
+                    title: "Size the trade",
+                    body: "Position size in USDC is computed from portfolio value and risk rules (`position_size_usdc`).",
+                  },
+                  {
+                    step: "02",
+                    title: "Quote & swap",
+                    body: "TWAK routes through LiquidMesh on BSC with a max slippage cap (`max_slippage_pct`).",
+                  },
+                  {
+                    step: "03",
+                    title: "Track the position",
+                    body: "Entry price, trailing stop, and take-profit levels are written to `positions.json` and shown on the Active Positions tab.",
+                  },
+                ].map((item, index) => (
+                  <ViewportReveal
+                    key={item.step}
+                    as="li"
+                    variant={index % 2 === 0 ? "up" : "scale"}
+                    delay={180 + index * 55}
+                    className="list-none"
+                  >
+                    <div className="flex gap-3 border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-3">
+                      <span className="shrink-0 text-[#555]">{item.step}</span>
+                      <span>
+                        <strong className="text-white">{item.title}</strong> — {item.body}
+                      </span>
+                    </div>
+                  </ViewportReveal>
+                ))}
+              </ol>
+            </div>
+          </ViewportReveal>
+        </div>
+      </div>
+
+      <div className={chapterGap}>
+        <ViewportReveal variant={chapterRevealVariant(4)} delay={40} duration="slow">
+          <ChapterDivider
+            number="05"
+            title="Possible outcomes"
+            subtitle="Four actions the agent can emit each cycle."
+            chapterIndex={4}
+          />
+        </ViewportReveal>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {OUTCOMES.map((outcome, index) => (
+            <ViewportReveal
+              key={outcome.action}
+              variant={outcomeRevealVariant(index)}
+              delay={80 + index * 65}
+              duration={index % 2 === 0 ? "normal" : "fast"}
+            >
+              <div className="border border-[#2A2A2A] bg-black/88 px-4 py-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">{outcome.action}</div>
+                <div className="mt-1 font-mono text-[12px] font-semibold text-white">{outcome.summary}</div>
+                <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">{outcome.body}</p>
+              </div>
+            </ViewportReveal>
           ))}
         </div>
       </div>
 
-      <div className="mb-10">
-        <h2 className="mb-1 font-mono text-sm font-semibold text-white">Simulated signal examples</h2>
-        <p className="mb-4 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-          Realistic cycle snapshots showing what a passing vs non-passing checklist looks like before guardrails
-          apply.
-        </p>
-        <div className="grid gap-6 xl:grid-cols-2">
-          <DecisionSnapshot
-            decision={SIMULATED_PASSING_SIGNAL}
-            heading="Passing signal"
-            badge="6/6 · ENTER"
-          />
-          <DecisionSnapshot
-            decision={SIMULATED_NON_PASSING_SIGNAL}
-            heading="Non-passing signal"
-            badge="5/6 · WAIT"
-          />
+      {!compact ? (
+        <div className={chapterGap}>
+          <ViewportReveal variant={chapterRevealVariant(5)} delay={40} duration="slow">
+            <ChapterDivider
+              number="06"
+              title="Examples"
+              subtitle="Simulated and live cycle snapshots before guardrails apply."
+              chapterIndex={5}
+            />
+          </ViewportReveal>
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <ViewportReveal variant="scale" delay={100}>
+              <DecisionSnapshot
+                decision={SIMULATED_PASSING_SIGNAL}
+                heading="Passing signal"
+                badge="6/6 · ENTER"
+              />
+            </ViewportReveal>
+            <ViewportReveal variant="blur" delay={180} duration="slow">
+              <DecisionSnapshot
+                decision={SIMULATED_NON_PASSING_SIGNAL}
+                heading="Non-passing signal"
+                badge="5/6 · WAIT"
+              />
+            </ViewportReveal>
+          </div>
+          <ViewportReveal className="mt-4" variant="up" delay={260} duration="slow">
+            <LiveSnapshot decision={latestDecision} />
+          </ViewportReveal>
         </div>
-      </div>
-
-      <div>
-        <h2 className="mb-4 font-mono text-sm font-semibold text-white">Live example from telemetry</h2>
-        <LiveSnapshot decision={latestDecision} />
-      </div>
+      ) : null}
     </section>
   );
 }

@@ -50,12 +50,16 @@ export function resolveAgentLogLine(data: StatusPayload | null): AgentLogView {
   return { line, source, stale: false };
 }
 
-export function formatDecisionLogLine(decision: Decision): string {
+export function formatDecisionEvent(decision: Decision): string {
   const symbol = decision.symbol ?? "strategy";
   const reason = decision.reason ? ` — ${decision.reason}` : "";
   const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
 
-  return `${decision.action} ${symbol}${factors}${reason}`;
+  return `${symbol}${factors}${reason}`;
+}
+
+export function formatDecisionLogLine(decision: Decision): string {
+  return `${decision.action} ${formatDecisionEvent(decision)}`;
 }
 
 export function decisionActionTone(action: Decision["action"]): "green" | "yellow" | "red" {

@@ -35,8 +35,11 @@ import {
   realActiveTradeCount,
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
-import { decisionActionTone, formatDecisionLogLine, resolveAgentLogLine } from "@/lib/agent-log";
-import { decisionFactorSummary } from "@/lib/factor-scoring";
+import {
+  decisionActionTone,
+  formatDecisionEvent,
+  resolveAgentLogLine,
+} from "@/lib/agent-log";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -207,7 +210,7 @@ function AsciiRaccoonWatermark() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(520px,58vh)] w-[min(520px,78vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-45 mix-blend-screen"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(520px,58vh)] lg:w-[min(520px,78vw)] lg:opacity-35"
     />
   );
 }
@@ -299,6 +302,7 @@ function SectionTransition({
       <div
         key={displayedSection}
         className={cx(
+          "flex min-h-0 flex-1 flex-col",
           enabled && phase === "out" && "section-fade-out",
           enabled && phase === "in" && "section-fade-in",
         )}
@@ -503,13 +507,10 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       .reverse()
       .map((decision, index) => {
         const action = decision.action;
-        const symbol = decision.symbol ?? "strategy";
-        const reason = decision.reason ? ` - ${decision.reason}` : "";
-        const event = `${action} ${symbol}${reason}`;
 
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
-          amount: event,
+          amount: formatDecisionEvent(decision),
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
@@ -571,13 +572,10 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       .reverse()
       .map((decision, index) => {
         const action = decision.action;
-        const symbol = decision.symbol ?? "strategy";
-        const reason = decision.reason ? ` — ${decision.reason}` : "";
-        const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
 
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
-          amount: `${action} ${symbol}${factors}${reason}`,
+          amount: formatDecisionEvent(decision),
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
@@ -825,7 +823,7 @@ function DesktopSidebar({
   onNavigate: (section: DashboardSection) => void;
 }) {
   return (
-    <aside className="flex min-h-screen w-[280px] shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505] 2xl:w-[320px]">
+    <aside className="relative z-[1] flex min-h-screen w-[280px] shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505] 2xl:w-[320px]">
       <div className="border-b border-[#1A1A1A] px-4 py-4">
         <GithubRepositoryCard />
       </div>
@@ -969,6 +967,34 @@ function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow
   return <span className={cx("inline-flex border px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
 }
 
+function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
+  const color = {
+    green: "bg-[#00FF66] shadow-[0_0_6px_rgba(0,255,102,0.45)]",
+    yellow: "bg-[#FFD21A] shadow-[0_0_6px_rgba(255,210,26,0.35)]",
+    red: "bg-[#FF3737] shadow-[0_0_6px_rgba(255,55,55,0.35)]",
+  }[tone];
+
+  return (
+    <span
+      className={cx("inline-block h-2 w-2 shrink-0 rounded-full", color)}
+      title={status}
+      aria-label={status}
+    />
+  );
+}
+
+function decisionAccentClass(tone: "green" | "yellow" | "red") {
+  if (tone === "green") {
+    return "border-l-[#00FF66]/70";
+  }
+
+  if (tone === "red") {
+    return "border-l-[#FF3737]/70";
+  }
+
+  return "border-l-[#FFD21A]/70";
+}
+
 function formatTokenAmount(value: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "N/A";
@@ -1017,11 +1043,10 @@ function WalletPanel({
   return (
     <section
       className={cx(
-        "border border-[#2A2A2A] bg-black/88",
-        compact ? "mx-4 mt-9 overflow-hidden" : "mx-10 my-9",
+        compact ? "flex min-h-0 flex-1 flex-col px-4 pt-4" : "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
       )}
     >
-      <div className={cx("border-b border-[#1A1A1A]", headerPadding)}>
+      <div className={cx("border-b border-[#1A1A1A]", headerPadding, compact && "shrink-0")}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
@@ -1041,7 +1066,12 @@ function WalletPanel({
         </div>
       </div>
 
-      <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+      <div
+        className={cx(
+          "console-scroll overflow-x-auto overflow-y-auto",
+          compact ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
+        )}
+      >
         <table className="w-full table-fixed border-collapse text-left">
           <colgroup>
             <col className="w-[22%]" />
@@ -1059,7 +1089,10 @@ function WalletPanel({
           </thead>
           <tbody>
             {balances.map((balance) => (
-              <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+              <tr
+                key={`${balance.chain}-${balance.symbol}`}
+                className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
+              >
                 <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
                 <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
                   <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -1168,22 +1201,30 @@ function RecentActivity({
     });
   };
 
-  const visibleRows = compact ? rows.slice(0, 4) : rows;
+  const visibleRows = rows;
 
   return (
     <table className="w-full table-fixed border-collapse text-left">
       <colgroup>
-        {expandable ? <col className="w-[28px]" /> : null}
-        <col className={expandable ? "w-[32%]" : "w-[34%]"} />
-        <col className={expandable ? "w-[28%]" : "w-[30%]"} />
-        <col className={expandable ? "w-[34%]" : "w-[36%]"} />
+        <col className={expandable ? "w-[40%]" : "w-[38%]"} />
+        <col className={expandable ? "w-[34%]" : "w-[34%]"} />
+        <col className="w-[20px]" />
       </colgroup>
-      <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+      <thead
+        className={cx(
+          "font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
+          compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+        )}
+      >
         <tr>
-          {expandable ? <th className="px-2 py-4" aria-label="Expand" /> : null}
-          <th className="px-4 py-4">Event</th>
-          <th className="px-1 py-4">Reference</th>
-          <th className="px-4 py-4 text-right">Status</th>
+          <th className={cx(compact ? "px-3 py-2" : "px-4 py-4")}>
+            <div className="flex items-center gap-1.5">
+              {expandable ? <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
+              <span>Event</span>
+            </div>
+          </th>
+          <th className={cx(compact ? "px-2 py-2" : "px-1 py-4")}>Reference</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")} aria-label="Status" />
         </tr>
       </thead>
       <tbody>
@@ -1196,29 +1237,46 @@ function RecentActivity({
               <tr
                 className={cx(
                   "border-b border-[#1A1A1A] text-white",
-                  canExpand ? "cursor-pointer hover:bg-[#070707]" : "hover:bg-[#070707]",
+                  canExpand && "cursor-pointer",
+                  !compact && "hover:bg-[#070707]",
                 )}
                 onClick={canExpand ? () => toggleRow(row.id) : undefined}
               >
-                {expandable ? (
-                  <td className="px-2 py-5 text-[#757575]">
-                    {canExpand ? (
-                      isExpanded ? (
-                        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                      )
+                <td
+                  className={cx(
+                    "font-mono text-[13px] font-bold text-[#F2F2F2]",
+                    compact ? "px-3 py-2" : "px-4 py-5",
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    {expandable ? (
+                      <span className="shrink-0 text-[#757575]">
+                        {canExpand ? (
+                          isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          )
+                        ) : (
+                          <span className="inline-block h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                      </span>
                     ) : null}
-                  </td>
-                ) : null}
-                <td className="truncate px-4 py-5 font-mono text-[13px] font-bold tabular-nums">{row.amount}</td>
-                <td className="truncate px-1 py-5 font-mono text-[12px] font-bold text-[#D0D0D0]">
+                    <span className="truncate">{row.amount}</span>
+                  </div>
+                </td>
+                <td
+                  className={cx(
+                    "truncate font-mono text-[12px] text-[#D0D0D0]",
+                    compact ? "px-2 py-2" : "px-1 py-5",
+                  )}
+                >
                   {row.explorerUrl ? (
                     <a
                       href={row.explorerUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[#8FD9FF] transition-colors hover:text-white"
+                      className="font-bold text-[#8FD9FF] transition-colors hover:text-white"
                       title={row.explorerUrl}
                       onClick={(event) => event.stopPropagation()}
                     >
@@ -1228,13 +1286,13 @@ function RecentActivity({
                     row.hash
                   )}
                 </td>
-                <td className="px-4 py-4 text-right">
-                  <StatusBadge status={row.status} tone={row.tone} />
+                <td className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>
+                  <StatusDot status={row.status} tone={row.tone} />
                 </td>
               </tr>
               {isExpanded && row.details ? (
                 <tr className="border-b border-[#1A1A1A] bg-[#050505]">
-                  <td colSpan={expandable ? 4 : 3}>
+                  <td colSpan={3}>
                     <ActivityDetailPanel details={row.details} />
                   </td>
                 </tr>
@@ -1244,7 +1302,10 @@ function RecentActivity({
         })}
         {rows.length === 0 ? (
           <tr className="border-b border-[#1A1A1A]">
-            <td className="px-4 py-5 font-mono text-[12px] text-[#8A8A8A]" colSpan={expandable ? 4 : 3}>
+            <td
+              className={cx("font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3 py-4" : "px-4 py-5")}
+              colSpan={3}
+            >
               Waiting for telemetry
             </td>
           </tr>
@@ -1298,46 +1359,54 @@ function ActivePositionsTable({ rows, compact = false }: { rows: PositionRow[]; 
         <col className="w-[12%]" />
         <col className="w-[14%]" />
       </colgroup>
-      <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+      <thead
+        className={cx(
+          "font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
+          compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+        )}
+      >
         <tr>
-          <th className={cx("py-4", compact ? "px-3" : "px-5")}>Token</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Amount</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Entry</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Value</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>High</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Stop</th>
-          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Target</th>
-          <th className={cx("py-4 text-right", compact ? "px-3" : "px-5")}>Opened</th>
+          <th className={cx(compact ? "px-3 py-2" : "px-5 py-4")}>Token</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Amount</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Entry</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Value</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>High</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Stop</th>
+          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Target</th>
+          <th className={cx("text-right", compact ? "px-3 py-2" : "px-5 py-4")}>Opened</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.id} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
-            <td className={cx("py-4 font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3" : "px-5")}>
+          <tr
+            key={row.id}
+            className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
+          >
+            <td className={cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-5 py-4")}>
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
                 <span className="truncate">{row.symbol}</span>
               </span>
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatTokenAmount(row.amount)}
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatPrice(row.entryPrice)}
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatUsd(row.entryValueUsd)}
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#00FF66]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#00FF66]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatPrice(row.highestPrice)}
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#FFD21A]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#FFD21A]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatPrice(row.trailingStopPrice)}
             </td>
-            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#8FD9FF]", compact ? "px-2" : "px-3")}>
+            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#8FD9FF]", compact ? "px-2 py-2" : "px-3 py-4")}>
               {formatPrice(row.takeProfitPrice)}
             </td>
-            <td className={cx("truncate py-4 text-right font-mono text-[12px] text-[#A8A8A8]", compact ? "px-3" : "px-5")}>
+            <td className={cx("truncate text-right font-mono text-[12px] text-[#A8A8A8]", compact ? "px-3 py-2" : "px-5 py-4")}>
               {formatOpenedAt(row.openedAt)}
             </td>
           </tr>
@@ -1368,38 +1437,69 @@ function ActivePositionsPanel({
   const paperMode = agentMode === "PAPER";
 
   return (
-    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
-      <div className="mb-6">
+    <section
+      className={cx(
+        "flex min-h-0 flex-col",
+        compact ? "flex-1 px-4 pt-4" : "px-10 py-9",
+      )}
+    >
+      <div className={cx(compact ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6")}>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="font-mono text-[32px] font-semibold leading-tight text-white">Active Positions</h1>
-          <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+          <h1
+            className={cx(
+              "font-mono font-semibold leading-tight text-white",
+              compact ? "text-[28px]" : "text-[32px]",
+            )}
+          >
+            Active Positions
+          </h1>
+          {compact ? (
+            <div className="shrink-0 text-right font-mono">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+                {rows.length} {rows.length === 1 ? "position" : "positions"}
+              </div>
+              <div className="mt-1 text-sm tabular-nums text-white">{totalPositionValue}</div>
+            </div>
+          ) : (
+            <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+          )}
         </div>
-        <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-          Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
-          maintained by the agent after each decision cycle.
-        </p>
+        {!compact ? (
+          <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+            Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
+            maintained by the agent after each decision cycle.
+          </p>
+        ) : null}
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2">
-        <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
-          <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+      {!compact ? (
+        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+          <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
+            <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+          </div>
+          <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
+            <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
+          </div>
         </div>
-        <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
-          <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
-        </div>
-      </div>
+      ) : null}
 
-      <div className="border border-[#2A2A2A] bg-black/88">
-        <div className="border-b border-[#1A1A1A] px-5 py-5">
-          <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
+      {!compact ? (
+        <div className="border border-[#2A2A2A] bg-black/88">
+          <div className="border-b border-[#1A1A1A] px-5 py-5">
+            <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
+          </div>
+          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+            <ActivePositionsTable rows={rows} compact={compact} />
+          </div>
         </div>
-        <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+      ) : (
+        <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
           <ActivePositionsTable rows={rows} compact={compact} />
         </div>
-      </div>
+      )}
     </section>
   );
 }
@@ -1413,30 +1513,44 @@ function ActivityTabSelector({
   onChange: (view: ActivityView) => void;
   compact?: boolean;
 }) {
-  const tabs: Array<{ id: ActivityView; label: string }> = [
-    { id: "sys", label: "Sys Logs" },
-    { id: "txs", label: "Tx Activity" },
+  const tabs: Array<{ id: ActivityView; label: string; compactLabel: string }> = [
+    { id: "sys", label: "Sys Logs", compactLabel: "Logs" },
+    { id: "txs", label: "Tx Activity", compactLabel: "Tx" },
   ];
 
   return (
-    <div className={cx("flex shrink-0 items-center", compact ? "gap-1.5" : "gap-2")}>
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onChange(tab.id)}
-          aria-pressed={tab.id === value}
-          className={cx(
-            "border font-mono transition-colors",
-            compact ? "h-8 px-3 text-[10px]" : "h-9 px-4 text-xs",
-            tab.id === value
-              ? "border-[#666666] bg-[#222222] text-white"
-              : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
+    <div className={cx("flex shrink-0 items-center", compact ? "gap-4" : "gap-2")}>
+      {tabs.map((tab) => {
+        const active = tab.id === value;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            aria-pressed={active}
+            className={cx(
+              "relative font-mono transition-colors",
+              compact
+                ? cx(
+                    "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
+                    active ? "font-semibold text-white" : "font-medium text-[#666666] active:text-[#999999]",
+                  )
+                : cx(
+                    "border h-9 px-4 text-xs",
+                    active
+                      ? "border-[#666666] bg-[#222222] text-white"
+                      : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+                  ),
+            )}
+          >
+            {compact ? tab.compactLabel : tab.label}
+            {compact && active ? (
+              <span className="absolute -bottom-3 left-0 right-0 h-px bg-white" aria-hidden="true" />
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1455,9 +1569,13 @@ function SysLogsPanel({
   compact?: boolean;
 }) {
   return (
-    <>
+    <div className={cx(compact && "flex min-h-0 flex-1 flex-col")}>
       {agentLog.line ? (
-        <div className={cx("border border-[#2A2A2A] bg-black/88", compact ? "mb-4 px-4 py-3" : "mb-6 px-5 py-4")}>
+        <div
+          className={cx(
+            compact ? "mb-4 shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4",
+          )}
+        >
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
             Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
           </div>
@@ -1467,28 +1585,39 @@ function SysLogsPanel({
           </div>
         </div>
       ) : latestDecision ? (
-        <div className={cx("border border-[#2A2A2A] bg-black/88", compact ? "mb-4 px-4 py-3" : "mb-6 px-5 py-4")}>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-            Latest decision
-            {latestDecision.cycle_number != null ? ` (cycle #${latestDecision.cycle_number})` : ""}
+        <div
+          className={cx(
+            "border border-[#2A2A2A] border-l-2 bg-black/88",
+            decisionAccentClass(decisionActionTone(latestDecision.action)),
+            compact ? "mb-4 shrink-0 px-4 py-4" : "mb-6 px-5 py-4",
+          )}
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <StatusDot status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+              Latest decision
+              {latestDecision.cycle_number != null ? ` · cycle #${latestDecision.cycle_number}` : ""}
+            </span>
           </div>
-          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{formatDecisionLogLine(latestDecision)}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <StatusBadge status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
-            <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
-          </div>
+          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{formatDecisionEvent(latestDecision)}</p>
         </div>
       ) : null}
 
-      <div className="border border-[#2A2A2A] bg-black/88">
-        <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
-          <h2 className={cx("font-mono text-[#DADADA]", compact ? "text-lg" : "text-xl")}>Decision &amp; Execution Log</h2>
+      {compact ? (
+        <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <RecentActivity rows={rows} expandable compact />
         </div>
-        <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-          <RecentActivity rows={rows} expandable />
+      ) : (
+        <div className="border border-[#2A2A2A] bg-black/88">
+          <div className="border-b border-[#1A1A1A] px-5 py-5">
+            <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
+          </div>
+          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+            <RecentActivity rows={rows} expandable />
+          </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }
 
@@ -1510,8 +1639,13 @@ function ActivityPanel({
   const [view, setView] = useState<ActivityView>("sys");
 
   return (
-    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
-      <div className={cx("flex items-start justify-between gap-4", compact ? "mb-4" : "mb-6")}>
+    <section
+      className={cx(
+        "flex min-h-0 flex-col",
+        compact ? "flex-1 px-4 pt-4" : "px-10 py-9",
+      )}
+    >
+      <div className={cx("flex justify-between gap-4", compact ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start")}>
         <div className="min-w-0">
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
           <h1 className={cx("mt-2 font-mono font-semibold leading-tight text-white", compact ? "text-[28px]" : "text-[32px]")}>
@@ -1521,21 +1655,27 @@ function ActivityPanel({
         <ActivityTabSelector value={view} onChange={setView} compact={compact} />
       </div>
 
-      <p className={cx("max-w-3xl font-mono leading-5 text-[#8A8A8A]", compact ? "mb-4 text-[11px]" : "mb-6 text-[12px]")}>
-        {view === "txs"
-          ? "On-chain swaps and execution events from TWAK portfolio telemetry."
-          : "Decision cycles from `decision_log.jsonl` on EC2. When bot stdout is stale, the summary card shows the latest decision cycle instead of `bot_live.log` / `agent.log`."}
-      </p>
+      {!compact && view === "txs" ? (
+        <p className="mb-6 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          On-chain swaps and execution events from TWAK portfolio telemetry.
+        </p>
+      ) : null}
 
       {view === "txs" ? (
-        <div className="border border-[#2A2A2A] bg-black/88">
-          <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
-            <h2 className={cx("font-mono text-[#DADADA]", compact ? "text-lg" : "text-xl")}>Recent Activity</h2>
+        compact ? (
+          <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <RecentActivity rows={activityRows} expandable compact />
           </div>
-          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-            <RecentActivity rows={activityRows} expandable />
+        ) : (
+          <div className="border border-[#2A2A2A] bg-black/88">
+            <div className="border-b border-[#1A1A1A] px-5 py-5">
+              <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
+            </div>
+            <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+              <RecentActivity rows={activityRows} expandable />
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <SysLogsPanel
           rows={logRows}
@@ -1567,10 +1707,10 @@ function DesktopDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative hidden min-h-screen bg-black text-white lg:flex">
+    <div className="relative isolate hidden min-h-screen bg-black text-white lg:flex">
       <AsciiRaccoonWatermark />
       <DesktopSidebar activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="technical-grid min-w-0 flex-1">
+      <main className="relative z-[1] technical-grid min-w-0 flex-1">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <SectionTransition section={activeSection} enabled={sectionTransitionEnabled}>
           {(section) =>
@@ -1725,10 +1865,10 @@ function MobilePerformanceWidget({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <section className="mx-4 mb-4 mt-4 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
+    <section className="mx-4 mt-3 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
       <div className="relative min-h-0 flex-1">
         <MobileChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-        <div className="absolute inset-0 px-2 py-2">
+        <div className="absolute inset-0 flex flex-col px-2 py-2">
           <PortfolioChart data={view.mobileChartData} variant="mobile" />
         </div>
       </div>
@@ -1802,12 +1942,12 @@ function MobileDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="technical-grid relative flex min-h-dvh flex-col bg-black text-white lg:hidden">
+    <div className="technical-grid relative isolate flex min-h-dvh flex-col bg-black text-white lg:hidden">
       <AsciiRaccoonWatermark />
-      <MobileHeader />
+      {/* <MobileHeader /> */}
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
-        className="mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
+        className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
         style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
       >
         <SectionTransition
