@@ -27,6 +27,24 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
+import {
+  ViewportReveal,
+  activityCellDelay,
+  activityColumnVariant,
+  activityLeadEventVariant,
+  activityReferenceVariant,
+  activityStatusVariant,
+  type ActivityFeedMode,
+  homeMetricDelay,
+  homeMetricVariant,
+  positionCellDelay,
+  positionColumnVariant,
+  positionLeadVariant,
+  type PositionColumn,
+  walletCellDelay,
+  walletColumnVariant,
+  walletRowLeadVariant,
+} from "@/components/viewport-reveal";
 import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio-chart";
 import { TokenIcon } from "@/components/token-icon";
 import {
@@ -874,22 +892,44 @@ function DesktopSidebar({
   );
 }
 
-function DesktopMetricBlock({ label, value, unit, delta, tone, tooltip }: MetricView) {
+function DesktopMetricBlock({
+  label,
+  value,
+  unit,
+  delta,
+  tone,
+  tooltip,
+  index = 0,
+}: MetricView & { index?: number }) {
   return (
-    <div className="min-w-0 border border-[#2A2A2A] bg-black/88 px-5 py-4">
-      <div className="mb-3 font-mono text-[13px] text-[#A0A0A0]">
-        <TooltipLabel label={label} tooltip={tooltip} />
+    <ViewportReveal
+      variant={homeMetricVariant(label, tone)}
+      delay={homeMetricDelay(index)}
+      duration={label.includes("Balance") ? "slow" : "normal"}
+      className="min-w-0"
+    >
+      <div className="min-w-0 border border-[#2A2A2A] bg-black/88 px-5 py-4">
+        <ViewportReveal variant="fade" delay={homeMetricDelay(index) + 40} duration="fast">
+          <div className="mb-3 font-mono text-[13px] text-[#A0A0A0]">
+            <TooltipLabel label={label} tooltip={tooltip} />
+          </div>
+        </ViewportReveal>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="break-words font-mono text-[30px] font-semibold leading-none text-white tabular-nums">{value}</span>
+          {unit ? <span className="font-mono text-sm font-semibold text-[#C7C7C7]">{unit}</span> : null}
+          {delta ? (
+            <span
+              className={cx(
+                "font-mono text-sm font-semibold tabular-nums",
+                tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+              )}
+            >
+              {delta}
+            </span>
+          ) : null}
+        </div>
       </div>
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="break-words font-mono text-[30px] font-semibold leading-none text-white tabular-nums">{value}</span>
-        {unit ? <span className="font-mono text-sm font-semibold text-[#C7C7C7]">{unit}</span> : null}
-        {delta ? (
-          <span className={cx("font-mono text-sm font-semibold tabular-nums", tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
-            {delta}
-          </span>
-        ) : null}
-      </div>
-    </div>
+    </ViewportReveal>
   );
 }
 
@@ -897,30 +937,56 @@ function TimeRangeSelector({
   compact = false,
   value,
   onChange,
+  animated = false,
 }: {
   compact?: boolean;
   value: TimeRange;
   onChange: (range: TimeRange) => void;
+  animated?: boolean;
 }) {
+  const buttons = timeRanges.map((range, index) => (
+    <button
+      key={range}
+      type="button"
+      onClick={() => onChange(range)}
+      className={cx(
+        "border font-mono transition-colors",
+        compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
+        range === value
+          ? "border-[#666666] bg-[#222222] text-white"
+          : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+      )}
+    >
+      {range}
+    </button>
+  ));
+
+  if (!animated) {
+    return <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>{buttons}</div>;
+  }
+
   return (
-    <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>
-      {timeRanges.map((range) => (
-        <button
-          key={range}
-          type="button"
-          onClick={() => onChange(range)}
-          className={cx(
-            "border font-mono transition-colors",
-            compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
-            range === value
-              ? "border-[#666666] bg-[#222222] text-white"
-              : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
-          )}
-        >
-          {range}
-        </button>
-      ))}
-    </div>
+    <ViewportReveal variant="fade" delay={200} duration="fast">
+      <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>
+        {timeRanges.map((range, index) => (
+          <ViewportReveal key={range} variant="up" delay={240 + index * 35} duration="fast">
+            <button
+              type="button"
+              onClick={() => onChange(range)}
+              className={cx(
+                "border font-mono transition-colors",
+                compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
+                range === value
+                  ? "border-[#666666] bg-[#222222] text-white"
+                  : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+              )}
+            >
+              {range}
+            </button>
+          </ViewportReveal>
+        ))}
+      </div>
+    </ViewportReveal>
   );
 }
 
@@ -935,24 +1001,31 @@ function DesktopPerformancePanel({
 }) {
   return (
     <section className="flex min-h-0 flex-col px-10 py-9">
-      <div className="mb-9">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Overview</div>
-        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Alexis' terminal</h1>
-      </div>
+      <ViewportReveal variant="blur" duration="slow" className="mb-9">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Overview</div>
+          <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Alexis' terminal</h1>
+        </div>
+        <ViewportReveal variant="expand" delay={120} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
+      </ViewportReveal>
       <div className="grid grid-cols-4 gap-4">
-        {view.metrics.map((metric) => (
-          <DesktopMetricBlock key={metric.label} {...metric} />
+        {view.metrics.map((metric, index) => (
+          <DesktopMetricBlock key={metric.label} {...metric} index={index} />
         ))}
       </div>
-      <div className="mt-10 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1A1A1A] px-7 py-5">
-          <h2 className="font-mono text-lg text-[#CFCFCF]">Portfolio Chart</h2>
-          <TimeRangeSelector value={timeRange} onChange={onTimeRangeChange} />
+      <ViewportReveal variant="fade" delay={360} duration="slow" className="mt-10 flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1A1A1A] px-7 py-5">
+            <ViewportReveal variant="left" delay={400} duration="fast">
+              <h2 className="font-mono text-lg text-[#CFCFCF]">Portfolio Chart</h2>
+            </ViewportReveal>
+            <TimeRangeSelector value={timeRange} onChange={onTimeRangeChange} animated />
+          </div>
+          <ViewportReveal variant="blur" delay={480} duration="slow" className="min-h-[340px] flex-1 p-6">
+            <PortfolioChart data={view.chartData} variant="desktop" />
+          </ViewportReveal>
         </div>
-        <div className="min-h-[340px] flex-1 p-6">
-          <PortfolioChart data={view.chartData} variant="desktop" />
-        </div>
-      </div>
+      </ViewportReveal>
     </section>
   );
 }
@@ -965,6 +1038,14 @@ function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow
   }[tone];
 
   return <span className={cx("inline-flex border px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
+}
+
+function statusToneTextClass(tone: "green" | "yellow" | "red") {
+  return {
+    green: "text-[#00FF66]",
+    yellow: "text-[#FFD21A]",
+    red: "text-[#FF3737]",
+  }[tone];
 }
 
 function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
@@ -1027,6 +1108,101 @@ function TelemetryBanner({ message }: { message: string }) {
   );
 }
 
+function WalletHeaderCell({
+  column,
+  label,
+  className,
+  align = "left",
+}: {
+  column: "chain" | "token" | "amount" | "value";
+  label: string;
+  className?: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <th className={className}>
+      <ViewportReveal
+        as="span"
+        variant={walletColumnVariant(column)}
+        delay={walletCellDelay(0, column)}
+        duration="fast"
+        className={cx("block", align === "right" && "text-right")}
+      >
+        {label}
+      </ViewportReveal>
+    </th>
+  );
+}
+
+function WalletBalanceTableRow({
+  balance,
+  index,
+  compact,
+  scrollRoot,
+}: {
+  balance: WalletBalanceRow;
+  index: number;
+  compact: boolean;
+  scrollRoot: Element | null;
+}) {
+  const isLeadHolding = index === 0 && (balance.valueUsd ?? 0) > 0;
+  const tokenVariant = isLeadHolding ? walletRowLeadVariant(balance.symbol, balance.valueUsd, index) : walletColumnVariant("token");
+
+  return (
+    <tr
+      className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
+    >
+      <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">
+        <ViewportReveal
+          as="span"
+          variant={walletColumnVariant("chain")}
+          delay={walletCellDelay(index, "chain")}
+          root={scrollRoot}
+          className="block truncate"
+        >
+          {balance.chain}
+        </ViewportReveal>
+      </td>
+      <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
+        <ViewportReveal
+          as="span"
+          variant={tokenVariant}
+          delay={walletCellDelay(index, "token")}
+          duration={isLeadHolding ? "slow" : "normal"}
+          root={scrollRoot}
+          className="inline-flex min-w-0 items-center gap-1.5"
+        >
+          <TokenIcon symbol={balance.symbol} size={16} />
+          <span className="truncate">{balance.symbol}</span>
+        </ViewportReveal>
+      </td>
+      <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+        <ViewportReveal
+          as="span"
+          variant={walletColumnVariant("amount")}
+          delay={walletCellDelay(index, "amount")}
+          root={scrollRoot}
+          className="block truncate"
+        >
+          {formatTokenAmount(balance.amount)}
+        </ViewportReveal>
+      </td>
+      <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+        <ViewportReveal
+          as="span"
+          variant={walletColumnVariant("value")}
+          delay={walletCellDelay(index, "value")}
+          duration={isLeadHolding ? "slow" : "normal"}
+          root={scrollRoot}
+          className="block truncate"
+        >
+          {formatUsd(balance.valueUsd)}
+        </ViewportReveal>
+      </td>
+    </tr>
+  );
+}
+
 function WalletPanel({
   balances,
   agentMode,
@@ -1036,9 +1212,15 @@ function WalletPanel({
   agentMode: string;
   compact?: boolean;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
   const paperMode = agentMode === "PAPER";
   const totalValue = balances.reduce((sum, balance) => sum + (balance.valueUsd ?? 0), 0);
   const headerPadding = compact ? "px-4 py-4" : "px-5 py-5";
+
+  useEffect(() => {
+    setScrollRoot(scrollRef.current);
+  }, []);
 
   return (
     <section
@@ -1048,25 +1230,40 @@ function WalletPanel({
     >
       <div className={cx("border-b border-[#1A1A1A]", headerPadding, compact && "shrink-0")}>
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
-            <h1 className={cx("mt-1 font-mono font-semibold leading-tight text-white", compact ? "text-[28px]" : "text-[32px]")}>
-              Live Holdings
-            </h1>
-          </div>
-          <div className="shrink-0 text-right font-mono">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
-              {balances.length} {balances.length === 1 ? "token" : "tokens"}
+          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
+              <h1
+                className={cx(
+                  "mt-1 font-mono font-semibold leading-tight text-white",
+                  compact ? "text-[28px]" : "text-[32px]",
+                )}
+              >
+                Live Holdings
+              </h1>
             </div>
-            <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
+          </ViewportReveal>
+          <div className="shrink-0 text-right font-mono">
+            <ViewportReveal variant="fade" delay={70} duration="fast">
+              <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+                {balances.length} {balances.length === 1 ? "token" : "tokens"}
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="scale" delay={130} duration="slow">
+              <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
+            </ViewportReveal>
             {paperMode ? (
-              <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+              <ViewportReveal variant="down" delay={190} duration="fast">
+                <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+              </ViewportReveal>
             ) : null}
           </div>
         </div>
+        <ViewportReveal variant="expand" delay={220} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
       </div>
 
       <div
+        ref={scrollRef}
         className={cx(
           "console-scroll overflow-x-auto overflow-y-auto",
           compact ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
@@ -1081,37 +1278,28 @@ function WalletPanel({
           </colgroup>
           <thead className="border-b border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
             <tr>
-              <th className="px-3 py-2">Chain</th>
-              <th className="px-2 py-2">Token</th>
-              <th className="px-2 py-2">Amount</th>
-              <th className="px-3 py-2 text-right">Value</th>
+              <WalletHeaderCell column="chain" label="Chain" className="px-3 py-2" />
+              <WalletHeaderCell column="token" label="Token" className="px-2 py-2" />
+              <WalletHeaderCell column="amount" label="Amount" className="px-2 py-2" />
+              <WalletHeaderCell column="value" label="Value" className="px-3 py-2" align="right" />
             </tr>
           </thead>
           <tbody>
-            {balances.map((balance) => (
-              <tr
+            {balances.map((balance, index) => (
+              <WalletBalanceTableRow
                 key={`${balance.chain}-${balance.symbol}`}
-                className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
-              >
-                <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
-                <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <TokenIcon symbol={balance.symbol} size={16} />
-                    <span className="truncate">{balance.symbol}</span>
-                  </span>
-                </td>
-                <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                  {formatTokenAmount(balance.amount)}
-                </td>
-                <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                  {formatUsd(balance.valueUsd)}
-                </td>
-              </tr>
+                balance={balance}
+                index={index}
+                compact={compact}
+                scrollRoot={scrollRoot}
+              />
             ))}
             {balances.length === 0 ? (
               <tr className="border-b border-[#1A1A1A]">
                 <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
-                  Waiting for TWAK wallet balances
+                  <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                    Waiting for TWAK wallet balances
+                  </ViewportReveal>
                 </td>
               </tr>
             ) : null}
@@ -1178,14 +1366,169 @@ function ActivityDetailPanel({ details }: { details: LogEventDetails }) {
   );
 }
 
+function ActivityHeaderCell({
+  column,
+  label,
+  className,
+  mode,
+  expandable = false,
+}: {
+  column: "event" | "reference" | "status";
+  label: string;
+  className?: string;
+  mode: ActivityFeedMode;
+  expandable?: boolean;
+}) {
+  const variant = column === "reference" ? activityReferenceVariant(mode) : activityColumnVariant(column);
+
+  return (
+    <th className={className}>
+      <ViewportReveal
+        as="span"
+        variant={variant}
+        delay={activityCellDelay(0, column)}
+        duration="fast"
+        className="block"
+      >
+        {column === "event" && expandable ? (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {label}
+          </span>
+        ) : (
+          label
+        )}
+      </ViewportReveal>
+    </th>
+  );
+}
+
+function ActivityTableRow({
+  row,
+  index,
+  compact,
+  expandable,
+  expanded,
+  mode,
+  scrollRoot,
+  onToggle,
+}: {
+  row: ActivityRow;
+  index: number;
+  compact: boolean;
+  expandable: boolean;
+  expanded: boolean;
+  mode: ActivityFeedMode;
+  scrollRoot: Element | null;
+  onToggle?: () => void;
+}) {
+  const canExpand = expandable && Boolean(row.details);
+  const isLead = index === 0;
+
+  return (
+    <Fragment>
+      <tr
+        className={cx(
+          "border-b border-[#1A1A1A] text-white",
+          canExpand && "cursor-pointer",
+          !compact && "hover:bg-[#070707]",
+        )}
+        onClick={canExpand ? onToggle : undefined}
+      >
+        <td className={cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-4 py-5")}>
+          <ViewportReveal
+            as="span"
+            variant={activityLeadEventVariant(index, mode)}
+            delay={activityCellDelay(index, "event")}
+            duration={isLead ? "slow" : "normal"}
+            root={scrollRoot}
+            className="flex min-w-0 items-center gap-1.5"
+          >
+            {expandable ? (
+              <span className="shrink-0 text-[#757575]">
+                {canExpand ? (
+                  expanded ? (
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  )
+                ) : (
+                  <span className="inline-block h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </span>
+            ) : null}
+            <span className="truncate">{row.amount}</span>
+          </ViewportReveal>
+        </td>
+        <td className={cx("truncate font-mono text-[12px] text-[#D0D0D0]", compact ? "px-2 py-2" : "px-1 py-5")}>
+          <ViewportReveal
+            as="span"
+            variant={activityReferenceVariant(mode)}
+            delay={activityCellDelay(index, "reference")}
+            root={scrollRoot}
+            className="block truncate"
+          >
+            {row.explorerUrl ? (
+              <a
+                href={row.explorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-[#8FD9FF] transition-colors hover:text-white"
+                title={row.explorerUrl}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.hash}
+              </a>
+            ) : (
+              row.hash
+            )}
+          </ViewportReveal>
+        </td>
+        <td className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>
+          <ViewportReveal
+            as="span"
+            variant={activityStatusVariant(row.tone)}
+            delay={activityCellDelay(index, "status")}
+            root={scrollRoot}
+            className="flex min-w-0 items-center gap-1.5"
+          >
+            <StatusDot status={row.status} tone={row.tone} />
+            <span
+              className={cx(
+                "truncate font-mono text-[10px] font-bold uppercase tracking-[0.06em]",
+                statusToneTextClass(row.tone),
+              )}
+            >
+              {row.status}
+            </span>
+          </ViewportReveal>
+        </td>
+      </tr>
+      {expanded && row.details ? (
+        <tr className="border-b border-[#1A1A1A] bg-[#050505]">
+          <td colSpan={3}>
+            <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
+              <ActivityDetailPanel details={row.details} />
+            </ViewportReveal>
+          </td>
+        </tr>
+      ) : null}
+    </Fragment>
+  );
+}
+
 function RecentActivity({
   rows,
   compact = false,
   expandable = false,
+  mode = "logs",
+  scrollRoot = null,
 }: {
   rows: ActivityRow[];
   compact?: boolean;
   expandable?: boolean;
+  mode?: ActivityFeedMode;
+  scrollRoot?: Element | null;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
@@ -1201,14 +1544,12 @@ function RecentActivity({
     });
   };
 
-  const visibleRows = rows;
-
   return (
     <table className="w-full table-fixed border-collapse text-left">
       <colgroup>
-        <col className={expandable ? "w-[40%]" : "w-[38%]"} />
-        <col className={expandable ? "w-[34%]" : "w-[34%]"} />
-        <col className="w-[20px]" />
+        <col className={expandable ? "w-[36%]" : "w-[34%]"} />
+        <col className="w-[32%]" />
+        <col className="w-[32%]" />
       </colgroup>
       <thead
         className={cx(
@@ -1217,96 +1558,50 @@ function RecentActivity({
         )}
       >
         <tr>
-          <th className={cx(compact ? "px-3 py-2" : "px-4 py-4")}>
-            <div className="flex items-center gap-1.5">
-              {expandable ? <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
-              <span>Event</span>
-            </div>
-          </th>
-          <th className={cx(compact ? "px-2 py-2" : "px-1 py-4")}>Reference</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")} aria-label="Status" />
+          <ActivityHeaderCell
+            column="event"
+            label="Event"
+            mode={mode}
+            expandable={expandable}
+            className={cx(compact ? "px-3 py-2" : "px-4 py-4")}
+          />
+          <ActivityHeaderCell
+            column="reference"
+            label="Reference"
+            mode={mode}
+            className={cx(compact ? "px-2 py-2" : "px-1 py-4")}
+          />
+          <ActivityHeaderCell
+            column="status"
+            label="Status"
+            mode={mode}
+            className={cx(compact ? "px-2 py-2" : "px-3 py-4")}
+          />
         </tr>
       </thead>
       <tbody>
-        {visibleRows.map((row) => {
-          const canExpand = expandable && Boolean(row.details);
-          const isExpanded = canExpand && expandedIds.has(row.id);
-
-          return (
-            <Fragment key={row.id}>
-              <tr
-                className={cx(
-                  "border-b border-[#1A1A1A] text-white",
-                  canExpand && "cursor-pointer",
-                  !compact && "hover:bg-[#070707]",
-                )}
-                onClick={canExpand ? () => toggleRow(row.id) : undefined}
-              >
-                <td
-                  className={cx(
-                    "font-mono text-[13px] font-bold text-[#F2F2F2]",
-                    compact ? "px-3 py-2" : "px-4 py-5",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    {expandable ? (
-                      <span className="shrink-0 text-[#757575]">
-                        {canExpand ? (
-                          isExpanded ? (
-                            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                          )
-                        ) : (
-                          <span className="inline-block h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                      </span>
-                    ) : null}
-                    <span className="truncate">{row.amount}</span>
-                  </div>
-                </td>
-                <td
-                  className={cx(
-                    "truncate font-mono text-[12px] text-[#D0D0D0]",
-                    compact ? "px-2 py-2" : "px-1 py-5",
-                  )}
-                >
-                  {row.explorerUrl ? (
-                    <a
-                      href={row.explorerUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-bold text-[#8FD9FF] transition-colors hover:text-white"
-                      title={row.explorerUrl}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {row.hash}
-                    </a>
-                  ) : (
-                    row.hash
-                  )}
-                </td>
-                <td className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>
-                  <StatusDot status={row.status} tone={row.tone} />
-                </td>
-              </tr>
-              {isExpanded && row.details ? (
-                <tr className="border-b border-[#1A1A1A] bg-[#050505]">
-                  <td colSpan={3}>
-                    <ActivityDetailPanel details={row.details} />
-                  </td>
-                </tr>
-              ) : null}
-            </Fragment>
-          );
-        })}
+        {rows.map((row, index) => (
+          <ActivityTableRow
+            key={row.id}
+            row={row}
+            index={index}
+            compact={compact}
+            expandable={expandable}
+            expanded={expandable && expandedIds.has(row.id)}
+            mode={mode}
+            scrollRoot={scrollRoot}
+            onToggle={() => toggleRow(row.id)}
+          />
+        ))}
         {rows.length === 0 ? (
           <tr className="border-b border-[#1A1A1A]">
             <td
               className={cx("font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3 py-4" : "px-4 py-5")}
               colSpan={3}
             >
-              Waiting for telemetry
+              <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                Waiting for telemetry
+              </ViewportReveal>
             </td>
           </tr>
         ) : null}
@@ -1346,7 +1641,121 @@ function formatOpenedAt(timestamp: string | null) {
   });
 }
 
-function ActivePositionsTable({ rows, compact = false }: { rows: PositionRow[]; compact?: boolean }) {
+function PositionHeaderCell({
+  column,
+  label,
+  className,
+  align = "left",
+}: {
+  column: PositionColumn;
+  label: string;
+  className?: string;
+  align?: "left" | "right";
+}) {
+  return (
+    <th className={className}>
+      <ViewportReveal
+        as="span"
+        variant={positionColumnVariant(column)}
+        delay={positionCellDelay(0, column)}
+        duration="fast"
+        className={cx("block", align === "right" && "text-right")}
+      >
+        {label}
+      </ViewportReveal>
+    </th>
+  );
+}
+
+function PositionTableRow({
+  row,
+  index,
+  compact,
+  scrollRoot,
+}: {
+  row: PositionRow;
+  index: number;
+  compact: boolean;
+  scrollRoot: Element | null;
+}) {
+  const isLead = index === 0;
+  const cellClass = (column: PositionColumn, colorClass = "text-[#D0D0D0]") =>
+    cx(
+      "truncate font-mono text-[12px] tabular-nums",
+      colorClass,
+      compact ? "px-2 py-2" : "px-3 py-4",
+      column === "token" && (compact ? "px-3 py-2" : "px-5 py-4"),
+      column === "opened" && (compact ? "px-3 py-2" : "px-5 py-4"),
+    );
+
+  const renderCell = (column: PositionColumn, content: ReactNode, className: string) => (
+    <td className={className}>
+      <ViewportReveal
+        as="span"
+        variant={column === "token" && isLead ? positionLeadVariant(index) : positionColumnVariant(column)}
+        delay={positionCellDelay(index, column)}
+        duration={isLead && column === "token" ? "slow" : "normal"}
+        root={scrollRoot}
+        className={column === "token" ? "inline-flex min-w-0 items-center gap-1.5" : "block truncate"}
+      >
+        {content}
+      </ViewportReveal>
+    </td>
+  );
+
+  return (
+    <tr className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}>
+      {renderCell(
+        "token",
+        <>
+          <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
+          <span className="truncate font-mono text-[13px] font-bold text-[#F2F2F2]">{row.symbol}</span>
+        </>,
+        cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-5 py-4"),
+      )}
+      {renderCell("amount", formatTokenAmount(row.amount), cellClass("amount"))}
+      {renderCell("entry", formatPrice(row.entryPrice), cellClass("entry"))}
+      {renderCell("value", formatUsd(row.entryValueUsd), cellClass("value"))}
+      {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#00FF66]"))}
+      {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#FFD21A]"))}
+      {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#8FD9FF]"))}
+      {renderCell(
+        "opened",
+        formatOpenedAt(row.openedAt),
+        cx(
+          "truncate text-right font-mono text-[12px] text-[#A8A8A8]",
+          compact ? "px-3 py-2" : "px-5 py-4",
+        ),
+      )}
+    </tr>
+  );
+}
+
+function ActivePositionsTable({
+  rows,
+  compact = false,
+  scrollRoot = null,
+}: {
+  rows: PositionRow[];
+  compact?: boolean;
+  scrollRoot?: Element | null;
+}) {
+  const headerColumns: Array<{ column: PositionColumn; label: string; className: string; align?: "right" }> = [
+    { column: "token", label: "Token", className: cx(compact ? "px-3 py-2" : "px-5 py-4") },
+    { column: "amount", label: "Amount", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "entry", label: "Entry", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "value", label: "Value", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "high", label: "High", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "stop", label: "Stop", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "target", label: "Target", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    {
+      column: "opened",
+      label: "Opened",
+      className: cx("text-right", compact ? "px-3 py-2" : "px-5 py-4"),
+      align: "right",
+    },
+  ];
+
   return (
     <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
       <colgroup>
@@ -1366,55 +1775,33 @@ function ActivePositionsTable({ rows, compact = false }: { rows: PositionRow[]; 
         )}
       >
         <tr>
-          <th className={cx(compact ? "px-3 py-2" : "px-5 py-4")}>Token</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Amount</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Entry</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Value</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>High</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Stop</th>
-          <th className={cx(compact ? "px-2 py-2" : "px-3 py-4")}>Target</th>
-          <th className={cx("text-right", compact ? "px-3 py-2" : "px-5 py-4")}>Opened</th>
+          {headerColumns.map((header) => (
+            <PositionHeaderCell
+              key={header.column}
+              column={header.column}
+              label={header.label}
+              className={header.className}
+              align={header.align}
+            />
+          ))}
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr
+        {rows.map((row, index) => (
+          <PositionTableRow
             key={row.id}
-            className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
-          >
-            <td className={cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-5 py-4")}>
-              <span className="inline-flex min-w-0 items-center gap-1.5">
-                <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
-                <span className="truncate">{row.symbol}</span>
-              </span>
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatTokenAmount(row.amount)}
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatPrice(row.entryPrice)}
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatUsd(row.entryValueUsd)}
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#00FF66]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatPrice(row.highestPrice)}
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#FFD21A]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatPrice(row.trailingStopPrice)}
-            </td>
-            <td className={cx("truncate font-mono text-[12px] tabular-nums text-[#8FD9FF]", compact ? "px-2 py-2" : "px-3 py-4")}>
-              {formatPrice(row.takeProfitPrice)}
-            </td>
-            <td className={cx("truncate text-right font-mono text-[12px] text-[#A8A8A8]", compact ? "px-3 py-2" : "px-5 py-4")}>
-              {formatOpenedAt(row.openedAt)}
-            </td>
-          </tr>
+            row={row}
+            index={index}
+            compact={compact}
+            scrollRoot={scrollRoot}
+          />
         ))}
         {rows.length === 0 ? (
           <tr className="border-b border-[#1A1A1A]">
             <td className={cx("py-6 font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3" : "px-5")} colSpan={8}>
-              No open positions in positions.json
+              <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                No open positions in positions.json
+              </ViewportReveal>
             </td>
           </tr>
         ) : null}
@@ -1434,7 +1821,13 @@ function ActivePositionsPanel({
   agentMode: string;
   compact?: boolean;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
   const paperMode = agentMode === "PAPER";
+
+  useEffect(() => {
+    setScrollRoot(scrollRef.current);
+  }, []);
 
   return (
     <section
@@ -1444,60 +1837,81 @@ function ActivePositionsPanel({
       )}
     >
       <div className={cx(compact ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6")}>
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <h1
-            className={cx(
-              "font-mono font-semibold leading-tight text-white",
-              compact ? "text-[28px]" : "text-[32px]",
-            )}
-          >
-            Active Positions
-          </h1>
-          {compact ? (
-            <div className="shrink-0 text-right font-mono">
-              <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
-                {rows.length} {rows.length === 1 ? "position" : "positions"}
+        <ViewportReveal variant="blur" duration="slow">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+            <h1
+              className={cx(
+                "font-mono font-semibold leading-tight text-white",
+                compact ? "text-[28px]" : "text-[32px]",
+              )}
+            >
+              Active Positions
+            </h1>
+            {compact ? (
+              <div className="shrink-0 text-right font-mono">
+                <ViewportReveal variant="fade" delay={70} duration="fast">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+                    {rows.length} {rows.length === 1 ? "position" : "positions"}
+                  </div>
+                </ViewportReveal>
+                <ViewportReveal variant="scale" delay={130} duration="slow">
+                  <div className="mt-1 text-sm tabular-nums text-white">{totalPositionValue}</div>
+                </ViewportReveal>
               </div>
-              <div className="mt-1 text-sm tabular-nums text-white">{totalPositionValue}</div>
-            </div>
-          ) : (
-            <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
-          )}
-        </div>
+            ) : (
+              <ViewportReveal variant="scale" delay={90} duration="fast">
+                <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+              </ViewportReveal>
+            )}
+          </div>
+          {!compact ? (
+            <ViewportReveal variant="left" delay={140}>
+              <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+                Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
+                maintained by the agent after each decision cycle.
+              </p>
+            </ViewportReveal>
+          ) : null}
+        </ViewportReveal>
         {!compact ? (
-          <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-            Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
-            maintained by the agent after each decision cycle.
-          </p>
+          <ViewportReveal variant="expand" delay={180} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
         ) : null}
       </div>
 
       {!compact ? (
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
-          <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
-            <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
-          </div>
-          <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
-            <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
-          </div>
+          <ViewportReveal variant="fade" delay={100}>
+            <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
+              <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+            </div>
+          </ViewportReveal>
+          <ViewportReveal variant="scale" delay={160} duration="slow">
+            <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
+              <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
+            </div>
+          </ViewportReveal>
         </div>
       ) : null}
 
       {!compact ? (
-        <div className="border border-[#2A2A2A] bg-black/88">
-          <div className="border-b border-[#1A1A1A] px-5 py-5">
-            <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
+        <ViewportReveal variant="fade" delay={200}>
+          <div className="border border-[#2A2A2A] bg-black/88">
+            <div className="border-b border-[#1A1A1A] px-5 py-5">
+              <ViewportReveal variant="left" delay={240} duration="fast">
+                <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
+              </ViewportReveal>
+            </div>
+            <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+              <ActivePositionsTable rows={rows} compact={compact} scrollRoot={scrollRoot} />
+            </div>
           </div>
-          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-            <ActivePositionsTable rows={rows} compact={compact} />
-          </div>
-        </div>
+        </ViewportReveal>
       ) : (
-        <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <ActivePositionsTable rows={rows} compact={compact} />
+        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <ActivePositionsTable rows={rows} compact={compact} scrollRoot={scrollRoot} />
         </div>
       )}
     </section>
@@ -1519,38 +1933,106 @@ function ActivityTabSelector({
   ];
 
   return (
-    <div className={cx("flex shrink-0 items-center", compact ? "gap-4" : "gap-2")}>
-      {tabs.map((tab) => {
-        const active = tab.id === value;
+    <ViewportReveal variant="fade" delay={90} duration="fast">
+      <div className={cx("flex shrink-0 items-center", compact ? "gap-4" : "gap-2")}>
+        {tabs.map((tab, index) => {
+          const active = tab.id === value;
 
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onChange(tab.id)}
-            aria-pressed={active}
-            className={cx(
-              "relative font-mono transition-colors",
-              compact
-                ? cx(
-                    "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
-                    active ? "font-semibold text-white" : "font-medium text-[#666666] active:text-[#999999]",
-                  )
-                : cx(
-                    "border h-9 px-4 text-xs",
-                    active
-                      ? "border-[#666666] bg-[#222222] text-white"
-                      : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
-                  ),
-            )}
-          >
-            {compact ? tab.compactLabel : tab.label}
-            {compact && active ? (
-              <span className="absolute -bottom-3 left-0 right-0 h-px bg-white" aria-hidden="true" />
-            ) : null}
-          </button>
-        );
-      })}
+          return (
+            <ViewportReveal
+              key={tab.id}
+              variant={tab.id === "txs" ? "right" : "left"}
+              delay={120 + index * 50}
+              duration="fast"
+            >
+              <button
+                type="button"
+                onClick={() => onChange(tab.id)}
+                aria-pressed={active}
+                className={cx(
+                  "relative font-mono transition-colors",
+                  compact
+                    ? cx(
+                        "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
+                        active ? "font-semibold text-white" : "font-medium text-[#666666] active:text-[#999999]",
+                      )
+                    : cx(
+                        "border h-9 px-4 text-xs",
+                        active
+                          ? "border-[#666666] bg-[#222222] text-white"
+                          : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+                      ),
+                )}
+              >
+                {compact ? tab.compactLabel : tab.label}
+                {compact && active ? (
+                  <span className="absolute -bottom-3 left-0 right-0 h-px bg-white" aria-hidden="true" />
+                ) : null}
+              </button>
+            </ViewportReveal>
+          );
+        })}
+      </div>
+    </ViewportReveal>
+  );
+}
+
+function ActivityViewTransition({
+  view,
+  className,
+  children,
+}: {
+  view: ActivityView;
+  className?: string;
+  children: (activeView: ActivityView) => ReactNode;
+}) {
+  const [displayedView, setDisplayedView] = useState(view);
+  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
+  const [direction, setDirection] = useState<"to-txs" | "to-sys">("to-sys");
+  const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (view === displayedView) {
+      return;
+    }
+
+    setDirection(view === "txs" ? "to-txs" : "to-sys");
+    setPhase("out");
+
+    const swapTimeout = window.setTimeout(() => {
+      setDisplayedView(view);
+      setPhase("in");
+
+      enterIdleTimeoutRef.current = window.setTimeout(() => {
+        setPhase("idle");
+      }, 380);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(swapTimeout);
+      if (enterIdleTimeoutRef.current !== undefined) {
+        window.clearTimeout(enterIdleTimeoutRef.current);
+        enterIdleTimeoutRef.current = undefined;
+      }
+    };
+  }, [view, displayedView]);
+
+  const motionClass =
+    phase === "out"
+      ? direction === "to-txs"
+        ? "activity-view-out-sys"
+        : "activity-view-out-txs"
+      : phase === "in"
+        ? direction === "to-txs"
+          ? "activity-view-in-txs"
+          : "activity-view-in-sys"
+        : null;
+
+  return (
+    <div className={className}>
+      <div key={displayedView} className={cx("flex min-h-0 flex-1 flex-col", motionClass)}>
+        {children(displayedView)}
+      </div>
     </div>
   );
 }
@@ -1568,54 +2050,125 @@ function SysLogsPanel({
   agentRunning: boolean;
   compact?: boolean;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+
+  useEffect(() => {
+    setScrollRoot(scrollRef.current);
+  }, []);
+
   return (
     <div className={cx(compact && "flex min-h-0 flex-1 flex-col")}>
       {agentLog.line ? (
-        <div
-          className={cx(
-            compact ? "mb-4 shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4",
-          )}
-        >
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-            Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
+        <ViewportReveal variant="blur" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
+          <div
+            className={cx(
+              compact ? "border-b border-[#1A1A1A] pb-4" : "border border-[#2A2A2A] bg-black/88 px-5 py-4",
+            )}
+          >
+            <ViewportReveal variant="fade" delay={60} duration="fast">
+              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+                Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="left" delay={120}>
+              <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{agentLog.line}</p>
+            </ViewportReveal>
+            <ViewportReveal variant="scale" delay={180} duration="fast" className="mt-3">
+              <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
+            </ViewportReveal>
           </div>
-          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{agentLog.line}</p>
-          <div className="mt-3">
-            <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
-          </div>
-        </div>
+        </ViewportReveal>
       ) : latestDecision ? (
-        <div
-          className={cx(
-            "border border-[#2A2A2A] border-l-2 bg-black/88",
-            decisionAccentClass(decisionActionTone(latestDecision.action)),
-            compact ? "mb-4 shrink-0 px-4 py-4" : "mb-6 px-5 py-4",
-          )}
-        >
-          <div className="mb-2 flex items-center gap-2">
-            <StatusDot status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-              Latest decision
-              {latestDecision.cycle_number != null ? ` · cycle #${latestDecision.cycle_number}` : ""}
-            </span>
+        <ViewportReveal variant="scale" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
+          <div
+            className={cx(
+              "border border-[#2A2A2A] border-l-2 bg-black/88",
+              decisionAccentClass(decisionActionTone(latestDecision.action)),
+              compact ? "px-4 py-4" : "px-5 py-4",
+            )}
+          >
+            <ViewportReveal variant="fade" delay={50} duration="fast">
+              <div className="mb-2 flex items-center gap-2">
+                <StatusDot status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+                  Latest decision
+                  {latestDecision.cycle_number != null ? ` · cycle #${latestDecision.cycle_number}` : ""}
+                </span>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="left" delay={110}>
+              <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">
+                {formatDecisionEvent(latestDecision)}
+              </p>
+            </ViewportReveal>
           </div>
-          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{formatDecisionEvent(latestDecision)}</p>
-        </div>
+        </ViewportReveal>
       ) : null}
 
       {compact ? (
-        <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <RecentActivity rows={rows} expandable compact />
+        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <RecentActivity rows={rows} expandable compact mode="logs" scrollRoot={scrollRoot} />
         </div>
       ) : (
-        <div className="border border-[#2A2A2A] bg-black/88">
-          <div className="border-b border-[#1A1A1A] px-5 py-5">
-            <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
+        <ViewportReveal variant="fade" delay={80}>
+          <div className="border border-[#2A2A2A] bg-black/88">
+            <div className="border-b border-[#1A1A1A] px-5 py-5">
+              <ViewportReveal variant="left" delay={120} duration="fast">
+                <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
+              </ViewportReveal>
+            </div>
+            <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+              <RecentActivity rows={rows} expandable mode="logs" scrollRoot={scrollRoot} />
+            </div>
           </div>
-          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-            <RecentActivity rows={rows} expandable />
-          </div>
+        </ViewportReveal>
+      )}
+    </div>
+  );
+}
+
+function TxActivityPanel({
+  rows,
+  compact = false,
+}: {
+  rows: ActivityRow[];
+  compact?: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+
+  useEffect(() => {
+    setScrollRoot(scrollRef.current);
+  }, []);
+
+  return (
+    <div className={cx("flex min-h-0 flex-1 flex-col", !compact && "gap-0")}>
+      {!compact ? (
+        <ViewportReveal variant="right" delay={60} duration="fast" className="mb-6 max-w-3xl">
+          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
+            On-chain swaps and execution events from TWAK portfolio telemetry.
+          </p>
+        </ViewportReveal>
+      ) : null}
+
+      {compact ? (
+        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+          <RecentActivity rows={rows} expandable compact mode="txs" scrollRoot={scrollRoot} />
         </div>
+      ) : (
+        <ViewportReveal variant="fade" delay={100}>
+          <div className="border border-[#2A2A2A] bg-black/88">
+            <div className="border-b border-[#1A1A1A] px-5 py-5">
+              <ViewportReveal variant="right" delay={140} duration="fast">
+                <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
+              </ViewportReveal>
+            </div>
+            <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+              <RecentActivity rows={rows} expandable mode="txs" scrollRoot={scrollRoot} />
+            </div>
+          </div>
+        </ViewportReveal>
       )}
     </div>
   );
@@ -1645,46 +2198,47 @@ function ActivityPanel({
         compact ? "flex-1 px-4 pt-4" : "px-10 py-9",
       )}
     >
-      <div className={cx("flex justify-between gap-4", compact ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start")}>
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-          <h1 className={cx("mt-2 font-mono font-semibold leading-tight text-white", compact ? "text-[28px]" : "text-[32px]")}>
-            Activity
-          </h1>
-        </div>
+      <div
+        className={cx(
+          "flex justify-between gap-4",
+          compact ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
+        )}
+      >
+        <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+            <h1
+              className={cx(
+                "mt-2 font-mono font-semibold leading-tight text-white",
+                compact ? "text-[28px]" : "text-[32px]",
+              )}
+            >
+              Activity
+            </h1>
+          </div>
+        </ViewportReveal>
         <ActivityTabSelector value={view} onChange={setView} compact={compact} />
       </div>
 
-      {!compact && view === "txs" ? (
-        <p className="mb-6 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-          On-chain swaps and execution events from TWAK portfolio telemetry.
-        </p>
+      {!compact ? (
+        <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#1A1A1A]" />
       ) : null}
 
-      {view === "txs" ? (
-        compact ? (
-          <div className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-            <RecentActivity rows={activityRows} expandable compact />
-          </div>
-        ) : (
-          <div className="border border-[#2A2A2A] bg-black/88">
-            <div className="border-b border-[#1A1A1A] px-5 py-5">
-              <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
-            </div>
-            <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-              <RecentActivity rows={activityRows} expandable />
-            </div>
-          </div>
-        )
-      ) : (
-        <SysLogsPanel
-          rows={logRows}
-          agentLog={agentLog}
-          latestDecision={latestDecision}
-          agentRunning={agentRunning}
-          compact={compact}
-        />
-      )}
+      <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
+        {(activeView) =>
+          activeView === "txs" ? (
+            <TxActivityPanel rows={activityRows} compact={compact} />
+          ) : (
+            <SysLogsPanel
+              rows={logRows}
+              agentLog={agentLog}
+              latestDecision={latestDecision}
+              agentRunning={agentRunning}
+              compact={compact}
+            />
+          )
+        }
+      </ActivityViewTransition>
     </section>
   );
 }
@@ -1758,25 +2312,36 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
     <section className="shrink-0 px-4 pt-4">
       <div className="grid grid-cols-2 gap-x-4">
-        <div className="min-w-0 text-center">
+        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
           <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Total Balance</div>
           <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
             <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
             <span className="font-mono text-[13px] text-[#B8B8B8]">USD</span>
           </div>
-        </div>
-        <div className="min-w-0 text-center">
+        </ViewportReveal>
+        <ViewportReveal
+          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+          delay={80}
+          duration="slow"
+          className="min-w-0 text-center"
+        >
           <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
           <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
             <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
             {view.pnlDelta ? (
-              <span className={cx("font-mono text-[14px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
+              <span
+                className={cx(
+                  "font-mono text-[14px] font-bold tabular-nums",
+                  view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                )}
+              >
                 ({view.pnlDelta})
               </span>
             ) : null}
           </div>
-        </div>
+        </ViewportReveal>
       </div>
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
     </section>
   );
 }
@@ -1865,14 +2430,16 @@ function MobilePerformanceWidget({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <section className="mx-4 mt-3 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
-      <div className="relative min-h-0 flex-1">
-        <MobileChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-        <div className="absolute inset-0 flex flex-col px-2 py-2">
-          <PortfolioChart data={view.mobileChartData} variant="mobile" />
+    <ViewportReveal variant="fade" delay={200} duration="slow" className="mx-4 mt-3 flex min-h-0 flex-1 flex-col">
+      <section className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
+        <div className="relative min-h-0 flex-1">
+          <MobileChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+          <ViewportReveal variant="blur" delay={320} duration="slow" className="absolute inset-0 flex flex-col px-2 py-2">
+            <PortfolioChart data={view.mobileChartData} variant="mobile" />
+          </ViewportReveal>
         </div>
-      </div>
-    </section>
+      </section>
+    </ViewportReveal>
   );
 }
 

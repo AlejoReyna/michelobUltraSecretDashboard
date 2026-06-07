@@ -203,3 +203,76 @@ textarea {
   width: 100%;
   background: #1a1a1a;
 }
+
+@keyframes activity-view-in-txs {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes activity-view-in-sys {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes activity-view-out-txs {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+@keyframes activity-view-out-sys {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
+.activity-view-in-txs {
+  animation: activity-view-in-txs 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.activity-view-in-sys {
+  animation: activity-view-in-sys 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.activity-view-out-txs {
+  animation: activity-view-out-txs 0.18s ease-in both;
+}
+
+.activity-view-out-sys {
+  animation: activity-view-out-sys 0.18s ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-view-in-txs,
+  .activity-view-in-sys,
+  .activity-view-out-txs,
+  .activity-view-out-sys {
+    animation: none;
+  }
+}
