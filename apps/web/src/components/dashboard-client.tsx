@@ -242,6 +242,7 @@ function SectionTransition({
   const [displayedSection, setDisplayedSection] = useState(section);
   const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
   const wasEnabledRef = useRef(false);
+  const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!enabled) {
@@ -270,7 +271,6 @@ function SectionTransition({
     }
 
     if (section === displayedSection) {
-      setPhase((current) => (current === "out" ? "idle" : current));
       return;
     }
 
@@ -279,27 +279,32 @@ function SectionTransition({
     const swapTimeout = window.setTimeout(() => {
       setDisplayedSection(section);
       setPhase("in");
-    }, 180);
 
-    const idleTimeout = window.setTimeout(() => {
-      setPhase("idle");
-    }, 560);
+      enterIdleTimeoutRef.current = window.setTimeout(() => {
+        setPhase("idle");
+      }, 380);
+    }, 180);
 
     return () => {
       window.clearTimeout(swapTimeout);
-      window.clearTimeout(idleTimeout);
+      if (enterIdleTimeoutRef.current !== undefined) {
+        window.clearTimeout(enterIdleTimeoutRef.current);
+        enterIdleTimeoutRef.current = undefined;
+      }
     };
   }, [section, displayedSection, enabled]);
 
   return (
-    <div
-      className={cx(
-        enabled && phase === "out" && "section-fade-out",
-        enabled && phase === "in" && "section-fade-in",
-        className,
-      )}
-    >
-      {children(displayedSection)}
+    <div className={className}>
+      <div
+        key={displayedSection}
+        className={cx(
+          enabled && phase === "out" && "section-fade-out",
+          enabled && phase === "in" && "section-fade-in",
+        )}
+      >
+        {children(displayedSection)}
+      </div>
     </div>
   );
 }
