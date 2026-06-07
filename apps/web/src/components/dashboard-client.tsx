@@ -2298,12 +2298,99 @@ function DesktopDashboard({
   );
 }
 
-function MobileHeader() {
+function MobileHomeTopBar({
+  activeSection,
+  enabled,
+}: {
+  activeSection: DashboardSection;
+  enabled: boolean;
+}) {
+  const isHome = activeSection === "overview";
+  const [rendered, setRendered] = useState(isHome);
+  const [phase, setPhase] = useState<"idle" | "in" | "out">(isHome ? "in" : "idle");
+  const wasEnabledRef = useRef(false);
+  const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!enabled) {
+      setRendered(isHome);
+      setPhase("idle");
+      wasEnabledRef.current = false;
+      return;
+    }
+
+    if (!wasEnabledRef.current) {
+      wasEnabledRef.current = true;
+      if (isHome) {
+        setRendered(true);
+        setPhase("in");
+
+        const enterTimeout = window.setTimeout(() => {
+          setPhase("idle");
+        }, 380);
+
+        return () => window.clearTimeout(enterTimeout);
+      }
+    }
+  }, [enabled, isHome]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    if (isHome && !rendered) {
+      setRendered(true);
+      setPhase("in");
+
+      enterIdleTimeoutRef.current = window.setTimeout(() => {
+        setPhase("idle");
+      }, 380);
+
+      return () => {
+        if (enterIdleTimeoutRef.current !== undefined) {
+          window.clearTimeout(enterIdleTimeoutRef.current);
+          enterIdleTimeoutRef.current = undefined;
+        }
+      };
+    }
+
+    if (!isHome && rendered) {
+      setPhase("out");
+
+      const exitTimeout = window.setTimeout(() => {
+        setRendered(false);
+        setPhase("idle");
+      }, 220);
+
+      return () => window.clearTimeout(exitTimeout);
+    }
+  }, [isHome, rendered, enabled]);
+
+  if (!rendered) {
+    return null;
+  }
+
   return (
-    <header className="sticky top-0 z-50 border-b border-[#1A1A1A] bg-[#050505]">
-      <div className="mx-auto max-w-[640px] px-4 py-2">
-        <GithubRepositoryCard variant="compact" />
-      </div>
+    <header
+      className={cx(
+        "sticky top-0 z-30 shrink-0 border-b border-[#1A1A1A] bg-black/88 backdrop-blur-sm",
+        enabled && phase === "in" && "home-topbar-in",
+        enabled && phase === "out" && "home-topbar-out",
+      )}
+    >
+      <a
+        href={projectRepository.url}
+        target="_blank"
+        rel="noreferrer"
+        className="mx-auto flex max-w-[640px] items-center justify-between gap-3 px-4 py-2.5"
+        aria-label="Open No Named Yet Bot on GitHub"
+      >
+        <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-[0.06em] text-white">
+          AlejoReyna/NoNamedYetBot
+        </span>
+        <Github size={14} strokeWidth={1.75} className="shrink-0 text-white" aria-hidden="true" />
+      </a>
     </header>
   );
 }
@@ -2511,12 +2598,12 @@ function MobileDashboard({
   return (
     <div className="technical-grid relative isolate flex min-h-dvh flex-col bg-black text-white lg:hidden">
       <AsciiRaccoonWatermark />
-      {/* <MobileHeader /> */}
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
         className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
         style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
       >
+        <MobileHomeTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
