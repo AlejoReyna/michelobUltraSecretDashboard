@@ -60,6 +60,12 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${percentFormatter.format(value)}%` : "N/A";
 }
 
+function formatSlippagePct(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${percentFormatter.format(value * 100)}%`
+    : "N/A";
+}
+
 function formatTimestamp(timestamp: string | null | undefined) {
   if (!timestamp) {
     return "N/A";
@@ -153,7 +159,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
           decision.entries_allowed === true ? "green" : decision.entries_allowed === false ? "red" : "neutral",
       },
       { label: "Position size", value: formatUsd(decision.position_size_usdc) },
-      { label: "Slippage est.", value: formatPercent(decision.estimated_slippage_pct) },
+      { label: "Slippage est.", value: formatSlippagePct(decision.estimated_slippage_pct) },
       scoreItem,
       { label: "Exit reason", value: decision.exit_reason?.trim() || "—" },
       {

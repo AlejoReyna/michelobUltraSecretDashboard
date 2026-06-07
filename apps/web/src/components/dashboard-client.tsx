@@ -1989,7 +1989,9 @@ function LiveScanPanel({
           </ul>
         ) : (
           <p className={cx("font-mono leading-5 text-[#8A8A8A]", mobileFit ? "text-center text-[12px]" : "text-[12px]")}>
-            Factor scores will appear after the agent completes a scan cycle.
+            {latestDecision?.reason?.trim()
+              ? latestDecision.reason
+              : "Factor scores will appear after the agent completes a scan cycle."}
           </p>
         )}
 
