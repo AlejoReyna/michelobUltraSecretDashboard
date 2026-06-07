@@ -176,6 +176,32 @@ textarea {
   filter: blur(0);
 }
 
+.typewriter-cursor {
+  display: inline-block;
+  width: 0.45em;
+  margin-left: 1px;
+  border-right: 2px solid currentColor;
+  animation: typewriter-blink 0.75s step-end infinite;
+  vertical-align: baseline;
+}
+
+@keyframes typewriter-blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typewriter-cursor {
+    display: none;
+  }
+}
+
 .guide-chapter-divider {
   display: flex;
   flex-direction: column;

@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
+import { TypewriterText } from "@/components/typewriter-text";
 import {
   ViewportReveal,
   activityCellDelay,
@@ -1064,16 +1065,47 @@ function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" 
   );
 }
 
-function decisionAccentClass(tone: "green" | "yellow" | "red") {
+function decisionAccentBarClass(tone: "green" | "yellow" | "red") {
   if (tone === "green") {
-    return "border-l-[#00FF66]/70";
+    return "bg-[#00FF66]/70";
   }
 
   if (tone === "red") {
-    return "border-l-[#FF3737]/70";
+    return "bg-[#FF3737]/70";
   }
 
-  return "border-l-[#FFD21A]/70";
+  return "bg-[#FFD21A]/70";
+}
+
+function LatestDecisionLogEntry({
+  decision,
+  compact = false,
+}: {
+  decision: NonNullable<StatusPayload["latestDecision"]>;
+  compact?: boolean;
+}) {
+  const tone = decisionActionTone(decision.action);
+  const decisionText = formatDecisionEvent(decision);
+
+  return (
+    <div className="flex border border-[#2A2A2A]">
+      <div className={cx("w-0.5 shrink-0", decisionAccentBarClass(tone))} aria-hidden="true" />
+      <ViewportReveal
+        variant="scale"
+        duration="slow"
+        className={cx("min-w-0 flex-1 bg-black/88", compact ? "px-4 py-4" : "px-5 py-4")}
+      >
+        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+          Last decision
+        </div>
+        <TypewriterText
+          text={decisionText}
+          className="break-words font-mono text-[12px] leading-5 text-[#DADADA]"
+          startDelay={520}
+        />
+      </ViewportReveal>
+    </div>
+  );
 }
 
 function formatTokenAmount(value: number | null) {
@@ -2052,6 +2084,7 @@ function SysLogsPanel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+  const showLatestDecision = Boolean(latestDecision && !agentLog.line);
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
@@ -2079,31 +2112,10 @@ function SysLogsPanel({
             </ViewportReveal>
           </div>
         </ViewportReveal>
-      ) : latestDecision ? (
-        <ViewportReveal variant="scale" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
-          <div
-            className={cx(
-              "border border-[#2A2A2A] border-l-2 bg-black/88",
-              decisionAccentClass(decisionActionTone(latestDecision.action)),
-              compact ? "px-4 py-4" : "px-5 py-4",
-            )}
-          >
-            <ViewportReveal variant="fade" delay={50} duration="fast">
-              <div className="mb-2 flex items-center gap-2">
-                <StatusDot status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-                  Latest decision
-                  {latestDecision.cycle_number != null ? ` · cycle #${latestDecision.cycle_number}` : ""}
-                </span>
-              </div>
-            </ViewportReveal>
-            <ViewportReveal variant="left" delay={110}>
-              <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">
-                {formatDecisionEvent(latestDecision)}
-              </p>
-            </ViewportReveal>
-          </div>
-        </ViewportReveal>
+      ) : showLatestDecision && latestDecision ? (
+        <div className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
+          <LatestDecisionLogEntry decision={latestDecision} compact={compact} />
+        </div>
       ) : null}
 
       {compact ? (
