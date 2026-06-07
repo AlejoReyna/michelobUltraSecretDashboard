@@ -1,7 +1,17 @@
 "use client";
 
-import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  Activity,
   BookOpen,
   BrainCircuit,
   ChevronDown,
@@ -9,12 +19,11 @@ import {
   CircleUserRound,
   Download,
   ExternalLink,
-  FileText,
+  Filter,
   Github,
   Home,
   Layers,
-  LineChart,
-  ScrollText,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
@@ -36,20 +45,22 @@ import {
 } from "@/lib/log-event-details";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
-type DashboardSection = "overview" | "positions" | "logs" | "chart" | "algorithm";
+type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm";
+type ActivityView = "txs" | "sys";
 
 const navItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
   { label: "Overview", icon: Home, section: "overview" },
   { label: "Active Positions", icon: Layers, section: "positions" },
-  { label: "Logs", icon: FileText, section: "logs" },
+  { label: "Activity", icon: Activity, section: "activity" },
+  { label: "Wallet", icon: Wallet, section: "wallet" },
   { label: "How It Works", icon: BrainCircuit, section: "algorithm" },
 ];
 
 const mobileNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
   { label: "Home", icon: Home, section: "overview" },
   { label: "Positions", icon: Layers, section: "positions" },
-  { label: "Logs", icon: ScrollText, section: "logs" },
-  { label: "Chart", icon: LineChart, section: "chart" },
+  { label: "Activity", icon: Activity, section: "activity" },
+  { label: "Wallet", icon: Wallet, section: "wallet" },
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
 
@@ -155,14 +166,6 @@ function explorerUrlFromExecution(execution: StatusPayload["executions"][number]
   return explorerUrlFor(chain, txHash);
 }
 
-type SystemView = {
-  label: string;
-  tone: "green" | "yellow" | "red";
-  latency: string;
-  cycle: string;
-  mode: string;
-};
-
 type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
@@ -176,9 +179,8 @@ type DashboardViewModel = {
   mobileChartData: PortfolioChartPoint[];
   totalBalance: string;
   pnlValue: string;
-  pnlDelta: string;
+  pnlDelta?: string;
   pnlTone: "positive" | "negative";
-  system: SystemView;
 };
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
@@ -210,20 +212,65 @@ function AsciiRaccoonWatermark() {
   );
 }
 
+function useMediaQuery(query: string) {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const mediaQuery = window.matchMedia(query);
+      mediaQuery.addEventListener("change", onStoreChange);
+      return () => mediaQuery.removeEventListener("change", onStoreChange);
+    },
+    [query],
+  );
+
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query]);
+  const getServerSnapshot = useCallback(() => false, []);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
 function SectionTransition({
   section,
   children,
   className,
+  enabled = true,
 }: {
   section: DashboardSection;
   children: (section: DashboardSection) => ReactNode;
   className?: string;
+  enabled?: boolean;
 }) {
   const [displayedSection, setDisplayedSection] = useState(section);
   const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
+  const wasEnabledRef = useRef(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setDisplayedSection(section);
+      setPhase("idle");
+      wasEnabledRef.current = false;
+      return;
+    }
+
+    if (!wasEnabledRef.current) {
+      wasEnabledRef.current = true;
+      setDisplayedSection(section);
+      setPhase("in");
+
+      const enterTimeout = window.setTimeout(() => {
+        setPhase("idle");
+      }, 380);
+
+      return () => window.clearTimeout(enterTimeout);
+    }
+  }, [enabled, section]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     if (section === displayedSection) {
+      setPhase((current) => (current === "out" ? "idle" : current));
       return;
     }
 
@@ -242,13 +289,13 @@ function SectionTransition({
       window.clearTimeout(swapTimeout);
       window.clearTimeout(idleTimeout);
     };
-  }, [section, displayedSection]);
+  }, [section, displayedSection, enabled]);
 
   return (
     <div
       className={cx(
-        phase === "out" && "section-fade-out",
-        (phase === "in" || phase === "idle") && "section-fade-in",
+        enabled && phase === "out" && "section-fade-out",
+        enabled && phase === "in" && "section-fade-in",
         className,
       )}
     >
@@ -264,6 +311,10 @@ function formatUsd(value: number | null | undefined) {
 function formatSignedUsd(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "N/A";
+  }
+
+  if (value === 0) {
+    return usdFormatter.format(0);
   }
 
   return `${value >= 0 ? "+" : "-"}${usdFormatter.format(Math.abs(value))}`;
@@ -621,32 +672,9 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
     }));
 }
 
-function systemView(data: StatusPayload | null, error: string | null, latencyMs: number | null): SystemView {
-  if (error || data?.connection?.source === "error") {
-    return {
-      label: "Telemetry degraded",
-      tone: "yellow",
-      latency: latencyMs === null ? "N/A" : `${latencyMs}ms`,
-      cycle: "N/A",
-      mode: "N/A",
-    };
-  }
-
-  const running = data?.health.agentRunning;
-
-  return {
-    label: running ? "System operational" : "Agent offline",
-    tone: running ? "green" : "red",
-    latency: latencyMs === null ? "N/A" : `${latencyMs}ms`,
-    cycle: data?.latestDecision?.cycle_number ? String(data.latestDecision.cycle_number) : "N/A",
-    mode: data?.latestDecision?.mode?.toUpperCase() ?? "N/A",
-  };
-}
-
 function buildViewModel(
   data: StatusPayload | null,
   error: string | null,
-  latencyMs: number | null,
   timeRange: TimeRange,
 ): DashboardViewModel {
   const rangedDecisions = decisionsForRange(data, timeRange);
@@ -657,7 +685,8 @@ function buildViewModel(
   const activeTrades = realActiveTradeCount(data);
   const successRate = executionSuccessRate(data?.executions ?? []);
   const chart = chartPoints(data, timeRange);
-  const performanceDelta = formatPercent(pnl.percent);
+  const performanceDelta =
+    pnl.absolute !== null && pnl.absolute !== 0 ? formatPercent(pnl.percent) : undefined;
   const positionRows = activePositionRowsFromTelemetry(data);
   const totalPositionValue = positionRows.reduce((sum, row) => sum + (row.entryValueUsd ?? 0), 0);
 
@@ -702,7 +731,6 @@ function buildViewModel(
     pnlValue: formatSignedUsd(pnl.absolute),
     pnlDelta: performanceDelta,
     pnlTone,
-    system: systemView(data, error, latencyMs),
   };
 }
 
@@ -769,15 +797,7 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
             className="shrink-0 text-[#8A8A8A] transition-colors group-hover:text-white"
           />
         </span>
-        {compact ? (
-          <span className="mt-2 flex min-w-0 items-center gap-2 border-t border-[#1A1A1A] pt-2">
-            <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[8px] uppercase tracking-[0.18em] text-[#A8A8A8]">
-              <PythonLogo className="h-2.5 w-2.5 shrink-0" />
-              Python
-            </span>
-            <span className="min-w-0 truncate text-[10px] leading-4 text-[#BDBDBD]">{projectRepository.description}</span>
-          </span>
-        ) : (
+        {!compact ? (
           <span className="mt-2 block border-t border-[#1A1A1A] pt-2">
             <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
               <PythonLogo className="h-3 w-3 shrink-0" />
@@ -787,7 +807,7 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
               {projectRepository.description}
             </span>
           </span>
-        )}
+        ) : null}
     </a>
   );
 }
@@ -976,110 +996,90 @@ function TelemetryBanner({ message }: { message: string }) {
   );
 }
 
-function WalletSection({
+function WalletPanel({
   balances,
   agentMode,
   compact = false,
-  desktopFill = false,
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
   compact?: boolean;
-  desktopFill?: boolean;
 }) {
   const paperMode = agentMode === "PAPER";
-
-  const headerPadding = desktopFill ? "px-3 py-1.5" : compact ? "px-4 py-4" : "px-5 py-5";
-  const sectionPadding = desktopFill ? "px-3 py-1" : compact ? "px-4 py-3" : "px-5 py-3";
-
-  const balancesTable = (
-    <div className={cx("min-h-0", desktopFill && "flex flex-1 flex-col border-t border-[#1A1A1A]")}>
-      <div className={cx("shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]", sectionPadding)}>
-        Balances
-      </div>
-      <div className={cx(desktopFill && "console-scroll min-h-0 flex-1 overflow-auto")}>
-      <table className="w-full table-fixed border-collapse text-left">
-        <colgroup>
-          <col className="w-[22%]" />
-          <col className="w-[22%]" />
-          <col className="w-[32%]" />
-          <col className="w-[24%]" />
-        </colgroup>
-        <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
-          <tr>
-            <th className="px-3 py-2">Chain</th>
-            <th className="px-2 py-2">Token</th>
-            <th className="px-2 py-2">Amount</th>
-            <th className="px-3 py-2 text-right">Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {balances.map((balance) => (
-            <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
-              <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
-              <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
-                <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <TokenIcon symbol={balance.symbol} size={desktopFill ? 14 : 16} />
-                  <span className="truncate">{balance.symbol}</span>
-                </span>
-              </td>
-              <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                {formatTokenAmount(balance.amount)}
-              </td>
-              <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                {formatUsd(balance.valueUsd)}
-              </td>
-            </tr>
-          ))}
-          {balances.length === 0 ? (
-            <tr className="border-b border-[#1A1A1A]">
-              <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
-                Waiting for TWAK wallet balances
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-      </div>
-    </div>
-  );
+  const totalValue = balances.reduce((sum, balance) => sum + (balance.valueUsd ?? 0), 0);
+  const headerPadding = compact ? "px-4 py-4" : "px-5 py-5";
 
   return (
-    <section className={cx(desktopFill ? "flex h-full min-h-0 flex-col bg-black/88" : "border border-[#2A2A2A] bg-black/88")}>
-      <div className={cx("shrink-0", !desktopFill && "border-b border-[#1A1A1A]", headerPadding)}>
-        <div className="flex items-start justify-between gap-3">
+    <section
+      className={cx(
+        "border border-[#2A2A2A] bg-black/88",
+        compact ? "mx-4 mt-9 overflow-hidden" : "mx-10 my-9",
+      )}
+    >
+      <div className={cx("border-b border-[#1A1A1A]", headerPadding)}>
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
-            <h2 className={cx("mt-1 font-mono text-[#DADADA]", compact ? "text-base" : desktopFill ? "text-lg" : "text-xl")}>
+            <h1 className={cx("mt-1 font-mono font-semibold leading-tight text-white", compact ? "text-[28px]" : "text-[32px]")}>
               Live Holdings
-            </h2>
+            </h1>
           </div>
-          <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+          <div className="shrink-0 text-right font-mono">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+              {balances.length} {balances.length === 1 ? "token" : "tokens"}
+            </div>
+            <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
+            {paperMode ? (
+              <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+            ) : null}
+          </div>
         </div>
-        {!desktopFill ? (
-          <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-            {paperMode
-              ? "Agent is in paper mode. Below is your real TWAK wallet; CAKE signals are simulated only."
-              : "Real token balances from TWAK portfolio telemetry."}
-          </p>
-        ) : null}
       </div>
 
-      {balancesTable}
-    </section>
-  );
-}
-
-function DesktopWalletPanel({
-  balances,
-  agentMode,
-}: {
-  balances: WalletBalanceRow[];
-  agentMode: string;
-}) {
-  return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-[#1A1A1A] bg-black/72">
-      <WalletSection balances={balances} agentMode={agentMode} desktopFill />
+      <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+        <table className="w-full table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
+            <col className="w-[32%]" />
+            <col className="w-[24%]" />
+          </colgroup>
+          <thead className="border-b border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+            <tr>
+              <th className="px-3 py-2">Chain</th>
+              <th className="px-2 py-2">Token</th>
+              <th className="px-2 py-2">Amount</th>
+              <th className="px-3 py-2 text-right">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {balances.map((balance) => (
+              <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+                <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
+                <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <TokenIcon symbol={balance.symbol} size={16} />
+                    <span className="truncate">{balance.symbol}</span>
+                  </span>
+                </td>
+                <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  {formatTokenAmount(balance.amount)}
+                </td>
+                <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  {formatUsd(balance.valueUsd)}
+                </td>
+              </tr>
+            ))}
+            {balances.length === 0 ? (
+              <tr className="border-b border-[#1A1A1A]">
+                <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
+                  Waiting for TWAK wallet balances
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -1249,19 +1249,6 @@ function RecentActivity({
   );
 }
 
-function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
-  return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black/72">
-      <div className="shrink-0 border-b border-[#1A1A1A] px-3 py-2">
-        <h2 className="font-mono text-base text-[#DADADA]">Recent Activity</h2>
-      </div>
-      <div className="console-scroll min-h-0 flex-1 overflow-auto">
-        <RecentActivity rows={rows} />
-      </div>
-    </section>
-  );
-}
-
 function formatPrice(value: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "N/A";
@@ -1412,7 +1399,44 @@ function ActivePositionsPanel({
   );
 }
 
-function LogsPanel({
+function ActivityTabSelector({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: ActivityView;
+  onChange: (view: ActivityView) => void;
+  compact?: boolean;
+}) {
+  const tabs: Array<{ id: ActivityView; label: string }> = [
+    { id: "sys", label: "Sys Logs" },
+    { id: "txs", label: "Tx Activity" },
+  ];
+
+  return (
+    <div className={cx("flex shrink-0 items-center", compact ? "gap-1.5" : "gap-2")}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          aria-pressed={tab.id === value}
+          className={cx(
+            "border font-mono transition-colors",
+            compact ? "h-8 px-3 text-[10px]" : "h-9 px-4 text-xs",
+            tab.id === value
+              ? "border-[#666666] bg-[#222222] text-white"
+              : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SysLogsPanel({
   rows,
   agentLog,
   latestDecision,
@@ -1426,18 +1450,9 @@ function LogsPanel({
   compact?: boolean;
 }) {
   return (
-    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
-      <div className="mb-6">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Agent Logs</h1>
-        <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-          Decision cycles from `decision_log.jsonl` on EC2. When bot stdout is stale, the summary card shows the latest
-          decision cycle instead of `bot_live.log` / `agent.log`.
-        </p>
-      </div>
-
+    <>
       {agentLog.line ? (
-        <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
+        <div className={cx("border border-[#2A2A2A] bg-black/88", compact ? "mb-4 px-4 py-3" : "mb-6 px-5 py-4")}>
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
             Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
           </div>
@@ -1447,7 +1462,7 @@ function LogsPanel({
           </div>
         </div>
       ) : latestDecision ? (
-        <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
+        <div className={cx("border border-[#2A2A2A] bg-black/88", compact ? "mb-4 px-4 py-3" : "mb-6 px-5 py-4")}>
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
             Latest decision
             {latestDecision.cycle_number != null ? ` (cycle #${latestDecision.cycle_number})` : ""}
@@ -1461,48 +1476,71 @@ function LogsPanel({
       ) : null}
 
       <div className="border border-[#2A2A2A] bg-black/88">
-        <div className="border-b border-[#1A1A1A] px-5 py-5">
-          <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
+        <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
+          <h2 className={cx("font-mono text-[#DADADA]", compact ? "text-lg" : "text-xl")}>Decision &amp; Execution Log</h2>
         </div>
         <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
           <RecentActivity rows={rows} expandable />
         </div>
       </div>
-    </section>
+    </>
   );
 }
 
-function SystemDot({ tone, size = "h-2 w-2" }: { tone: SystemView["tone"]; size?: string }) {
-  const classes = {
-    green: "bg-[#00FF00] shadow-[0_0_14px_rgba(0,255,0,0.95)]",
-    yellow: "bg-[#FFD21A] shadow-[0_0_14px_rgba(255,210,26,0.75)]",
-    red: "bg-[#FF3737] shadow-[0_0_14px_rgba(255,55,55,0.75)]",
-  }[tone];
+function ActivityPanel({
+  activityRows,
+  logRows,
+  agentLog,
+  latestDecision,
+  agentRunning,
+  compact = false,
+}: {
+  activityRows: ActivityRow[];
+  logRows: ActivityRow[];
+  agentLog: ReturnType<typeof resolveAgentLogLine>;
+  latestDecision: StatusPayload["latestDecision"];
+  agentRunning: boolean;
+  compact?: boolean;
+}) {
+  const [view, setView] = useState<ActivityView>("sys");
 
-  return <span className={cx(size, classes)} />;
-}
-
-function DesktopStatusBar({ system }: { system: SystemView }) {
   return (
-    <footer className="fixed bottom-0 left-[280px] right-0 z-40 border-t border-[#1A1A1A] bg-[#050505]/95 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[#A7A7A7] backdrop-blur 2xl:left-[320px]">
-      <div className="flex items-center justify-between gap-6">
-        <span className="inline-flex items-center gap-2 whitespace-nowrap text-[#CFCFCF]">
-          <SystemDot tone={system.tone} />
-          {system.label}
-        </span>
-        <span className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-right">
-          <span>
-            Latency: <span className="text-white">{system.latency}</span>
-          </span>
-          <span>
-            Cycle: <span className="text-white">{system.cycle}</span>
-          </span>
-          <span>
-            Mode: <span className="text-white">{system.mode}</span>
-          </span>
-        </span>
+    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
+      <div className={cx("flex items-start justify-between gap-4", compact ? "mb-4" : "mb-6")}>
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+          <h1 className={cx("mt-2 font-mono font-semibold leading-tight text-white", compact ? "text-[28px]" : "text-[32px]")}>
+            Activity
+          </h1>
+        </div>
+        <ActivityTabSelector value={view} onChange={setView} compact={compact} />
       </div>
-    </footer>
+
+      <p className={cx("max-w-3xl font-mono leading-5 text-[#8A8A8A]", compact ? "mb-4 text-[11px]" : "mb-6 text-[12px]")}>
+        {view === "txs"
+          ? "On-chain swaps and execution events from TWAK portfolio telemetry."
+          : "Decision cycles from `decision_log.jsonl` on EC2. When bot stdout is stale, the summary card shows the latest decision cycle instead of `bot_live.log` / `agent.log`."}
+      </p>
+
+      {view === "txs" ? (
+        <div className="border border-[#2A2A2A] bg-black/88">
+          <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
+            <h2 className={cx("font-mono text-[#DADADA]", compact ? "text-lg" : "text-xl")}>Recent Activity</h2>
+          </div>
+          <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+            <RecentActivity rows={activityRows} expandable />
+          </div>
+        </div>
+      ) : (
+        <SysLogsPanel
+          rows={logRows}
+          agentLog={agentLog}
+          latestDecision={latestDecision}
+          agentRunning={agentRunning}
+          compact={compact}
+        />
+      )}
+    </section>
   );
 }
 
@@ -1513,6 +1551,7 @@ function DesktopDashboard({
   data,
   timeRange,
   onTimeRangeChange,
+  sectionTransitionEnabled,
 }: {
   view: DashboardViewModel;
   activeSection: DashboardSection;
@@ -1520,22 +1559,26 @@ function DesktopDashboard({
   data: StatusPayload | null;
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  sectionTransitionEnabled: boolean;
 }) {
   return (
     <div className="relative hidden min-h-screen bg-black text-white lg:flex">
       <AsciiRaccoonWatermark />
       <DesktopSidebar activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="technical-grid min-w-0 flex-1 pb-9">
+      <main className="technical-grid min-w-0 flex-1">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-        <SectionTransition section={activeSection}>
+        <SectionTransition section={activeSection} enabled={sectionTransitionEnabled}>
           {(section) =>
-            section === "logs" ? (
-              <LogsPanel
-                rows={view.logRows}
+            section === "activity" ? (
+              <ActivityPanel
+                activityRows={view.activityRows}
+                logRows={view.logRows}
                 agentLog={resolveAgentLogLine(data)}
                 latestDecision={data?.latestDecision ?? null}
                 agentRunning={Boolean(data?.health.agentRunning)}
               />
+            ) : section === "wallet" ? (
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
             ) : section === "positions" ? (
               <ActivePositionsPanel
                 rows={view.positionRows}
@@ -1545,18 +1588,13 @@ function DesktopDashboard({
             ) : section === "algorithm" ? (
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} />
             ) : (
-              <section className="grid h-[calc(100vh-36px)] min-h-0 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+              <section className="h-[calc(100vh-36px)] min-h-0">
                 <DesktopPerformancePanel view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-                <div className="flex h-full min-h-0 flex-col border-l border-[#1A1A1A]">
-                  <DesktopWalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
-                  <DesktopRecentActivity rows={view.activityRows} />
-                </div>
               </section>
             )
           }
         </SectionTransition>
       </main>
-      <DesktopStatusBar system={view.system} />
     </div>
   );
 }
@@ -1573,26 +1611,102 @@ function MobileHeader() {
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="px-4 pt-5">
+    <section className="shrink-0 px-4 pt-4">
       <div className="grid grid-cols-2 gap-x-4">
-        <div className="min-w-0">
-          <div className="font-mono text-[16px] font-medium text-[#B8B8B8]">Total Balance</div>
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-mono text-[14px] text-[#B8B8B8]">USD</span>
+        <div className="min-w-0 text-center">
+          <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Total Balance</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+            <span className="font-mono text-[13px] text-[#B8B8B8]">USD</span>
           </div>
         </div>
-        <div className="min-w-0">
-          <div className="font-mono text-[16px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="font-mono text-[28px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-            <span className={cx("font-mono text-[14px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
-              ({view.pnlDelta})
-            </span>
+        <div className="min-w-0 text-center">
+          <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+            {view.pnlDelta ? (
+              <span className={cx("font-mono text-[14px] font-bold tabular-nums", view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]")}>
+                ({view.pnlDelta})
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function MobileChartFilterMenu({
+  timeRange,
+  onTimeRangeChange,
+}: {
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="absolute right-3 top-3 z-10">
+      <button
+        type="button"
+        onClick={() => setOpen((previous) => !previous)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={`Chart time range: ${timeRange}`}
+        className={cx(
+          "inline-flex h-8 w-8 items-center justify-center border transition-colors",
+          open
+            ? "border-[#666666] bg-[#222222] text-white"
+            : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm",
+        )}
+      >
+        <Filter className="h-4 w-4" strokeWidth={2} />
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Chart time range"
+          className="absolute right-0 top-[calc(100%+6px)] flex min-w-[88px] flex-col border border-[#242424] bg-[#050505] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+        >
+          {timeRanges.map((range) => (
+            <button
+              key={range}
+              type="button"
+              role="option"
+              aria-selected={range === timeRange}
+              onClick={() => {
+                onTimeRangeChange(range);
+                setOpen(false);
+              }}
+              className={cx(
+                "border-b border-[#1A1A1A] px-3 py-2 text-left font-mono text-[11px] last:border-b-0",
+                range === timeRange
+                  ? "bg-[#222222] text-white"
+                  : "text-[#A8A8A8] hover:bg-[#101010] hover:text-white",
+              )}
+            >
+              {range}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1606,65 +1720,14 @@ function MobilePerformanceWidget({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <section className="mx-4 mt-9 flex min-h-0 flex-col border border-[#2A2A2A] bg-black/80">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-4 py-4">
-        <h2 className="font-mono text-base text-[#CFCFCF]">Portfolio Chart</h2>
-        <TimeRangeSelector compact value={timeRange} onChange={onTimeRangeChange} />
-      </div>
-      <div className="h-[200px] p-4">
-        <PortfolioChart data={view.mobileChartData} variant="mobile" />
+    <section className="mx-4 mb-4 mt-4 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
+      <div className="relative min-h-0 flex-1">
+        <MobileChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+        <div className="absolute inset-0 px-2 py-2">
+          <PortfolioChart data={view.mobileChartData} variant="mobile" />
+        </div>
       </div>
     </section>
-  );
-}
-
-function MobileWalletSection({
-  balances,
-  agentMode,
-}: {
-  balances: WalletBalanceRow[];
-  agentMode: string;
-}) {
-  return (
-    <section className="mx-4 mt-9 overflow-hidden">
-      <WalletSection balances={balances} agentMode={agentMode} compact />
-    </section>
-  );
-}
-
-function MobileRecentActivity({ rows }: { rows: ActivityRow[] }) {
-  return (
-    <section className="mx-4 mt-9 overflow-hidden border border-[#1A1A1A] bg-black">
-      <div className="px-5 py-5">
-        <h2 className="text-[24px] font-bold text-white">Recent Activity</h2>
-      </div>
-      <RecentActivity rows={rows} compact />
-    </section>
-  );
-}
-
-function MobileSystemBar({ system }: { system: SystemView }) {
-  return (
-    <div
-      className="fixed left-0 right-0 z-40 border-y border-[#1A1A1A] bg-black"
-      style={{ bottom: MOBILE_NAV_HEIGHT }}
-    >
-      <div className="mx-auto flex h-8 max-w-[640px] items-center justify-between gap-2 px-4 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-[#BEBEBE]">
-        <span className="inline-flex items-center gap-1.5">
-          <SystemDot tone={system.tone} size="h-1.5 w-1.5" />
-          {system.tone === "green" ? "Operational" : "Degraded"}
-        </span>
-        <span>
-          Latency: <span className="text-white">{system.latency}</span>
-        </span>
-        <span>
-          Mode: <span className="text-white">{system.mode}</span>
-        </span>
-        <span className="hidden sm:inline">
-          Cycle: <span className="text-white">{system.cycle}</span>
-        </span>
-      </div>
-    </div>
   );
 }
 
@@ -1682,7 +1745,7 @@ function MobileBottomNav({
       aria-label="Mobile navigation"
     >
       <div
-        className="mx-auto grid max-w-[640px] grid-cols-5 px-1"
+        className="mx-auto grid max-w-[640px] grid-cols-5 px-0.5"
         style={{ height: MOBILE_NAV_HEIGHT }}
       >
         {mobileNavItems.map((item) => {
@@ -1698,11 +1761,11 @@ function MobileBottomNav({
               aria-label={item.label}
               className={cx(
                 "relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
-                active ? "text-[#00FF00]" : "text-[#7A7A7A] active:text-white",
+                active ? "text-white" : "text-[#7A7A7A] active:text-white",
               )}
             >
               {active ? (
-                <span className="absolute top-0 h-0.5 w-4 rounded-full bg-[#00FF00]" aria-hidden="true" />
+                <span className="absolute top-0 h-0.5 w-4 rounded-full bg-white" aria-hidden="true" />
               ) : null}
               <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
               <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-[0.06em]">
@@ -1716,28 +1779,6 @@ function MobileBottomNav({
   );
 }
 
-function MobileChartSection({
-  view,
-  timeRange,
-  onTimeRangeChange,
-}: {
-  view: DashboardViewModel;
-  timeRange: TimeRange;
-  onTimeRangeChange: (range: TimeRange) => void;
-}) {
-  return (
-    <section className="mx-4 mt-9 overflow-hidden border border-[#1A1A1A] bg-black">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-5 py-5">
-        <h2 className="text-[24px] font-bold text-white">Portfolio Chart</h2>
-        <TimeRangeSelector compact value={timeRange} onChange={onTimeRangeChange} />
-      </div>
-      <div className="p-4">
-        <PortfolioChart data={view.mobileChartData} variant="mobile" />
-      </div>
-    </section>
-  );
-}
-
 function MobileDashboard({
   view,
   activeSection,
@@ -1745,6 +1786,7 @@ function MobileDashboard({
   data,
   timeRange,
   onTimeRangeChange,
+  sectionTransitionEnabled,
 }: {
   view: DashboardViewModel;
   activeSection: DashboardSection;
@@ -1752,23 +1794,34 @@ function MobileDashboard({
   data: StatusPayload | null;
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="technical-grid relative min-h-screen bg-black text-white lg:hidden">
+    <div className="technical-grid relative flex min-h-dvh flex-col bg-black text-white lg:hidden">
       <AsciiRaccoonWatermark />
       <MobileHeader />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main className="mx-auto max-w-[640px] pb-[100px]">
-        <SectionTransition section={activeSection}>
+      <main
+        className="mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
+        style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
+      >
+        <SectionTransition
+          section={activeSection}
+          enabled={sectionTransitionEnabled}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           {(section) =>
-            section === "logs" ? (
-              <LogsPanel
-                rows={view.logRows}
+            section === "activity" ? (
+              <ActivityPanel
+                activityRows={view.activityRows}
+                logRows={view.logRows}
                 agentLog={resolveAgentLogLine(data)}
                 latestDecision={data?.latestDecision ?? null}
                 agentRunning={Boolean(data?.health.agentRunning)}
                 compact
               />
+            ) : section === "wallet" ? (
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} compact />
             ) : section === "positions" ? (
               <ActivePositionsPanel
                 rows={view.positionRows}
@@ -1776,22 +1829,17 @@ function MobileDashboard({
                 agentMode={view.agentMode}
                 compact
               />
-            ) : section === "chart" ? (
-              <MobileChartSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             ) : section === "algorithm" ? (
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
             ) : (
-              <>
+              <section className="flex min-h-0 flex-1 flex-col">
                 <MobileHeroMetrics view={view} />
                 <MobilePerformanceWidget view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-                <MobileWalletSection balances={view.walletBalances} agentMode={view.agentMode} />
-                <MobileRecentActivity rows={view.activityRows} />
-              </>
+              </section>
             )
           }
         </SectionTransition>
       </main>
-      <MobileSystemBar system={view.system} />
       <MobileBottomNav activeSection={activeSection} onNavigate={onNavigate} />
     </div>
   );
@@ -1800,7 +1848,6 @@ function MobileDashboard({
 export function DashboardClient() {
   const [data, setData] = useState<StatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [timeRange, setTimeRange] = useState<TimeRange>("1D");
 
@@ -1808,8 +1855,6 @@ export function DashboardClient() {
     let active = true;
 
     async function load() {
-      const startedAt = performance.now();
-
       try {
         const response = await fetch("/api/status", { cache: "no-store" });
         const body = await response.json();
@@ -1825,14 +1870,12 @@ export function DashboardClient() {
 
         setData(parsed.data);
         setError(parsed.data.connection?.error ?? (response.ok ? null : `HTTP ${response.status}`));
-        setLatencyMs(Math.round(performance.now() - startedAt));
       } catch (nextError) {
         if (!active) {
           return;
         }
 
         setError(nextError instanceof Error ? nextError.message : String(nextError));
-        setLatencyMs(Math.round(performance.now() - startedAt));
       }
     }
 
@@ -1845,7 +1888,8 @@ export function DashboardClient() {
     };
   }, []);
 
-  const view = useMemo(() => buildViewModel(data, error, latencyMs, timeRange), [data, error, latencyMs, timeRange]);
+  const view = useMemo(() => buildViewModel(data, error, timeRange), [data, error, timeRange]);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   return (
     <>
@@ -1856,6 +1900,7 @@ export function DashboardClient() {
         data={data}
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
+        sectionTransitionEnabled={!isDesktop}
       />
       <DesktopDashboard
         view={view}
@@ -1864,6 +1909,7 @@ export function DashboardClient() {
         data={data}
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
+        sectionTransitionEnabled={isDesktop}
       />
     </>
   );
