@@ -90,6 +90,8 @@ export const healthSchema = z
     pids: z.array(z.string()),
     lastLogLine: z.string().nullable(),
     lastLogSource: z.string().nullable().optional(),
+    lastLogModifiedAt: z.string().nullable().optional(),
+    lastLogStale: z.boolean().optional(),
     serverTime: z.string(),
     sourcePath: z.string(),
     error: z.string().optional(),

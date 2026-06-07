@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { promises as fs } from "node:fs";
 import { promisify } from "node:util";
-import { readLatestAgentLogLine } from "./files.js";
+import { FILES, readLatestAgentLogLine, sourceFile } from "./files.js";
 import { redact, safeError } from "./redact.js";
 
 const execFileAsync = promisify(execFile);
@@ -11,13 +12,32 @@ export type Health = {
   pids: string[];
   lastLogLine: string | null;
   lastLogSource: string | null;
+  lastLogModifiedAt: string | null;
+  lastLogStale: boolean;
   serverTime: string;
   sourcePath: string;
   error?: string;
 };
 
+async function agentLogIsStale(sourcePath: string, logModifiedAtMs: number | null): Promise<boolean> {
+  if (logModifiedAtMs === null) {
+    return false;
+  }
+
+  try {
+    const stat = await fs.stat(sourceFile(sourcePath, FILES.decisionLog));
+    return logModifiedAtMs < stat.mtimeMs;
+  } catch {
+    return false;
+  }
+}
+
 export async function getHealth(sourcePath: string): Promise<Health> {
-  const { line: lastLogLine, source: lastLogSource } = await readLatestAgentLogLine(sourcePath);
+  const { line, source, modifiedAt, modifiedAtMs } = await readLatestAgentLogLine(sourcePath);
+  const lastLogStale = await agentLogIsStale(sourcePath, modifiedAtMs);
+
+  const lastLogLine = lastLogStale ? null : line;
+  const lastLogSource = source;
 
   try {
     const { stdout } = await execFileAsync("pgrep", ["-af", "src.main"], {
@@ -32,6 +52,8 @@ export async function getHealth(sourcePath: string): Promise<Health> {
       pids,
       lastLogLine,
       lastLogSource,
+      lastLogModifiedAt: modifiedAt,
+      lastLogStale,
       serverTime: new Date().toISOString(),
       sourcePath,
     };
@@ -42,6 +64,8 @@ export async function getHealth(sourcePath: string): Promise<Health> {
       pids: [],
       lastLogLine,
       lastLogSource,
+      lastLogModifiedAt: modifiedAt,
+      lastLogStale,
       serverTime: new Date().toISOString(),
       sourcePath,
       error: safeError(error),

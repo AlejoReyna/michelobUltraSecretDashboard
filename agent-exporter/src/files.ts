@@ -61,7 +61,7 @@ export async function readLastLogLine(filePath: string): Promise<string | null> 
 
 export async function readLatestAgentLogLine(
   sourcePath: string,
-): Promise<{ line: string | null; source: string | null }> {
+): Promise<{ line: string | null; source: string | null; modifiedAt: string | null; modifiedAtMs: number | null }> {
   let best: { line: string; source: string; mtimeMs: number } | null = null;
 
   for (const fileName of AGENT_LOG_CANDIDATES) {
@@ -84,10 +84,15 @@ export async function readLatestAgentLogLine(
   }
 
   if (!best) {
-    return { line: null, source: null };
+    return { line: null, source: null, modifiedAt: null, modifiedAtMs: null };
   }
 
-  return { line: best.line, source: best.source };
+  return {
+    line: best.line,
+    source: best.source,
+    modifiedAt: new Date(best.mtimeMs).toISOString(),
+    modifiedAtMs: best.mtimeMs,
+  };
 }
 
 export async function fileStatuses(sourcePath: string): Promise<Record<keyof typeof FILES, FileStatus>> {

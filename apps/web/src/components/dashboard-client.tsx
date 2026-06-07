@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   BarChart3,
+  ChevronDown,
+  ChevronRight,
   CircleUserRound,
   Download,
   ExternalLink,
@@ -21,6 +23,14 @@ import {
   realActiveTradeCount,
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
+import { resolveAgentLogLine } from "@/lib/agent-log";
+import { decisionFactorSummary } from "@/lib/factor-scoring";
+import {
+  detailsFromDecision,
+  detailsFromExecution,
+  detailsFromMovement,
+  type LogEventDetails,
+} from "@/lib/log-event-details";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
 type DashboardSection = "overview" | "logs" | "chart";
@@ -61,11 +71,13 @@ type MetricView = {
 };
 
 type ActivityRow = {
+  id: string;
   amount: string;
   hash: string;
   explorerUrl: string | null;
   status: string;
   tone: "green" | "yellow" | "red";
+  details?: LogEventDetails;
 };
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -286,16 +298,18 @@ function amountLabel(row: StatusPayload["wallet"]["movements"][number]) {
 
 function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   const movements =
-    data?.wallet.movements.slice(0, 7).map((movement) => {
+    data?.wallet.movements.slice(0, 7).map((movement, index) => {
       const failed = Boolean(movement.error) || String(movement.status ?? "").toLowerCase().includes("failed");
       const pending = !movement.txHash && !failed;
 
       return {
+        id: `movement-${movement.txHash ?? movement.timestamp ?? index}`,
         amount: amountLabel(movement),
         hash: shortHash(movement.txHash),
         explorerUrl: movement.explorerUrl ?? explorerUrlFor(movement.chain, movement.txHash),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
         tone: failed ? "red" : pending ? "yellow" : "green",
+        details: detailsFromMovement(movement),
       } satisfies ActivityRow;
     }) ?? [];
 
@@ -304,7 +318,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   }
 
   const executions =
-    data?.executions.slice(0, 7).map((execution) => {
+    data?.executions.slice(0, 7).map((execution, index) => {
       const failed = executionFailed(execution);
       const pending = !executionSucceeded(execution) && !failed;
       const from = execution.from_symbol ?? "";
@@ -314,6 +328,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash);
 
       return {
+        id: `execution-${execution.timestamp ?? index}-${txHash ?? index}`,
         amount:
           typeof execution.amount_in === "number"
             ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
@@ -322,6 +337,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         explorerUrl: explorerUrlFromExecution(execution),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
         tone: failed ? "red" : pending ? "yellow" : "green",
+        details: detailsFromExecution(execution),
       } satisfies ActivityRow;
     }) ?? [];
 
@@ -333,18 +349,20 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     data?.decisions
       .slice(-7)
       .reverse()
-      .map((decision) => {
+      .map((decision, index) => {
         const action = decision.action;
         const symbol = decision.symbol ?? "strategy";
         const reason = decision.reason ? ` - ${decision.reason}` : "";
         const event = `${action} ${symbol}${reason}`;
 
         return {
+          id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: event,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
           tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+          details: detailsFromDecision(decision),
         } satisfies ActivityRow;
       }) ?? [];
 
@@ -352,12 +370,13 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     return decisions;
   }
 
-  const lastLogLine = data?.health.lastLogLine?.trim();
-  if (lastLogLine) {
+  const agentLog = resolveAgentLogLine(data);
+  if (agentLog.line) {
     return [
       {
-        amount: lastLogLine,
-        hash: "agent.log",
+        id: "agent-log-latest",
+        amount: agentLog.line,
+        hash: agentLog.source ?? "agent.log",
         explorerUrl: null,
         status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
         tone: data?.health.agentRunning ? "green" : "red",
@@ -369,13 +388,14 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     { label: "agent.log", file: data?.files.agentLog },
     { label: "decision_log.jsonl", file: data?.files.decisionLog },
     { label: "execution_log.jsonl", file: data?.files.executionLog },
-  ].flatMap(({ label, file }) => {
+  ].flatMap(({ label, file }, index) => {
     if (!file) {
       return [];
     }
 
     return [
       {
+        id: `file-${label}-${index}`,
         amount: file.exists ? `${label} detected, waiting for records` : `${label} not found`,
         hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
         explorerUrl: null,
@@ -397,19 +417,20 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     data?.decisions
       .slice()
       .reverse()
-      .map((decision) => {
+      .map((decision, index) => {
         const action = decision.action;
         const symbol = decision.symbol ?? "strategy";
         const reason = decision.reason ? ` — ${decision.reason}` : "";
-        const factors =
-          typeof decision.true_factor_count === "number" ? ` (${decision.true_factor_count}/6 factors)` : "";
+        const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
 
         return {
+          id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: `${action} ${symbol}${factors}${reason}`,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
           tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+          details: detailsFromDecision(decision),
         } satisfies ActivityRow;
       }) ?? [];
 
@@ -421,7 +442,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     data?.executions
       .slice()
       .reverse()
-      .map((execution) => {
+      .map((execution, index) => {
         const failed = executionFailed(execution);
         const pending = !executionSucceeded(execution) && !failed;
         const from = execution.from_symbol ?? "";
@@ -430,6 +451,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
           execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash);
 
         return {
+          id: `execution-${execution.timestamp ?? index}-${txHash ?? index}`,
           amount:
             typeof execution.amount_in === "number"
               ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
@@ -438,6 +460,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
           explorerUrl: explorerUrlFromExecution(execution),
           status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
           tone: failed ? "red" : pending ? "yellow" : "green",
+          details: detailsFromExecution(execution),
         } satisfies ActivityRow;
       }) ?? [];
 
@@ -445,12 +468,13 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     return executionRows;
   }
 
-  const lastLogLine = data?.health.lastLogLine?.trim();
-  if (lastLogLine) {
+  const agentLog = resolveAgentLogLine(data);
+  if (agentLog.line) {
     return [
       {
-        amount: lastLogLine,
-        hash: "agent.log",
+        id: "agent-log-latest",
+        amount: agentLog.line,
+        hash: agentLog.source ?? "agent.log",
         explorerUrl: null,
         status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
         tone: data?.health.agentRunning ? "green" : "red",
@@ -462,13 +486,14 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
     { label: "agent.log", file: data?.files.agentLog },
     { label: "decision_log.jsonl", file: data?.files.decisionLog },
     { label: "execution_log.jsonl", file: data?.files.executionLog },
-  ].flatMap(({ label, file }) => {
+  ].flatMap(({ label, file }, index) => {
     if (!file) {
       return [];
     }
 
     return [
       {
+        id: `file-${label}-${index}`,
         amount: file.exists ? `${label} on EC2, waiting for records` : `${label} not found on EC2`,
         hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
         explorerUrl: null,
@@ -922,48 +947,162 @@ function DesktopWalletPanel({
   );
 }
 
-function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compact?: boolean }) {
+function detailValueToneClass(tone: LogEventDetails["items"][number]["tone"]) {
+  if (tone === "green") {
+    return "text-[#00FF66]";
+  }
+
+  if (tone === "yellow") {
+    return "text-[#FFD21A]";
+  }
+
+  if (tone === "red") {
+    return "text-[#FF7373]";
+  }
+
+  return "text-[#DADADA]";
+}
+
+function ActivityDetailPanel({ details }: { details: LogEventDetails }) {
+  return (
+    <div className="space-y-4 px-4 py-4">
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {details.items.map((item) => (
+          <div key={item.label} className="min-w-0">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">{item.label}</dt>
+            <dd className={cx("mt-1 break-words font-mono text-[12px] leading-5", detailValueToneClass(item.tone))}>
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {details.factors && details.factors.length > 0 ? (
+        <div>
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+            Factor scores · all 6 required to enter
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {details.factors.map((factor) => (
+              <span
+                key={factor.key}
+                className={cx(
+                  "inline-flex border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em]",
+                  factor.passed
+                    ? "border-[#00FF66]/40 bg-[#001A0A] text-[#00FF66]"
+                    : "border-[#FF3737]/40 bg-[#1B0505] text-[#FF7373]",
+                )}
+              >
+                {factor.passed ? "PASS" : "FAIL"} {factor.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RecentActivity({
+  rows,
+  compact = false,
+  expandable = false,
+}: {
+  rows: ActivityRow[];
+  compact?: boolean;
+  expandable?: boolean;
+}) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  const toggleRow = (id: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const visibleRows = compact ? rows.slice(0, 4) : rows;
+
   return (
     <table className="w-full table-fixed border-collapse text-left">
       <colgroup>
-        <col className="w-[34%]" />
-        <col className="w-[30%]" />
-        <col className="w-[36%]" />
+        {expandable ? <col className="w-[28px]" /> : null}
+        <col className={expandable ? "w-[32%]" : "w-[34%]"} />
+        <col className={expandable ? "w-[28%]" : "w-[30%]"} />
+        <col className={expandable ? "w-[34%]" : "w-[36%]"} />
       </colgroup>
       <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
         <tr>
+          {expandable ? <th className="px-2 py-4" aria-label="Expand" /> : null}
           <th className="px-4 py-4">Event</th>
           <th className="px-1 py-4">Reference</th>
           <th className="px-4 py-4 text-right">Status</th>
         </tr>
       </thead>
       <tbody>
-        {(compact ? rows.slice(0, 4) : rows).map((row, index) => (
-          <tr key={`${row.hash}-${row.amount}-${index}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
-            <td className="truncate px-4 py-5 font-mono text-[13px] font-bold tabular-nums">{row.amount}</td>
-            <td className="truncate px-1 py-5 font-mono text-[12px] font-bold text-[#D0D0D0]">
-              {row.explorerUrl ? (
-                <a
-                  href={row.explorerUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#8FD9FF] transition-colors hover:text-white"
-                  title={row.explorerUrl}
-                >
-                  {row.hash}
-                </a>
-              ) : (
-                row.hash
-              )}
-            </td>
-            <td className="px-4 py-4 text-right">
-              <StatusBadge status={row.status} tone={row.tone} />
-            </td>
-          </tr>
-        ))}
+        {visibleRows.map((row) => {
+          const canExpand = expandable && Boolean(row.details);
+          const isExpanded = canExpand && expandedIds.has(row.id);
+
+          return (
+            <Fragment key={row.id}>
+              <tr
+                className={cx(
+                  "border-b border-[#1A1A1A] text-white",
+                  canExpand ? "cursor-pointer hover:bg-[#070707]" : "hover:bg-[#070707]",
+                )}
+                onClick={canExpand ? () => toggleRow(row.id) : undefined}
+              >
+                {expandable ? (
+                  <td className="px-2 py-5 text-[#757575]">
+                    {canExpand ? (
+                      isExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      )
+                    ) : null}
+                  </td>
+                ) : null}
+                <td className="truncate px-4 py-5 font-mono text-[13px] font-bold tabular-nums">{row.amount}</td>
+                <td className="truncate px-1 py-5 font-mono text-[12px] font-bold text-[#D0D0D0]">
+                  {row.explorerUrl ? (
+                    <a
+                      href={row.explorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#8FD9FF] transition-colors hover:text-white"
+                      title={row.explorerUrl}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {row.hash}
+                    </a>
+                  ) : (
+                    row.hash
+                  )}
+                </td>
+                <td className="px-4 py-4 text-right">
+                  <StatusBadge status={row.status} tone={row.tone} />
+                </td>
+              </tr>
+              {isExpanded && row.details ? (
+                <tr className="border-b border-[#1A1A1A] bg-[#050505]">
+                  <td colSpan={expandable ? 4 : 3}>
+                    <ActivityDetailPanel details={row.details} />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          );
+        })}
         {rows.length === 0 ? (
           <tr className="border-b border-[#1A1A1A]">
-            <td className="px-4 py-5 font-mono text-[12px] text-[#8A8A8A]" colSpan={3}>
+            <td className="px-4 py-5 font-mono text-[12px] text-[#8A8A8A]" colSpan={expandable ? 4 : 3}>
               Waiting for telemetry
             </td>
           </tr>
@@ -988,14 +1127,12 @@ function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
 
 function LogsPanel({
   rows,
-  lastLogLine,
-  lastLogSource,
+  agentLog,
   agentRunning,
   compact = false,
 }: {
   rows: ActivityRow[];
-  lastLogLine: string | null;
-  lastLogSource: string | null;
+  agentLog: ReturnType<typeof resolveAgentLogLine>;
   agentRunning: boolean;
   compact?: boolean;
 }) {
@@ -1006,16 +1143,29 @@ function LogsPanel({
         <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Agent Logs</h1>
         <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
           Decision cycles from `decision_log.jsonl` on EC2. The latest bot stdout line comes from the most recently
-          updated log file (`bot_live.log` or `agent.log`).
+          updated log file (`bot_live.log` or `agent.log`) when it is newer than the current decision cycle.
         </p>
       </div>
 
-      {lastLogLine ? (
+      {agentLog.line ? (
         <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-            Latest bot log{lastLogSource ? ` (${lastLogSource})` : ""}
+            Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
           </div>
-          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{lastLogLine}</p>
+          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{agentLog.line}</p>
+          <div className="mt-3">
+            <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
+          </div>
+        </div>
+      ) : agentLog.stale ? (
+        <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+            Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
+          </div>
+          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
+            Hidden because it predates the current agent session. Stdout from the running process has not updated{" "}
+            {agentLog.source ?? "agent.log"} since the latest decision cycle.
+          </p>
           <div className="mt-3">
             <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
           </div>
@@ -1027,7 +1177,7 @@ function LogsPanel({
           <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
         </div>
         <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-          <RecentActivity rows={rows} />
+          <RecentActivity rows={rows} expandable />
         </div>
       </div>
     </section>
@@ -1087,8 +1237,7 @@ function DesktopDashboard({
         {activeSection === "logs" ? (
           <LogsPanel
             rows={view.logRows}
-            lastLogLine={data?.health.lastLogLine?.trim() ?? null}
-            lastLogSource={data?.health.lastLogSource ?? null}
+            agentLog={resolveAgentLogLine(data)}
             agentRunning={Boolean(data?.health.agentRunning)}
           />
         ) : (
@@ -1268,8 +1417,7 @@ function MobileDashboard({
         {activeSection === "logs" ? (
           <LogsPanel
             rows={view.logRows}
-            lastLogLine={data?.health.lastLogLine?.trim() ?? null}
-            lastLogSource={data?.health.lastLogSource ?? null}
+            agentLog={resolveAgentLogLine(data)}
             agentRunning={Boolean(data?.health.agentRunning)}
             compact
           />
