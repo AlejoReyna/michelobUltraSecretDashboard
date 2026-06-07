@@ -3,6 +3,7 @@
 :root {
   --background: #000000;
   --foreground: #ffffff;
+  --grid-line-color: rgba(26, 26, 26, 0.72);
 }
 
 @theme inline {
@@ -50,9 +51,9 @@ textarea {
 
 .technical-grid {
   background-image:
-    linear-gradient(rgba(26, 26, 26, 0.72) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(26, 26, 26, 0.72) 1px, transparent 1px);
-  background-size: 50px 50px;
+    linear-gradient(var(--grid-line-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-color) 1px, transparent 1px);
+  background-size: 5px 5px;
   background-position: -1px -1px;
 }
 
@@ -68,4 +69,43 @@ textarea {
 .console-scroll::-webkit-scrollbar-thumb {
   background: #242424;
   border-radius: 0;
+}
+
+@keyframes section-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes section-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.section-fade-in {
+  animation: section-fade-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.section-fade-out {
+  animation: section-fade-out 0.18s ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-fade-in,
+  .section-fade-out {
+    animation: none;
+  }
 }

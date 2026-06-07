@@ -1,4 +1,5 @@
-import type { StatusPayload } from "@/lib/schemas";
+import { decisionFactorSummary } from "@/lib/factor-scoring";
+import type { Decision, StatusPayload } from "@/lib/schemas";
 
 export type AgentLogView = {
   line: string | null;
@@ -47,4 +48,24 @@ export function resolveAgentLogLine(data: StatusPayload | null): AgentLogView {
   }
 
   return { line, source, stale: false };
+}
+
+export function formatDecisionLogLine(decision: Decision): string {
+  const symbol = decision.symbol ?? "strategy";
+  const reason = decision.reason ? ` — ${decision.reason}` : "";
+  const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
+
+  return `${decision.action} ${symbol}${factors}${reason}`;
+}
+
+export function decisionActionTone(action: Decision["action"]): "green" | "yellow" | "red" {
+  if (action === "HALT") {
+    return "red";
+  }
+
+  if (action === "ENTER") {
+    return "green";
+  }
+
+  return "yellow";
 }

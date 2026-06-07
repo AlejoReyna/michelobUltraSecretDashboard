@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  BarChart3,
+  BookOpen,
+  BrainCircuit,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
@@ -12,18 +12,21 @@ import {
   FileText,
   Github,
   Home,
-  Rocket,
-  Settings,
+  Layers,
+  LineChart,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
+import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio-chart";
+import { TokenIcon } from "@/components/token-icon";
 import {
   agentModeLabel,
   liveWalletBalancesFromTelemetry,
   realActiveTradeCount,
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
-import { resolveAgentLogLine } from "@/lib/agent-log";
+import { decisionActionTone, formatDecisionLogLine, resolveAgentLogLine } from "@/lib/agent-log";
 import { decisionFactorSummary } from "@/lib/factor-scoring";
 import {
   detailsFromDecision,
@@ -33,23 +36,24 @@ import {
 } from "@/lib/log-event-details";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
-type DashboardSection = "overview" | "logs" | "chart";
+type DashboardSection = "overview" | "positions" | "logs" | "chart" | "algorithm";
 
-const navItems: Array<{ label: string; icon: LucideIcon; section?: DashboardSection }> = [
+const navItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
   { label: "Overview", icon: Home, section: "overview" },
-  { label: "Bot Performance", icon: Activity },
-  { label: "Deployments", icon: Rocket },
+  { label: "Active Positions", icon: Layers, section: "positions" },
   { label: "Logs", icon: FileText, section: "logs" },
-  { label: "Analytics", icon: BarChart3 },
-  { label: "Settings", icon: Settings },
+  { label: "How It Works", icon: BrainCircuit, section: "algorithm" },
 ];
 
 const mobileNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
-  { label: "Overview", icon: Home, section: "overview" },
-  { label: "Logs", icon: FileText, section: "logs" },
-  { label: "Chart", icon: BarChart3, section: "chart" },
-  { label: "Settings", icon: Settings, section: "overview" },
+  { label: "Home", icon: Home, section: "overview" },
+  { label: "Positions", icon: Layers, section: "positions" },
+  { label: "Logs", icon: ScrollText, section: "logs" },
+  { label: "Chart", icon: LineChart, section: "chart" },
+  { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
+
+const MOBILE_NAV_HEIGHT = 52;
 
 const projectRepository = {
   owner: "AlejoReyna",
@@ -60,6 +64,30 @@ const projectRepository = {
 };
 
 const timeRanges = ["1H", "1D", "1W", "1M"] as const;
+type TimeRange = (typeof timeRanges)[number];
+
+function timeRangeDurationMs(range: TimeRange) {
+  switch (range) {
+    case "1H":
+      return 60 * 60 * 1000;
+    case "1D":
+      return 24 * 60 * 60 * 1000;
+    case "1W":
+      return 7 * 24 * 60 * 60 * 1000;
+    case "1M":
+      return 30 * 24 * 60 * 60 * 1000;
+  }
+}
+
+function decisionsForRange(data: StatusPayload | null, range: TimeRange) {
+  const cutoff = Date.now() - timeRangeDurationMs(range);
+  return (
+    data?.decisions.filter((decision) => {
+      const timestamp = new Date(decision.timestamp).getTime();
+      return !Number.isNaN(timestamp) && timestamp >= cutoff;
+    }) ?? []
+  );
+}
 
 type MetricView = {
   label: string;
@@ -78,6 +106,18 @@ type ActivityRow = {
   status: string;
   tone: "green" | "yellow" | "red";
   details?: LogEventDetails;
+};
+
+type PositionRow = {
+  id: string;
+  symbol: string;
+  amount: number | null;
+  entryPrice: number | null;
+  entryValueUsd: number | null;
+  highestPrice: number | null;
+  trailingStopPrice: number | null;
+  takeProfitPrice: number | null;
+  openedAt: string | null;
 };
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -127,6 +167,8 @@ type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
   logRows: ActivityRow[];
+  positionRows: PositionRow[];
+  totalPositionValue: string;
   walletBalances: WalletBalanceRow[];
   agentMode: string;
   telemetryError: string | null;
@@ -157,6 +199,62 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function AsciiRaccoonWatermark() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(520px,58vh)] w-[min(520px,78vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-45 mix-blend-screen"
+    />
+  );
+}
+
+function SectionTransition({
+  section,
+  children,
+  className,
+}: {
+  section: DashboardSection;
+  children: (section: DashboardSection) => ReactNode;
+  className?: string;
+}) {
+  const [displayedSection, setDisplayedSection] = useState(section);
+  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
+
+  useEffect(() => {
+    if (section === displayedSection) {
+      return;
+    }
+
+    setPhase("out");
+
+    const swapTimeout = window.setTimeout(() => {
+      setDisplayedSection(section);
+      setPhase("in");
+    }, 180);
+
+    const idleTimeout = window.setTimeout(() => {
+      setPhase("idle");
+    }, 560);
+
+    return () => {
+      window.clearTimeout(swapTimeout);
+      window.clearTimeout(idleTimeout);
+    };
+  }, [section, displayedSection]);
+
+  return (
+    <div
+      className={cx(
+        phase === "out" && "section-fade-out",
+        (phase === "in" || phase === "idle") && "section-fade-in",
+        className,
+      )}
+    >
+      {children(displayedSection)}
+    </div>
+  );
 }
 
 function formatUsd(value: number | null | undefined) {
@@ -204,12 +302,10 @@ function timeReference(timestamp: string | null | undefined) {
   });
 }
 
-function numericPortfolioValues(data: StatusPayload | null) {
-  return (
-    data?.decisions
-      .map((decision) => decision.portfolio_value_usdc)
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value)) ?? []
-  );
+function numericPortfolioValues(decisions: StatusPayload["decisions"]) {
+  return decisions
+    .map((decision) => decision.portfolio_value_usdc)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
 }
 
 function latestPortfolioValue(data: StatusPayload | null) {
@@ -233,7 +329,7 @@ function latestPortfolioValue(data: StatusPayload | null) {
     return data.latestDecision.portfolio_value_usdc;
   }
 
-  return numericPortfolioValues(data).at(-1) ?? null;
+  return numericPortfolioValues(data?.decisions ?? []).at(-1) ?? null;
 }
 
 function pnlFromWindow(values: number[]) {
@@ -249,14 +345,14 @@ function pnlFromWindow(values: number[]) {
   return { absolute, percent };
 }
 
-function chartPoints(data: StatusPayload | null): PortfolioChartPoint[] {
-  const points =
-    data?.decisions
-      .filter((decision) => typeof decision.portfolio_value_usdc === "number")
-      .map((decision, index) => ({
-        label: decision.cycle_number ? `#${decision.cycle_number}` : `${index + 1}`,
-        value: decision.portfolio_value_usdc ?? 0,
-      })) ?? [];
+function chartPoints(data: StatusPayload | null, range: TimeRange): PortfolioChartPoint[] {
+  const decisions = decisionsForRange(data, range);
+  const points = decisions
+    .filter((decision) => typeof decision.portfolio_value_usdc === "number")
+    .map((decision, index) => ({
+      label: decision.cycle_number ? `#${decision.cycle_number}` : `${index + 1}`,
+      value: decision.portfolio_value_usdc ?? 0,
+    }));
 
   if (points.length > 0) {
     return points;
@@ -506,6 +602,25 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   return fileRows;
 }
 
+function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRow[] {
+  return (data?.positions.positions ?? [])
+    .filter((position) => {
+      const amount = position.amount_tokens;
+      return typeof amount === "number" && Number.isFinite(amount) && amount > 0;
+    })
+    .map((position, index) => ({
+      id: `position-${position.symbol}-${position.opened_at ?? index}`,
+      symbol: position.symbol,
+      amount: position.amount_tokens ?? null,
+      entryPrice: position.entry_price ?? null,
+      entryValueUsd: position.entry_value_usdc ?? null,
+      highestPrice: position.highest_price ?? null,
+      trailingStopPrice: position.trailing_stop_price ?? null,
+      takeProfitPrice: position.take_profit_price ?? null,
+      openedAt: position.opened_at ?? null,
+    }));
+}
+
 function systemView(data: StatusPayload | null, error: string | null, latencyMs: number | null): SystemView {
   if (error || data?.connection?.source === "error") {
     return {
@@ -528,15 +643,23 @@ function systemView(data: StatusPayload | null, error: string | null, latencyMs:
   };
 }
 
-function buildViewModel(data: StatusPayload | null, error: string | null, latencyMs: number | null): DashboardViewModel {
-  const values = numericPortfolioValues(data);
+function buildViewModel(
+  data: StatusPayload | null,
+  error: string | null,
+  latencyMs: number | null,
+  timeRange: TimeRange,
+): DashboardViewModel {
+  const rangedDecisions = decisionsForRange(data, timeRange);
+  const values = numericPortfolioValues(rangedDecisions);
   const latest = latestPortfolioValue(data);
   const pnl = pnlFromWindow(values);
   const pnlTone = (pnl.absolute ?? 0) >= 0 ? "positive" : "negative";
   const activeTrades = realActiveTradeCount(data);
   const successRate = executionSuccessRate(data?.executions ?? []);
-  const chart = chartPoints(data);
+  const chart = chartPoints(data, timeRange);
   const performanceDelta = formatPercent(pnl.percent);
+  const positionRows = activePositionRowsFromTelemetry(data);
+  const totalPositionValue = positionRows.reduce((sum, row) => sum + (row.entryValueUsd ?? 0), 0);
 
   return {
     metrics: [
@@ -568,6 +691,8 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
     ],
     activityRows: activityFromTelemetry(data),
     logRows: logRowsFromTelemetry(data),
+    positionRows,
+    totalPositionValue: formatUsd(totalPositionValue),
     walletBalances: liveWalletBalancesFromTelemetry(data),
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
@@ -684,24 +809,11 @@ function DesktopSidebar({
           const Icon = item.icon;
           const active = item.section === activeSection;
 
-          if (!item.section) {
-            return (
-              <span
-                key={item.label}
-                className="flex h-12 cursor-not-allowed items-center gap-3 border border-transparent px-3 font-mono text-[13px] text-[#555555]"
-                title="Coming soon"
-              >
-                <Icon size={17} className="shrink-0 text-[#555555]" />
-                <span>{item.label}</span>
-              </span>
-            );
-          }
-
           return (
             <button
               key={item.label}
               type="button"
-              onClick={() => onNavigate(item.section!)}
+              onClick={() => onNavigate(item.section)}
               className={cx(
                 "group flex h-12 w-full items-center gap-3 border border-transparent px-3 font-mono text-[13px] transition-colors",
                 active
@@ -741,7 +853,7 @@ function DesktopSidebar({
 
 function DesktopMetricBlock({ label, value, unit, delta, tone, tooltip }: MetricView) {
   return (
-    <div className="min-w-0 border-l border-[#1A1A1A] pl-5">
+    <div className="min-w-0 border border-[#2A2A2A] bg-black/88 px-5 py-4">
       <div className="mb-3 font-mono text-[13px] text-[#A0A0A0]">
         <TooltipLabel label={label} tooltip={tooltip} />
       </div>
@@ -758,16 +870,26 @@ function DesktopMetricBlock({ label, value, unit, delta, tone, tooltip }: Metric
   );
 }
 
-function TimeRangeSelector({ compact = false }: { compact?: boolean }) {
+function TimeRangeSelector({
+  compact = false,
+  value,
+  onChange,
+}: {
+  compact?: boolean;
+  value: TimeRange;
+  onChange: (range: TimeRange) => void;
+}) {
   return (
     <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>
       {timeRanges.map((range) => (
         <button
           key={range}
+          type="button"
+          onClick={() => onChange(range)}
           className={cx(
             "border font-mono transition-colors",
             compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
-            range === "1W"
+            range === value
               ? "border-[#666666] bg-[#222222] text-white"
               : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
           )}
@@ -779,14 +901,22 @@ function TimeRangeSelector({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function DesktopPerformancePanel({ view }: { view: DashboardViewModel }) {
+function DesktopPerformancePanel({
+  view,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  view: DashboardViewModel;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
   return (
     <section className="flex min-h-0 flex-col px-10 py-9">
       <div className="mb-9">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Overview</div>
-        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Bot Performance</h1>
+        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Alexis' terminal</h1>
       </div>
-      <div className="grid gap-x-6 gap-y-7 lg:grid-cols-2 2xl:grid-cols-[1.25fr_1fr_0.72fr_0.72fr]">
+      <div className="grid grid-cols-4 gap-4">
         {view.metrics.map((metric) => (
           <DesktopMetricBlock key={metric.label} {...metric} />
         ))}
@@ -794,7 +924,7 @@ function DesktopPerformancePanel({ view }: { view: DashboardViewModel }) {
       <div className="mt-10 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1A1A1A] px-7 py-5">
           <h2 className="font-mono text-lg text-[#CFCFCF]">Portfolio Chart</h2>
-          <TimeRangeSelector />
+          <TimeRangeSelector value={timeRange} onChange={onTimeRangeChange} />
         </div>
         <div className="min-h-[340px] flex-1 p-6">
           <PortfolioChart data={view.chartData} variant="desktop" />
@@ -863,10 +993,11 @@ function WalletSection({
   const sectionPadding = desktopFill ? "px-3 py-1" : compact ? "px-4 py-3" : "px-5 py-3";
 
   const balancesTable = (
-    <div className={cx(desktopFill && "border-t border-[#1A1A1A]")}>
-      <div className={cx("font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]", sectionPadding)}>
+    <div className={cx("min-h-0", desktopFill && "flex flex-1 flex-col border-t border-[#1A1A1A]")}>
+      <div className={cx("shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]", sectionPadding)}>
         Balances
       </div>
+      <div className={cx(desktopFill && "console-scroll min-h-0 flex-1 overflow-auto")}>
       <table className="w-full table-fixed border-collapse text-left">
         <colgroup>
           <col className="w-[22%]" />
@@ -886,7 +1017,12 @@ function WalletSection({
           {balances.map((balance) => (
             <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
               <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
-              <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">{balance.symbol}</td>
+              <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
+                <span className="inline-flex min-w-0 items-center gap-1.5">
+                  <TokenIcon symbol={balance.symbol} size={desktopFill ? 14 : 16} />
+                  <span className="truncate">{balance.symbol}</span>
+                </span>
+              </td>
               <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
                 {formatTokenAmount(balance.amount)}
               </td>
@@ -904,11 +1040,12 @@ function WalletSection({
           ) : null}
         </tbody>
       </table>
+      </div>
     </div>
   );
 
   return (
-    <section className={cx(desktopFill ? "bg-black/88" : "border border-[#2A2A2A] bg-black/88")}>
+    <section className={cx(desktopFill ? "flex h-full min-h-0 flex-col bg-black/88" : "border border-[#2A2A2A] bg-black/88")}>
       <div className={cx("shrink-0", !desktopFill && "border-b border-[#1A1A1A]", headerPadding)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -941,7 +1078,7 @@ function DesktopWalletPanel({
   agentMode: string;
 }) {
   return (
-    <section className="shrink-0 overflow-hidden bg-black/72">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-[#1A1A1A] bg-black/72">
       <WalletSection balances={balances} agentMode={agentMode} desktopFill />
     </section>
   );
@@ -1114,7 +1251,7 @@ function RecentActivity({
 
 function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-[#1A1A1A] bg-black/72">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black/72">
       <div className="shrink-0 border-b border-[#1A1A1A] px-3 py-2">
         <h2 className="font-mono text-base text-[#DADADA]">Recent Activity</h2>
       </div>
@@ -1125,14 +1262,166 @@ function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
   );
 }
 
+function formatPrice(value: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  if (value >= 100) {
+    return usdFormatter.format(value);
+  }
+
+  return `$${compactNumberFormatter.format(value)}`;
+}
+
+function formatOpenedAt(timestamp: string | null) {
+  if (!timestamp) {
+    return "N/A";
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return timestamp;
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function ActivePositionsTable({ rows, compact = false }: { rows: PositionRow[]; compact?: boolean }) {
+  return (
+    <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+      <colgroup>
+        <col className="w-[14%]" />
+        <col className="w-[12%]" />
+        <col className="w-[12%]" />
+        <col className="w-[12%]" />
+        <col className="w-[12%]" />
+        <col className="w-[12%]" />
+        <col className="w-[12%]" />
+        <col className="w-[14%]" />
+      </colgroup>
+      <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+        <tr>
+          <th className={cx("py-4", compact ? "px-3" : "px-5")}>Token</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Amount</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Entry</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Value</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>High</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Stop</th>
+          <th className={cx("py-4", compact ? "px-2" : "px-3")}>Target</th>
+          <th className={cx("py-4 text-right", compact ? "px-3" : "px-5")}>Opened</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.id} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+            <td className={cx("py-4 font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3" : "px-5")}>
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
+                <span className="truncate">{row.symbol}</span>
+              </span>
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+              {formatTokenAmount(row.amount)}
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+              {formatPrice(row.entryPrice)}
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]", compact ? "px-2" : "px-3")}>
+              {formatUsd(row.entryValueUsd)}
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#00FF66]", compact ? "px-2" : "px-3")}>
+              {formatPrice(row.highestPrice)}
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#FFD21A]", compact ? "px-2" : "px-3")}>
+              {formatPrice(row.trailingStopPrice)}
+            </td>
+            <td className={cx("truncate py-4 font-mono text-[12px] tabular-nums text-[#8FD9FF]", compact ? "px-2" : "px-3")}>
+              {formatPrice(row.takeProfitPrice)}
+            </td>
+            <td className={cx("truncate py-4 text-right font-mono text-[12px] text-[#A8A8A8]", compact ? "px-3" : "px-5")}>
+              {formatOpenedAt(row.openedAt)}
+            </td>
+          </tr>
+        ))}
+        {rows.length === 0 ? (
+          <tr className="border-b border-[#1A1A1A]">
+            <td className={cx("py-6 font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3" : "px-5")} colSpan={8}>
+              No open positions in positions.json
+            </td>
+          </tr>
+        ) : null}
+      </tbody>
+    </table>
+  );
+}
+
+function ActivePositionsPanel({
+  rows,
+  totalPositionValue,
+  agentMode,
+  compact = false,
+}: {
+  rows: PositionRow[];
+  totalPositionValue: string;
+  agentMode: string;
+  compact?: boolean;
+}) {
+  const paperMode = agentMode === "PAPER";
+
+  return (
+    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
+      <div className="mb-6">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="font-mono text-[32px] font-semibold leading-tight text-white">Active Positions</h1>
+          <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+        </div>
+        <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
+          maintained by the agent after each decision cycle.
+        </p>
+      </div>
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
+          <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+        </div>
+        <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
+          <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
+        </div>
+      </div>
+
+      <div className="border border-[#2A2A2A] bg-black/88">
+        <div className="border-b border-[#1A1A1A] px-5 py-5">
+          <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
+        </div>
+        <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
+          <ActivePositionsTable rows={rows} compact={compact} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LogsPanel({
   rows,
   agentLog,
+  latestDecision,
   agentRunning,
   compact = false,
 }: {
   rows: ActivityRow[];
   agentLog: ReturnType<typeof resolveAgentLogLine>;
+  latestDecision: StatusPayload["latestDecision"];
   agentRunning: boolean;
   compact?: boolean;
 }) {
@@ -1142,8 +1431,8 @@ function LogsPanel({
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
         <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Agent Logs</h1>
         <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-          Decision cycles from `decision_log.jsonl` on EC2. The latest bot stdout line comes from the most recently
-          updated log file (`bot_live.log` or `agent.log`) when it is newer than the current decision cycle.
+          Decision cycles from `decision_log.jsonl` on EC2. When bot stdout is stale, the summary card shows the latest
+          decision cycle instead of `bot_live.log` / `agent.log`.
         </p>
       </div>
 
@@ -1157,16 +1446,15 @@ function LogsPanel({
             <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
           </div>
         </div>
-      ) : agentLog.stale ? (
+      ) : latestDecision ? (
         <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
-            Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
+            Latest decision
+            {latestDecision.cycle_number != null ? ` (cycle #${latestDecision.cycle_number})` : ""}
           </div>
-          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
-            Hidden because it predates the current agent session. Stdout from the running process has not updated{" "}
-            {agentLog.source ?? "agent.log"} since the latest decision cycle.
-          </p>
-          <div className="mt-3">
+          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{formatDecisionLogLine(latestDecision)}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <StatusBadge status={latestDecision.action} tone={decisionActionTone(latestDecision.action)} />
             <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
           </div>
         </div>
@@ -1223,32 +1511,50 @@ function DesktopDashboard({
   activeSection,
   onNavigate,
   data,
+  timeRange,
+  onTimeRangeChange,
 }: {
   view: DashboardViewModel;
   activeSection: DashboardSection;
   onNavigate: (section: DashboardSection) => void;
   data: StatusPayload | null;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <div className="hidden min-h-screen bg-black text-white lg:flex">
+    <div className="relative hidden min-h-screen bg-black text-white lg:flex">
+      <AsciiRaccoonWatermark />
       <DesktopSidebar activeSection={activeSection} onNavigate={onNavigate} />
       <main className="technical-grid min-w-0 flex-1 pb-9">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-        {activeSection === "logs" ? (
-          <LogsPanel
-            rows={view.logRows}
-            agentLog={resolveAgentLogLine(data)}
-            agentRunning={Boolean(data?.health.agentRunning)}
-          />
-        ) : (
-          <section className="grid h-[calc(100vh-36px)] min-h-0 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            <DesktopPerformancePanel view={view} />
-            <div className="flex min-h-0 flex-col border-l border-[#1A1A1A]">
-              <DesktopWalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
-              <DesktopRecentActivity rows={view.activityRows} />
-            </div>
-          </section>
-        )}
+        <SectionTransition section={activeSection}>
+          {(section) =>
+            section === "logs" ? (
+              <LogsPanel
+                rows={view.logRows}
+                agentLog={resolveAgentLogLine(data)}
+                latestDecision={data?.latestDecision ?? null}
+                agentRunning={Boolean(data?.health.agentRunning)}
+              />
+            ) : section === "positions" ? (
+              <ActivePositionsPanel
+                rows={view.positionRows}
+                totalPositionValue={view.totalPositionValue}
+                agentMode={view.agentMode}
+              />
+            ) : section === "algorithm" ? (
+              <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} />
+            ) : (
+              <section className="grid h-[calc(100vh-36px)] min-h-0 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+                <DesktopPerformancePanel view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+                <div className="flex h-full min-h-0 flex-col border-l border-[#1A1A1A]">
+                  <DesktopWalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
+                  <DesktopRecentActivity rows={view.activityRows} />
+                </div>
+              </section>
+            )
+          }
+        </SectionTransition>
       </main>
       <DesktopStatusBar system={view.system} />
     </div>
@@ -1290,12 +1596,20 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   );
 }
 
-function MobilePerformanceWidget({ view }: { view: DashboardViewModel }) {
+function MobilePerformanceWidget({
+  view,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  view: DashboardViewModel;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
   return (
     <section className="mx-4 mt-9 flex min-h-0 flex-col border border-[#2A2A2A] bg-black/80">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-4 py-4">
         <h2 className="font-mono text-base text-[#CFCFCF]">Portfolio Chart</h2>
-        <TimeRangeSelector compact />
+        <TimeRangeSelector compact value={timeRange} onChange={onTimeRangeChange} />
       </div>
       <div className="h-[200px] p-4">
         <PortfolioChart data={view.mobileChartData} variant="mobile" />
@@ -1331,7 +1645,10 @@ function MobileRecentActivity({ rows }: { rows: ActivityRow[] }) {
 
 function MobileSystemBar({ system }: { system: SystemView }) {
   return (
-    <div className="fixed bottom-[76px] left-0 right-0 z-40 border-y border-[#1A1A1A] bg-black">
+    <div
+      className="fixed left-0 right-0 z-40 border-y border-[#1A1A1A] bg-black"
+      style={{ bottom: MOBILE_NAV_HEIGHT }}
+    >
       <div className="mx-auto flex h-8 max-w-[640px] items-center justify-between gap-2 px-4 font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-[#BEBEBE]">
         <span className="inline-flex items-center gap-1.5">
           <SystemDot tone={system.tone} size="h-1.5 w-1.5" />
@@ -1359,24 +1676,38 @@ function MobileBottomNav({
   onNavigate: (section: DashboardSection) => void;
 }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A1A1A] bg-[#050505]">
-      <div className="mx-auto grid h-[76px] max-w-[640px] grid-cols-4 px-4">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      aria-label="Mobile navigation"
+    >
+      <div
+        className="mx-auto grid max-w-[640px] grid-cols-5 px-1"
+        style={{ height: MOBILE_NAV_HEIGHT }}
+      >
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.section === activeSection;
 
           return (
             <button
-              key={item.label}
+              key={item.section}
               type="button"
               onClick={() => onNavigate(item.section)}
+              aria-current={active ? "page" : undefined}
+              aria-label={item.label}
               className={cx(
-                "flex min-h-11 flex-col items-center justify-center gap-1 font-mono text-[11px] font-bold uppercase",
-                active ? "text-[#00FF00]" : "text-[#8A8A8A]",
+                "relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
+                active ? "text-[#00FF00]" : "text-[#7A7A7A] active:text-white",
               )}
             >
-              <Icon size={23} strokeWidth={2.1} />
-              <span>{item.label}</span>
+              {active ? (
+                <span className="absolute top-0 h-0.5 w-4 rounded-full bg-[#00FF00]" aria-hidden="true" />
+              ) : null}
+              <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+              <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-[0.06em]">
+                {item.label}
+              </span>
             </button>
           );
         })}
@@ -1385,11 +1716,20 @@ function MobileBottomNav({
   );
 }
 
-function MobileChartSection({ view }: { view: DashboardViewModel }) {
+function MobileChartSection({
+  view,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  view: DashboardViewModel;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
   return (
     <section className="mx-4 mt-9 overflow-hidden border border-[#1A1A1A] bg-black">
-      <div className="border-b border-[#1A1A1A] px-5 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1A1A1A] px-5 py-5">
         <h2 className="text-[24px] font-bold text-white">Portfolio Chart</h2>
+        <TimeRangeSelector compact value={timeRange} onChange={onTimeRangeChange} />
       </div>
       <div className="p-4">
         <PortfolioChart data={view.mobileChartData} variant="mobile" />
@@ -1403,34 +1743,53 @@ function MobileDashboard({
   activeSection,
   onNavigate,
   data,
+  timeRange,
+  onTimeRangeChange,
 }: {
   view: DashboardViewModel;
   activeSection: DashboardSection;
   onNavigate: (section: DashboardSection) => void;
   data: StatusPayload | null;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <div className="technical-grid min-h-screen bg-black text-white lg:hidden">
+    <div className="technical-grid relative min-h-screen bg-black text-white lg:hidden">
+      <AsciiRaccoonWatermark />
       <MobileHeader />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main className="mx-auto max-w-[640px] pb-[124px]">
-        {activeSection === "logs" ? (
-          <LogsPanel
-            rows={view.logRows}
-            agentLog={resolveAgentLogLine(data)}
-            agentRunning={Boolean(data?.health.agentRunning)}
-            compact
-          />
-        ) : activeSection === "chart" ? (
-          <MobileChartSection view={view} />
-        ) : (
-          <>
-            <MobileHeroMetrics view={view} />
-            <MobilePerformanceWidget view={view} />
-            <MobileWalletSection balances={view.walletBalances} agentMode={view.agentMode} />
-            <MobileRecentActivity rows={view.activityRows} />
-          </>
-        )}
+      <main className="mx-auto max-w-[640px] pb-[100px]">
+        <SectionTransition section={activeSection}>
+          {(section) =>
+            section === "logs" ? (
+              <LogsPanel
+                rows={view.logRows}
+                agentLog={resolveAgentLogLine(data)}
+                latestDecision={data?.latestDecision ?? null}
+                agentRunning={Boolean(data?.health.agentRunning)}
+                compact
+              />
+            ) : section === "positions" ? (
+              <ActivePositionsPanel
+                rows={view.positionRows}
+                totalPositionValue={view.totalPositionValue}
+                agentMode={view.agentMode}
+                compact
+              />
+            ) : section === "chart" ? (
+              <MobileChartSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+            ) : section === "algorithm" ? (
+              <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
+            ) : (
+              <>
+                <MobileHeroMetrics view={view} />
+                <MobilePerformanceWidget view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+                <MobileWalletSection balances={view.walletBalances} agentMode={view.agentMode} />
+                <MobileRecentActivity rows={view.activityRows} />
+              </>
+            )
+          }
+        </SectionTransition>
       </main>
       <MobileSystemBar system={view.system} />
       <MobileBottomNav activeSection={activeSection} onNavigate={onNavigate} />
@@ -1443,6 +1802,7 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+  const [timeRange, setTimeRange] = useState<TimeRange>("1D");
 
   useEffect(() => {
     let active = true;
@@ -1485,12 +1845,26 @@ export function DashboardClient() {
     };
   }, []);
 
-  const view = useMemo(() => buildViewModel(data, error, latencyMs), [data, error, latencyMs]);
+  const view = useMemo(() => buildViewModel(data, error, latencyMs, timeRange), [data, error, latencyMs, timeRange]);
 
   return (
     <>
-      <MobileDashboard view={view} activeSection={activeSection} onNavigate={setActiveSection} data={data} />
-      <DesktopDashboard view={view} activeSection={activeSection} onNavigate={setActiveSection} data={data} />
+      <MobileDashboard
+        view={view}
+        activeSection={activeSection}
+        onNavigate={setActiveSection}
+        data={data}
+        timeRange={timeRange}
+        onTimeRangeChange={setTimeRange}
+      />
+      <DesktopDashboard
+        view={view}
+        activeSection={activeSection}
+        onNavigate={setActiveSection}
+        data={data}
+        timeRange={timeRange}
+        onTimeRangeChange={setTimeRange}
+      />
     </>
   );
 }
