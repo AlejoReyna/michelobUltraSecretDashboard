@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   ViewportReveal,
   chapterRevealVariant,
@@ -156,17 +159,131 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   priced_target_count: 149,
 };
 
-const SCALPING_FACTORS: Array<{
+type GuideStrategyMode = "breakout" | "scalping";
+
+type ScalpingFactorMeta = {
   key: ScalpingFactorKey;
   title: string;
   weight: number;
   plain: string;
-}> = [
-  { key: "micro_momentum", title: "Micro-momentum", weight: 30, plain: "Price above EMA(9) with elevated 5m volume." },
-  { key: "slippage_ok", title: "Slippage OK", weight: 25, plain: "Estimated slippage stays under 0.3%." },
-  { key: "regime_neutro", title: "Regime neutral", weight: 20, plain: "Market is not in risk-off mode." },
-  { key: "no_whale_dump", title: "No whale dump", weight: 15, plain: "Token is not down more than 2% in the last hour." },
-  { key: "gas_viable", title: "Gas viable", weight: 10, plain: "BSC gas is below 5 gwei." },
+  detail: string;
+  dataSource: string;
+};
+
+const SCALPING_FACTOR_META: ScalpingFactorMeta[] = [
+  {
+    key: "micro_momentum",
+    title: "Micro-momentum",
+    weight: 30,
+    plain: "Price above EMA(9) with elevated 5m volume.",
+    detail:
+      "The token must trade above its 9-period EMA while recent 5-minute volume exceeds 1.5× the rolling hourly average. This targets short bursts—not slow overnight drifts.",
+    dataSource: "Price cache + CMC volume (trial every 5m, x402 every 2h)",
+  },
+  {
+    key: "slippage_ok",
+    title: "Slippage OK",
+    weight: 25,
+    plain: "Estimated slippage stays under 0.3%.",
+    detail:
+      "Before scoring, the bot reads estimated swap slippage from enriched market data. Above 0.3% this factor fails—even if the hard entry gate allows up to 0.5%.",
+    dataSource: "x402-enriched snapshot + TWAK quote at execution",
+  },
+  {
+    key: "regime_neutro",
+    title: "Regime neutral",
+    weight: 20,
+    plain: "Market is not in risk-off mode.",
+    detail:
+      "When BNB trend and sentiment turn defensive, new scalps are riskier. This factor confirms the macro backdrop is neutral or risk-on—not a broad selloff.",
+    dataSource: "BNB regime detector + sentiment tier-1",
+  },
+  {
+    key: "no_whale_dump",
+    title: "No whale dump",
+    weight: 15,
+    plain: "Token is not down more than 2% in the last hour.",
+    detail:
+      "A sharp 1-hour drawdown often signals distribution or a liquidity vacuum. The bot skips tokens that dropped more than 2% in the last hour.",
+    dataSource: "CMC percent_change_1h (trial overlay)",
+  },
+  {
+    key: "gas_viable",
+    title: "Gas viable",
+    weight: 10,
+    plain: "BSC gas is below 5 gwei.",
+    detail:
+      "With a small portfolio, gas can eat the entire edge. This factor blocks entries when BSC gas exceeds the configured ceiling (default 5 gwei).",
+    dataSource: "BSC RPC eth_gasPrice",
+  },
+];
+
+const SCALPING_CYCLE_INPUTS = [
+  "Market data (trial 5m + x402 2h)",
+  "Weighted score 0–100",
+  "Scalping guardrails",
+  "TWAK swap execution",
+  "Fixed TP / SL / time stop",
+  "Decision log",
+];
+
+const SCALPING_CYCLE_STEPS = [
+  {
+    step: "01",
+    title: "Wake up",
+    body: "Every 5 minutes the agent reads wallet balances, open positions, and guardrail state.",
+  },
+  {
+    step: "02",
+    title: "Dual data fetch",
+    body: "Trial REST refreshes prices every cycle; paid x402 plus free metrics enriches slippage and funding every 2 hours.",
+  },
+  {
+    step: "03",
+    title: "Score universe",
+    body: "Each allowlisted token gets five weighted checks. Points add up—60+ can enter, below 60 logs the best near-miss.",
+  },
+  {
+    step: "04",
+    title: "Apply guardrails",
+    body: "Daily loss cap, trade limits, max one open scalp, and cooldown after consecutive stops can still block a high score.",
+  },
+  {
+    step: "05",
+    title: "Enter or exit",
+    body: "ENTER swaps USDC → token via TWAK. Open positions exit at +1.5% TP, −0.8% SL, or a 20–30 min time stop.",
+  },
+];
+
+const SCALPING_FLOW_STEPS = [
+  { label: "New cycle", sub: "Read wallet & positions" },
+  { label: "Refresh data", sub: "Keyless quotes + x402 cache" },
+  { label: "Score 5 factors", sub: "Weighted 0–100 per token" },
+  { label: "Score ≥ 60?", sub: "Best candidate + guardrails" },
+  { label: "ENTER or WAIT", sub: "Swap or log near-miss" },
+];
+
+const SCALPING_OUTCOMES = [
+  {
+    action: "ENTER",
+    summary: "Scalp opened",
+    body: "Best token scored ≥ 60/100, guardrails allow entries, and TWAK accepts the swap size. One position max—no stacking scalps.",
+  },
+  {
+    action: "WAIT",
+    summary: "Below threshold",
+    body: "The top candidate scored under 60 (e.g. 45/100). The dashboard shows which factors passed and how many points each contributed.",
+  },
+  {
+    action: "BLOCKED",
+    summary: "Guardrail stop",
+    body: "Score may look fine, but daily loss cap, trade limit, cooldown, or max-position rule vetoed the entry.",
+  },
+  {
+    action: "EXIT",
+    summary: "Position closed",
+    body: "Take profit (+1.5%), stop loss (−0.8%), or time stop fired. Token swaps back to USDC and a symbol cooldown begins.",
+  },
 ];
 
 const SIMULATED_SCALPING_SIGNAL: ExampleDecision = {
@@ -192,6 +309,31 @@ const SIMULATED_SCALPING_SIGNAL: ExampleDecision = {
   estimated_slippage_pct: 0.001,
   reason: "scalping score 65/100 >= 60",
   priced_target_count: 149,
+};
+
+const SIMULATED_SCALPING_WAIT: ExampleDecision = {
+  timestamp: "2026-06-07T08:55:00.000Z",
+  cycle_number: 2,
+  mode: "live",
+  portfolio_value_usdc: 7.11,
+  position_count: 0,
+  entries_allowed: true,
+  action: "WAIT",
+  symbol: "TRX",
+  position_size_usdc: 0,
+  strategy_mode: "scalping",
+  entry_score: 45,
+  factor_scores: {
+    micro_momentum: false,
+    slippage_ok: false,
+    regime_neutro: true,
+    no_whale_dump: true,
+    gas_viable: true,
+  },
+  true_factor_count: 2,
+  estimated_slippage_pct: null,
+  reason: "best TRX scalping score 45/100 < 60",
+  priced_target_count: 117,
 };
 
 const CYCLE_INPUTS = [
@@ -265,12 +407,52 @@ function ChapterDivider({
   );
 }
 
-function CycleOverviewList() {
+function GuideStrategyToggle({
+  mode,
+  onChange,
+}: {
+  mode: GuideStrategyMode;
+  onChange: (mode: GuideStrategyMode) => void;
+}) {
+  return (
+    <div
+      className="mt-4 inline-flex border border-[#2A2A2A] bg-[#0A0A0A] p-0.5"
+      role="tablist"
+      aria-label="Strategy guide mode"
+    >
+      {(
+        [
+          { id: "breakout" as const, label: "Breakout" },
+          { id: "scalping" as const, label: "Scalping" },
+        ] as const
+      ).map((option) => {
+        const active = mode === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(option.id)}
+            className={cx(
+              "px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors",
+              active ? "bg-[#111] text-white" : "text-[#666] hover:text-[#A8A8A8]",
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CycleOverviewList({ items }: { items: string[] }) {
   const itemVariants = ["right", "fade", "left", "up", "down", "scale"] as const;
 
   return (
     <ol className="space-y-2">
-      {CYCLE_INPUTS.map((item, index) => (
+      {items.map((item, index) => (
         <ViewportReveal
           key={item}
           as="li"
@@ -291,14 +473,7 @@ function CycleOverviewList() {
   );
 }
 
-function DecisionFlowList() {
-  const steps = [
-    { label: "New cycle", sub: "Read wallet & positions" },
-    { label: "Scan allowlist", sub: "~149 BEP-20 tokens" },
-    { label: "Score 6 factors", sub: "Per candidate token" },
-    { label: "Guardrails OK?", sub: "Loss / regime / caps" },
-    { label: "ENTER or WAIT", sub: "Swap or log & retry" },
-  ];
+function DecisionFlowList({ steps }: { steps: Array<{ label: string; sub: string }> }) {
   const stepVariants = ["down", "fade", "up", "left", "scale"] as const;
 
   return (
@@ -432,7 +607,7 @@ function DecisionSnapshot({
       </div>
       <div className="grid gap-2 border-t border-[#1A1A1A] px-5 py-4 sm:grid-cols-2 lg:grid-cols-3">
         {strategyMode === "scalping"
-          ? SCALPING_FACTORS.map((factor) => {
+          ? SCALPING_FACTOR_META.map((factor) => {
               const passed = Boolean(decision.factor_scores?.[factor.key]);
               return (
                 <div
@@ -446,7 +621,7 @@ function DecisionSnapshot({
                     {passed ? "—" : "·"}
                   </span>
                   <span>
-                    {factor.title} ({factor.weight}%)
+                    {factor.title} ({factor.weight} pts)
                   </span>
                 </div>
               );
@@ -508,6 +683,30 @@ function FactorCard({ factor, index }: { factor: FactorMeta; index: number }) {
   );
 }
 
+function ScalpingFactorCard({ factor, index }: { factor: ScalpingFactorMeta; index: number }) {
+  return (
+    <article className="flex flex-col border border-[#2A2A2A] bg-black/88">
+      <div className="flex items-start gap-3 border-b border-[#1A1A1A] px-4 py-3">
+        <span className="grid h-7 w-7 shrink-0 place-items-center border border-[#2A2A2A] bg-[#0A0A0A] font-mono text-[11px] text-[#757575]">
+          {index + 1}
+        </span>
+        <div>
+          <h3 className="font-mono text-sm font-semibold text-white">
+            {factor.title} · {factor.weight} pts
+          </h3>
+          <p className="mt-1 font-mono text-[12px] leading-5 text-[#A8A8A8]">{factor.plain}</p>
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-3 px-4 py-3">
+        <p className="font-mono text-[11px] leading-5 text-[#B0B0B0]">{factor.detail}</p>
+        <p className="mt-auto font-mono text-[10px] uppercase tracking-[0.12em] text-[#666]">
+          Source: {factor.dataSource}
+        </p>
+      </div>
+    </article>
+  );
+}
+
 export function DecisionAlgorithmPanel({
   latestDecision,
   compact = false,
@@ -520,7 +719,91 @@ export function DecisionAlgorithmPanel({
   const wideLayout = desktop || !compact;
   const chapterGap = compact ? "mt-8" : desktop ? "mt-10" : "mt-12";
   const panelClass = "border border-[#2A2A2A] bg-black/88 p-4";
-  const activeStrategy = latestDecision ? resolveStrategyMode(latestDecision) : "breakout";
+  const [guideMode, setGuideMode] = useState<GuideStrategyMode>(() =>
+    latestDecision ? resolveStrategyMode(latestDecision) : "scalping",
+  );
+  const isScalping = guideMode === "scalping";
+  const cycleInputs = isScalping ? SCALPING_CYCLE_INPUTS : CYCLE_INPUTS;
+  const cycleSteps = isScalping ? SCALPING_CYCLE_STEPS : CYCLE_STEPS;
+  const flowSteps = isScalping ? SCALPING_FLOW_STEPS : [
+    { label: "New cycle", sub: "Read wallet & positions" },
+    { label: "Scan allowlist", sub: "~149 BEP-20 tokens" },
+    { label: "Score 6 factors", sub: "Per candidate token" },
+    { label: "Guardrails OK?", sub: "Loss / regime / caps" },
+    { label: "ENTER or WAIT", sub: "Swap or log & retry" },
+  ];
+  const outcomes = isScalping ? SCALPING_OUTCOMES : OUTCOMES;
+  const scalpingGuardrails = [
+    {
+      title: "One position max",
+      body: "Scalping mode holds at most one open trade. While a position is live, the bot monitors exits instead of hunting new entries.",
+    },
+    {
+      title: "Daily loss cap (2%)",
+      body: "Realized scalping losses are capped per day. Breaching the budget pauses new entries until the next window.",
+    },
+    {
+      title: "Daily trade limit",
+      body: "Up to 10 scalp entries per day by default—prevents over-trading when scores flicker around the 60-point threshold.",
+    },
+    {
+      title: "Consecutive-loss cooldown",
+      body: "Three stops in a row trigger a 1-hour pause on new entries for that symbol and globally.",
+    },
+  ];
+  const breakoutGuardrails = [
+    {
+      title: "Risk-off regime",
+      body: "Macro conditions turn defensive. New buys pause until the regime clears—even if a single token looks strong.",
+    },
+    {
+      title: "Daily loss budget",
+      body: "Tracks realized losses for the day (`daily_realized_loss`). Prevents revenge trading after a bad session.",
+    },
+    {
+      title: "Daily trade cap",
+      body: "Limits how many entries can fire in one day (`daily_trade_count`) to avoid over-trading in choppy markets.",
+    },
+    {
+      title: "Portfolio ATH tracking",
+      body: "Monitors all-time-high portfolio value (`portfolio_ath`) for drawdown-aware position sizing.",
+    },
+  ];
+  const afterEnterSteps = isScalping
+    ? [
+        {
+          step: "01",
+          title: "Size the scalp",
+          body: "Default ~1% of portfolio in USDC (`scalping_position_pct`). Small sizes limit MEV and gas drag.",
+        },
+        {
+          step: "02",
+          title: "Quote & swap",
+          body: "TWAK routes USDC → token on BSC with slippage capped at 0.5% for entry.",
+        },
+        {
+          step: "03",
+          title: "Fixed exit rules",
+          body: "Take profit +1.5%, stop loss −0.8%, time stop 20–30 min. No trailing stop—reduces MEV gaming.",
+        },
+      ]
+    : [
+        {
+          step: "01",
+          title: "Size the trade",
+          body: "Position size in USDC is computed from portfolio value and risk rules (`position_size_usdc`).",
+        },
+        {
+          step: "02",
+          title: "Quote & swap",
+          body: "TWAK routes through LiquidMesh on BSC with a max slippage cap (`max_slippage_pct`).",
+        },
+        {
+          step: "03",
+          title: "Track the position",
+          body: "Entry price, trailing stop, and take-profit levels are written to `positions.json` and shown on the Active Positions tab.",
+        },
+      ];
 
   return (
     <section
@@ -545,23 +828,30 @@ export function DecisionAlgorithmPanel({
               compact || desktop ? "text-[28px]" : "text-[32px]",
             )}
           >
-            How Buy Decisions Work
+            {isScalping ? "How Scalping Decisions Work" : "How Buy Decisions Work"}
           </h1>
           {!compact ? (
             <p className="mt-3 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-              The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety
-              guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch.
+              {isScalping
+                ? "Every 5 minutes the agent refreshes trial market data, scores ~149 tokens on five weighted factors (0–100), and enters when the best score reaches 60+. Exits are fixed—not trailing."
+                : "The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch."}
             </p>
           ) : null}
+          <GuideStrategyToggle mode={guideMode} onChange={setGuideMode} />
         </header>
       </ViewportReveal>
 
+      <div key={guideMode}>
       <div className={chapterGap}>
         <ViewportReveal variant={chapterRevealVariant(0)} delay={40} duration="slow">
           <ChapterDivider
             number="01"
             title="Overview"
-            subtitle="Six inputs feed one decision. All must agree before money moves."
+            subtitle={
+              isScalping
+                ? "Dual data feed plus a weighted score. Entry at 60+, not all-or-nothing."
+                : "Six inputs feed one decision. All must agree before money moves."
+            }
             chapterIndex={0}
           />
         </ViewportReveal>
@@ -569,7 +859,7 @@ export function DecisionAlgorithmPanel({
           <ViewportReveal variant="right" delay={80}>
             <div className={panelClass}>
               <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">Big picture</h3>
-              <CycleOverviewList />
+              <CycleOverviewList items={cycleInputs} />
             </div>
           </ViewportReveal>
           <ViewportReveal variant="left" delay={140}>
@@ -578,33 +868,68 @@ export function DecisionAlgorithmPanel({
                 The rule in one line
               </h3>
               <div className="border border-[#1A1A1A] bg-[#0A0A0A] px-4 py-4">
-                <p className="font-mono text-[18px] font-semibold leading-snug text-white">
-                  All {ENTRY_FACTOR_COUNT}/{ENTRY_FACTOR_COUNT} factors must pass
-                </p>
-                <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-                  Partial scores (e.g. 5/6) always result in WAIT—never a partial buy. Safety guardrails can still block
-                  even a perfect score.
-                </p>
+                {isScalping ? (
+                  <>
+                    <p className="font-mono text-[18px] font-semibold leading-snug text-white">
+                      Best score ≥ {SCALPING_ENTRY_SCORE_MIN}/{SCALPING_ENTRY_SCORE_MAX} to enter
+                    </p>
+                    <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
+                      Factors have different weights (30, 25, 20, 15, 10 pts). Three factors passing is not enough—e.g.
+                      regime + whale + gas = 45/100. Slippage (+25) or micro-momentum (+30) is usually needed to reach 60.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-[18px] font-semibold leading-snug text-white">
+                      All {ENTRY_FACTOR_COUNT}/{ENTRY_FACTOR_COUNT} factors must pass
+                    </p>
+                    <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
+                      Partial scores (e.g. 5/6) always result in WAIT—never a partial buy. Safety guardrails can still block
+                      even a perfect score.
+                    </p>
+                  </>
+                )}
               </div>
               <div className="mt-4 space-y-2">
                 <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">
                   Example score bars
                 </div>
                 <div className="space-y-3">
-                  <div>
-                    <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                      <span>5/6 — WAIT</span>
-                      <span>Missing one signal</span>
-                    </div>
-                    <FactorScoreBar passed={5} total={6} />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                      <span>6/6 — eligible for ENTER</span>
-                      <span>Full checklist</span>
-                    </div>
-                    <FactorScoreBar passed={6} total={6} />
-                  </div>
+                  {isScalping ? (
+                    <>
+                      <div>
+                        <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                          <span>45/100 — WAIT</span>
+                          <span>Regime + whale + gas only</span>
+                        </div>
+                        <ScalpingScoreBar score={45} max={SCALPING_ENTRY_SCORE_MAX} />
+                      </div>
+                      <div>
+                        <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                          <span>65/100 — eligible for ENTER</span>
+                          <span>Missing gas still OK if ≥ 60</span>
+                        </div>
+                        <ScalpingScoreBar score={65} max={SCALPING_ENTRY_SCORE_MAX} />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                          <span>5/6 — WAIT</span>
+                          <span>Missing one signal</span>
+                        </div>
+                        <FactorScoreBar passed={5} total={6} />
+                      </div>
+                      <div>
+                        <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
+                          <span>6/6 — eligible for ENTER</span>
+                          <span>Full checklist</span>
+                        </div>
+                        <FactorScoreBar passed={6} total={6} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -617,17 +942,21 @@ export function DecisionAlgorithmPanel({
           <ChapterDivider
             number="02"
             title="Cycle flow"
-            subtitle="From wake-up to swap—or to a logged wait state."
+            subtitle={
+              isScalping
+                ? "Every 5 minutes: refresh data, score, enter or log the best near-miss."
+                : "From wake-up to swap—or to a logged wait state."
+            }
             chapterIndex={1}
           />
         </ViewportReveal>
         <ViewportReveal className="mt-5" variant="fade" delay={100} duration="slow">
           <div className={panelClass}>
             <div className={cx(wideLayout && "grid gap-6 lg:grid-cols-[minmax(0,220px)_1fr]")}>
-              <DecisionFlowList />
+              <DecisionFlowList steps={flowSteps} />
               {wideLayout ? (
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:mt-0 lg:grid-cols-1">
-                  {CYCLE_STEPS.map((step, index) => (
+                  {cycleSteps.map((step, index) => (
                     <ViewportReveal
                       key={step.step}
                       variant={index % 2 === 0 ? "left" : "right"}
@@ -651,32 +980,25 @@ export function DecisionAlgorithmPanel({
         <ViewportReveal variant={chapterRevealVariant(2)} delay={40} duration="slow">
           <ChapterDivider
             number="03"
-            title={activeStrategy === "scalping" ? "Scalping score factors" : "The six factors"}
+            title={isScalping ? "The five weighted factors" : "The six factors"}
             subtitle={
-              activeStrategy === "scalping"
-                ? "Weighted score 0–100. Entry when score ≥ 60. Fixed TP +1.5%, SL −0.8%, max hold 30 min."
+              isScalping
+                ? "Points add up to 100. Entry when score ≥ 60. Fixed TP +1.5%, SL −0.8%, max hold 30 min."
                 : "Each factor is a yes/no gate. Expand decision rows in Activity to see these same flags."
             }
             chapterIndex={2}
           />
         </ViewportReveal>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {activeStrategy === "scalping"
-            ? SCALPING_FACTORS.map((factor, index) => (
+          {isScalping
+            ? SCALPING_FACTOR_META.map((factor, index) => (
                 <ViewportReveal
                   key={factor.key}
                   variant={factorRevealVariant(index)}
                   delay={80 + index * 50}
                   duration={index % 2 === 0 ? "normal" : "slow"}
                 >
-                  <article className="flex flex-col border border-[#2A2A2A] bg-black/88">
-                    <div className="border-b border-[#1A1A1A] px-4 py-3">
-                      <h3 className="font-mono text-sm font-semibold text-white">
-                        {factor.title} · {factor.weight}%
-                      </h3>
-                      <p className="mt-1 font-mono text-[12px] leading-5 text-[#A8A8A8]">{factor.plain}</p>
-                    </div>
-                  </article>
+                  <ScalpingFactorCard factor={factor} index={index} />
                 </ViewportReveal>
               ))
             : ENTRY_FACTORS.map((factor, index) => (
@@ -697,7 +1019,11 @@ export function DecisionAlgorithmPanel({
           <ChapterDivider
             number="04"
             title="Safety & execution"
-            subtitle="Guardrails can veto a perfect score. A buy starts position management."
+            subtitle={
+              isScalping
+                ? "Guardrails can veto a 60+ score. Exits are automatic and fixed."
+                : "Guardrails can veto a perfect score. A buy starts position management."
+            }
             chapterIndex={3}
           />
         </ViewportReveal>
@@ -708,24 +1034,7 @@ export function DecisionAlgorithmPanel({
                 Safety guardrails
               </h3>
               <ul className="space-y-2">
-                {[
-                  {
-                    title: "Risk-off regime",
-                    body: "Macro conditions turn defensive. New buys pause until the regime clears—even if a single token looks strong.",
-                  },
-                  {
-                    title: "Daily loss budget",
-                    body: "Tracks realized losses for the day (`daily_realized_loss`). Prevents revenge trading after a bad session.",
-                  },
-                  {
-                    title: "Daily trade cap",
-                    body: "Limits how many entries can fire in one day (`daily_trade_count`) to avoid over-trading in choppy markets.",
-                  },
-                  {
-                    title: "Portfolio ATH tracking",
-                    body: "Monitors all-time-high portfolio value (`portfolio_ath`) for drawdown-aware position sizing.",
-                  },
-                ].map((item, index) => (
+                {(isScalping ? scalpingGuardrails : breakoutGuardrails).map((item, index) => (
                   <ViewportReveal
                     key={item.title}
                     as="li"
@@ -746,26 +1055,10 @@ export function DecisionAlgorithmPanel({
           <ViewportReveal variant="left" delay={150}>
             <div className={panelClass}>
               <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">
-                What happens after ENTER
+                {isScalping ? "What happens after ENTER" : "What happens after ENTER"}
               </h3>
               <ol className="space-y-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-                {[
-                  {
-                    step: "01",
-                    title: "Size the trade",
-                    body: "Position size in USDC is computed from portfolio value and risk rules (`position_size_usdc`).",
-                  },
-                  {
-                    step: "02",
-                    title: "Quote & swap",
-                    body: "TWAK routes through LiquidMesh on BSC with a max slippage cap (`max_slippage_pct`).",
-                  },
-                  {
-                    step: "03",
-                    title: "Track the position",
-                    body: "Entry price, trailing stop, and take-profit levels are written to `positions.json` and shown on the Active Positions tab.",
-                  },
-                ].map((item, index) => (
+                {afterEnterSteps.map((item, index) => (
                   <ViewportReveal
                     key={item.step}
                     as="li"
@@ -792,12 +1085,16 @@ export function DecisionAlgorithmPanel({
           <ChapterDivider
             number="05"
             title="Possible outcomes"
-            subtitle="Four actions the agent can emit each cycle."
+            subtitle={
+              isScalping
+                ? "Four actions each cycle—including automatic exits on open scalps."
+                : "Four actions the agent can emit each cycle."
+            }
             chapterIndex={4}
           />
         </ViewportReveal>
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
-          {OUTCOMES.map((outcome, index) => (
+          {outcomes.map((outcome, index) => (
             <ViewportReveal
               key={outcome.action}
               variant={outcomeRevealVariant(index)}
@@ -820,14 +1117,18 @@ export function DecisionAlgorithmPanel({
             <ChapterDivider
               number="06"
               title="Examples"
-              subtitle="Simulated and live cycle snapshots before guardrails apply."
+              subtitle={
+                isScalping
+                  ? "Simulated passing and near-miss scores, plus your latest live cycle."
+                  : "Simulated and live cycle snapshots before guardrails apply."
+              }
               chapterIndex={5}
             />
           </ViewportReveal>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <ViewportReveal variant="scale" delay={100}>
-              {activeStrategy === "scalping" ? (
-                <DecisionSnapshot decision={SIMULATED_SCALPING_SIGNAL} heading="Scalping entry" />
+              {isScalping ? (
+                <DecisionSnapshot decision={SIMULATED_SCALPING_SIGNAL} heading="Scalping entry" badge="65/100 · ENTER" />
               ) : (
                 <DecisionSnapshot
                   decision={SIMULATED_PASSING_SIGNAL}
@@ -837,11 +1138,15 @@ export function DecisionAlgorithmPanel({
               )}
             </ViewportReveal>
             <ViewportReveal variant="blur" delay={180} duration="slow">
-              <DecisionSnapshot
-                decision={SIMULATED_NON_PASSING_SIGNAL}
-                heading="Non-passing signal"
-                badge="5/6 · WAIT"
-              />
+              {isScalping ? (
+                <DecisionSnapshot decision={SIMULATED_SCALPING_WAIT} heading="Near-miss" badge="45/100 · WAIT" />
+              ) : (
+                <DecisionSnapshot
+                  decision={SIMULATED_NON_PASSING_SIGNAL}
+                  heading="Non-passing signal"
+                  badge="5/6 · WAIT"
+                />
+              )}
             </ViewportReveal>
           </div>
           <ViewportReveal className="mt-4" variant="up" delay={260} duration="slow">
@@ -849,6 +1154,7 @@ export function DecisionAlgorithmPanel({
           </ViewportReveal>
         </div>
       ) : null}
+      </div>
     </section>
   );
 }
