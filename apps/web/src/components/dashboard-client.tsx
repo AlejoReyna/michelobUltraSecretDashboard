@@ -834,11 +834,11 @@ function WalletSection({
 }) {
   const paperMode = agentMode === "PAPER";
 
-  const headerPadding = desktopFill ? "px-3 py-2" : compact ? "px-4 py-4" : "px-5 py-5";
-  const sectionPadding = desktopFill ? "px-3 py-2" : compact ? "px-4 py-3" : "px-5 py-3";
+  const headerPadding = desktopFill ? "px-3 py-1.5" : compact ? "px-4 py-4" : "px-5 py-5";
+  const sectionPadding = desktopFill ? "px-3 py-1" : compact ? "px-4 py-3" : "px-5 py-3";
 
   const balancesTable = (
-    <div className={cx(desktopFill && "mt-2 border-t border-[#1A1A1A] pt-2")}>
+    <div className={cx(desktopFill && "border-t border-[#1A1A1A]")}>
       <div className={cx("font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]", sectionPadding)}>
         Balances
       </div>
@@ -860,12 +860,12 @@ function WalletSection({
         <tbody>
           {balances.map((balance) => (
             <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
-              <td className="truncate px-3 py-3 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
-              <td className="truncate px-2 py-3 font-mono text-[13px] font-bold text-[#F2F2F2]">{balance.symbol}</td>
-              <td className="truncate px-2 py-3 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+              <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
+              <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">{balance.symbol}</td>
+              <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
                 {formatTokenAmount(balance.amount)}
               </td>
-              <td className="truncate px-3 py-3 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+              <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
                 {formatUsd(balance.valueUsd)}
               </td>
             </tr>
@@ -883,11 +883,7 @@ function WalletSection({
   );
 
   return (
-    <section
-      className={cx(
-        desktopFill ? "flex h-full min-h-0 flex-col bg-black/88" : "border border-[#2A2A2A] bg-black/88",
-      )}
-    >
+    <section className={cx(desktopFill ? "bg-black/88" : "border border-[#2A2A2A] bg-black/88")}>
       <div className={cx("shrink-0", !desktopFill && "border-b border-[#1A1A1A]", headerPadding)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -907,11 +903,7 @@ function WalletSection({
         ) : null}
       </div>
 
-      {desktopFill ? (
-        <div className="console-scroll min-h-0 flex-1 overflow-auto">{balancesTable}</div>
-      ) : (
-        balancesTable
-      )}
+      {balancesTable}
     </section>
   );
 }
@@ -924,7 +916,7 @@ function DesktopWalletPanel({
   agentMode: string;
 }) {
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden bg-black/72">
+    <section className="shrink-0 overflow-hidden bg-black/72">
       <WalletSection balances={balances} agentMode={agentMode} desktopFill />
     </section>
   );
@@ -983,9 +975,9 @@ function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compac
 
 function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden border-t border-[#1A1A1A] bg-black/72">
-      <div className="shrink-0 border-b border-[#1A1A1A] px-3 py-3">
-        <h2 className="font-mono text-lg text-[#DADADA]">Recent Activity</h2>
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-[#1A1A1A] bg-black/72">
+      <div className="shrink-0 border-b border-[#1A1A1A] px-3 py-2">
+        <h2 className="font-mono text-base text-[#DADADA]">Recent Activity</h2>
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-auto">
         <RecentActivity rows={rows} />
@@ -1102,7 +1094,7 @@ function DesktopDashboard({
         ) : (
           <section className="grid h-[calc(100vh-36px)] min-h-0 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <DesktopPerformancePanel view={view} />
-            <div className="grid min-h-0 grid-rows-2 border-l border-[#1A1A1A]">
+            <div className="flex min-h-0 flex-col border-l border-[#1A1A1A]">
               <DesktopWalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
               <DesktopRecentActivity rows={view.activityRows} />
             </div>

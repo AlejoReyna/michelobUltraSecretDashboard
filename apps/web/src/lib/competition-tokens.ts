@@ -375,6 +375,8 @@ function upsertHolding(map: Map<string, WalletHolding>, holding: WalletHolding) 
     amount,
     valueUsd: holding.valueUsd ?? existing.valueUsd,
     entryValueUsd: existing.entryValueUsd ?? holding.entryValueUsd,
+    paperTargetUsd: existing.paperTargetUsd ?? holding.paperTargetUsd,
+    mode: existing.mode ?? holding.mode,
     chain: existing.chain || holding.chain,
     status:
       held || existing.status === "HELD"
