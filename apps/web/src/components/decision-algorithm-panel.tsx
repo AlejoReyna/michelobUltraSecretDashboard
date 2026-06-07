@@ -403,35 +403,47 @@ function FactorCard({ factor, index }: { factor: FactorMeta; index: number }) {
 export function DecisionAlgorithmPanel({
   latestDecision,
   compact = false,
+  desktop = false,
 }: {
   latestDecision: StatusPayload["latestDecision"];
   compact?: boolean;
+  desktop?: boolean;
 }) {
-  const chapterGap = compact ? "mt-8" : "mt-12";
+  const wideLayout = desktop || !compact;
+  const chapterGap = compact ? "mt-8" : desktop ? "mt-10" : "mt-12";
   const panelClass = "border border-[#2A2A2A] bg-black/88 p-4";
 
   return (
     <section
       className={cx(
         "console-scroll flex min-h-0 flex-col overflow-y-auto",
-        compact ? "flex-1 px-4 pt-4 pb-8" : "px-10 py-9",
+        compact && "flex-1 px-4 pt-4 pb-8",
+        desktop && "flex-1 px-8 pt-6 pb-10",
+        !compact && !desktop && "px-10 py-9",
       )}
     >
       <ViewportReveal variant="blur" duration="slow">
-        <header className={cx("max-w-3xl", compact ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "pb-2")}>
+        <header
+          className={cx(
+            wideLayout ? "max-w-none" : "max-w-3xl",
+            compact || desktop ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "pb-2",
+          )}
+        >
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy explainer</div>
           <h1
             className={cx(
               "mt-2 font-mono font-semibold leading-tight text-white",
-              compact ? "text-[28px]" : "text-[32px]",
+              compact || desktop ? "text-[28px]" : "text-[32px]",
             )}
           >
             How Buy Decisions Work
           </h1>
-          <p className="mt-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
-            The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety
-            guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch.
-          </p>
+          {!compact ? (
+            <p className="mt-3 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+              The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety
+              guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch.
+            </p>
+          ) : null}
         </header>
       </ViewportReveal>
 
@@ -444,7 +456,7 @@ export function DecisionAlgorithmPanel({
             chapterIndex={0}
           />
         </ViewportReveal>
-        <div className={cx("mt-5 grid gap-4", !compact && "xl:grid-cols-2")}>
+        <div className={cx("mt-5 grid gap-4", wideLayout && "xl:grid-cols-2")}>
           <ViewportReveal variant="right" delay={80}>
             <div className={panelClass}>
               <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">Big picture</h3>
@@ -502,9 +514,9 @@ export function DecisionAlgorithmPanel({
         </ViewportReveal>
         <ViewportReveal className="mt-5" variant="fade" delay={100} duration="slow">
           <div className={panelClass}>
-            <div className={cx(!compact && "grid gap-6 lg:grid-cols-[minmax(0,220px)_1fr]")}>
+            <div className={cx(wideLayout && "grid gap-6 lg:grid-cols-[minmax(0,220px)_1fr]")}>
               <DecisionFlowList />
-              {!compact ? (
+              {wideLayout ? (
                 <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:mt-0 lg:grid-cols-1">
                   {CYCLE_STEPS.map((step, index) => (
                     <ViewportReveal
@@ -558,7 +570,7 @@ export function DecisionAlgorithmPanel({
             chapterIndex={3}
           />
         </ViewportReveal>
-        <div className={cx("mt-5 grid gap-4", !compact && "lg:grid-cols-2")}>
+        <div className={cx("mt-5 grid gap-4", wideLayout && "lg:grid-cols-2")}>
           <ViewportReveal variant="right" delay={90}>
             <div className={panelClass}>
               <h3 className="mb-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[#757575]">
@@ -671,7 +683,7 @@ export function DecisionAlgorithmPanel({
         </div>
       </div>
 
-      {!compact ? (
+      {wideLayout ? (
         <div className={chapterGap}>
           <ViewportReveal variant={chapterRevealVariant(5)} delay={40} duration="slow">
             <ChapterDivider

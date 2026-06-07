@@ -13,12 +13,8 @@ import {
 import {
   Activity,
   BookOpen,
-  BrainCircuit,
   ChevronDown,
   ChevronRight,
-  CircleUserRound,
-  Download,
-  ExternalLink,
   Filter,
   Github,
   Home,
@@ -36,7 +32,6 @@ import {
   activityReferenceVariant,
   activityStatusVariant,
   type ActivityFeedMode,
-  homeMetricDelay,
   homeMetricVariant,
   positionCellDelay,
   positionColumnVariant,
@@ -70,15 +65,7 @@ import { statusSchema, type StatusPayload } from "@/lib/schemas";
 type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm";
 type ActivityView = "txs" | "sys";
 
-const navItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
-  { label: "Overview", icon: Home, section: "overview" },
-  { label: "Active Positions", icon: Layers, section: "positions" },
-  { label: "Activity", icon: Activity, section: "activity" },
-  { label: "Wallet", icon: Wallet, section: "wallet" },
-  { label: "How It Works", icon: BrainCircuit, section: "algorithm" },
-];
-
-const mobileNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
+const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
   { label: "Home", icon: Home, section: "overview" },
   { label: "Positions", icon: Layers, section: "positions" },
   { label: "Activity", icon: Activity, section: "activity" },
@@ -87,6 +74,11 @@ const mobileNavItems: Array<{ label: string; icon: LucideIcon; section: Dashboar
 ];
 
 const MOBILE_NAV_HEIGHT = 52;
+const DESKTOP_NAV_WIDTH = 220;
+
+function panelUsesFlatChrome(compact: boolean, desktop: boolean) {
+  return compact || desktop;
+}
 
 const projectRepository = {
   owner: "AlejoReyna",
@@ -229,7 +221,7 @@ function AsciiRaccoonWatermark() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(520px,58vh)] lg:w-[min(520px,78vw)] lg:opacity-35"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:opacity-25"
     />
   );
 }
@@ -756,85 +748,7 @@ function buildViewModel(
   };
 }
 
-function TooltipLabel({ label, tooltip }: { label: string; tooltip?: string }) {
-  if (!tooltip) {
-    return <span>{label}</span>;
-  }
-
-  return (
-    <span className="group relative inline-flex cursor-help items-center">
-      <span>{label}</span>
-      <span className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 border border-[#1A1A1A] bg-[#050505] px-3 py-2 text-left font-mono text-[11px] leading-5 text-white shadow-[0_18px_46px_rgba(0,0,0,0.72)] group-hover:block">
-        {tooltip}
-      </span>
-    </span>
-  );
-}
-
-function PythonLogo({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path
-        fill="#3776AB"
-        d="M15.9 3.2c-5.7 0-5.4 2.5-5.4 2.5v2.6h5.5v.8H8.4S4 8.6 4 15.4c0 6.8 3.8 6.6 3.8 6.6h2.3v-3.2s-.1-3.8 3.7-3.8h5.5s3.1.1 3.1-3V6.8s.5-3.6-6.5-3.6Zm-3 2.2c.6 0 1 .5 1 1s-.5 1-1 1a1 1 0 1 1 0-2Z"
-      />
-      <path
-        fill="#FFD43B"
-        d="M16.1 28.8c5.7 0 5.4-2.5 5.4-2.5v-2.6H16v-.8h7.6s4.4.5 4.4-6.3c0-6.8-3.8-6.6-3.8-6.6h-2.3v3.2s.1 3.8-3.7 3.8h-5.5s-3.1-.1-3.1 3v5.2s-.5 3.6 6.5 3.6Zm3-2.2c-.6 0-1-.5-1-1s.5-1 1-1a1 1 0 1 1 0 2Z"
-      />
-    </svg>
-  );
-}
-
-function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "compact" }) {
-  const compact = variant === "compact";
-
-  return (
-    <a
-      href={projectRepository.url}
-      target="_blank"
-      rel="noreferrer"
-      className="group block w-full border-0 bg-[#070707] text-left transition-colors hover:bg-[#0B0B0B]"
-      aria-label="Open cascade-ai project on GitHub"
-    >
-        <span className={cx("flex min-w-0 justify-between", compact ? "items-center gap-2" : "items-start gap-3")}>
-          <span className={cx("flex min-w-0 items-center", compact ? "gap-2" : "gap-2.5")}>
-            <Github size={compact ? 13 : 16} className="shrink-0 text-white" />
-            <span className="min-w-0">
-              <span
-                className={cx(
-                  "block truncate font-mono uppercase tracking-[0.18em] text-[#777777]",
-                  compact ? "text-[9px] leading-3" : "text-[10px] leading-4",
-                )}
-              >
-                {projectRepository.owner}
-              </span>
-              <span className={cx("block truncate font-semibold text-[#F2F2F2]", compact ? "text-xs leading-4" : "text-sm leading-5")}>
-                {projectRepository.name}
-              </span>
-            </span>
-          </span>
-          <ExternalLink
-            size={compact ? 12 : 14}
-            className="shrink-0 text-[#8A8A8A] transition-colors group-hover:text-white"
-          />
-        </span>
-        {!compact ? (
-          <span className="mt-2 block border-t border-[#1A1A1A] pt-2">
-            <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
-              <PythonLogo className="h-3 w-3 shrink-0" />
-              Python
-            </span>
-            <span className="mt-2 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-              {projectRepository.description}
-            </span>
-          </span>
-        ) : null}
-    </a>
-  );
-}
-
-function DesktopSidebar({
+function DesktopNavRail({
   activeSection,
   onNavigate,
 }: {
@@ -842,192 +756,43 @@ function DesktopSidebar({
   onNavigate: (section: DashboardSection) => void;
 }) {
   return (
-    <aside className="relative z-[1] flex min-h-screen w-[280px] shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505] 2xl:w-[320px]">
-      <div className="border-b border-[#1A1A1A] px-4 py-4">
-        <GithubRepositoryCard />
-      </div>
-      <nav className="grid gap-1 px-4 py-5">
-        {navItems.map((item) => {
+    <nav
+      className="relative z-[1] flex min-h-screen shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      style={{ width: DESKTOP_NAV_WIDTH }}
+      aria-label="Dashboard navigation"
+    >
+      <div className="flex flex-1 flex-col gap-0.5 px-3 py-5">
+        {dashboardNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.section === activeSection;
 
           return (
             <button
-              key={item.label}
+              key={item.section}
               type="button"
               onClick={() => onNavigate(item.section)}
+              aria-current={active ? "page" : undefined}
+              aria-label={item.label}
               className={cx(
-                "group flex h-12 w-full items-center gap-3 border border-transparent px-3 font-mono text-[13px] transition-colors",
-                active
-                  ? "border-[#1A1A1A] bg-[#0D1A12] text-white shadow-[inset_3px_0_0_#00FF00]"
-                  : "text-[#C9C9C9] hover:border-[#1A1A1A] hover:bg-[#0A0A0A] hover:text-white",
+                "relative flex h-11 w-full items-center gap-3 rounded-sm px-3 transition-colors",
+                active ? "text-white" : "text-[#7A7A7A] hover:text-white",
               )}
             >
-              <Icon
-                size={17}
-                className={cx("shrink-0", active ? "text-[#00FF00]" : "text-[#A3A3A3] group-hover:text-white")}
-              />
-              <span>{item.label}</span>
+              {active ? (
+                <span
+                  className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-white"
+                  aria-hidden="true"
+                />
+              ) : null}
+              <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+              <span className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.06em]">
+                {item.label}
+              </span>
             </button>
           );
         })}
-      </nav>
-      <div className="mt-auto px-4 py-4">
-        <button className="flex h-12 w-full items-center gap-3 border border-[#333333] bg-[#171717] px-3 font-mono text-[13px] text-white transition-colors hover:border-[#4A4A4A] hover:bg-[#202020]">
-          <Download size={17} className="shrink-0 text-[#A3A3A3]" />
-          <span>Export CSV</span>
-        </button>
       </div>
-      <div className="border-t border-[#1A1A1A] px-4 py-4">
-        <div className="flex items-center gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#2A2A2A] bg-[#0A0A0A] text-[#D8D8D8]">
-            <CircleUserRound size={19} />
-          </span>
-          <span className="min-w-0">
-            <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-[#777777]">Trader Profile</span>
-            <span className="block truncate text-sm font-medium text-white">A. Reyna</span>
-          </span>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function DesktopMetricBlock({
-  label,
-  value,
-  unit,
-  delta,
-  tone,
-  tooltip,
-  index = 0,
-}: MetricView & { index?: number }) {
-  return (
-    <ViewportReveal
-      variant={homeMetricVariant(label, tone)}
-      delay={homeMetricDelay(index)}
-      duration={label.includes("Balance") ? "slow" : "normal"}
-      className="min-w-0"
-    >
-      <div className="min-w-0 border border-[#2A2A2A] bg-black/88 px-5 py-4">
-        <ViewportReveal variant="fade" delay={homeMetricDelay(index) + 40} duration="fast">
-          <div className="mb-3 font-mono text-[13px] text-[#A0A0A0]">
-            <TooltipLabel label={label} tooltip={tooltip} />
-          </div>
-        </ViewportReveal>
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="break-words font-mono text-[30px] font-semibold leading-none text-white tabular-nums">{value}</span>
-          {unit ? <span className="font-mono text-sm font-semibold text-[#C7C7C7]">{unit}</span> : null}
-          {delta ? (
-            <span
-              className={cx(
-                "font-mono text-sm font-semibold tabular-nums",
-                tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
-              )}
-            >
-              {delta}
-            </span>
-          ) : null}
-        </div>
-      </div>
-    </ViewportReveal>
-  );
-}
-
-function TimeRangeSelector({
-  compact = false,
-  value,
-  onChange,
-  animated = false,
-}: {
-  compact?: boolean;
-  value: TimeRange;
-  onChange: (range: TimeRange) => void;
-  animated?: boolean;
-}) {
-  const buttons = timeRanges.map((range, index) => (
-    <button
-      key={range}
-      type="button"
-      onClick={() => onChange(range)}
-      className={cx(
-        "border font-mono transition-colors",
-        compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
-        range === value
-          ? "border-[#666666] bg-[#222222] text-white"
-          : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
-      )}
-    >
-      {range}
-    </button>
-  ));
-
-  if (!animated) {
-    return <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>{buttons}</div>;
-  }
-
-  return (
-    <ViewportReveal variant="fade" delay={200} duration="fast">
-      <div className={cx("flex items-center", compact ? "gap-1.5" : "gap-2")}>
-        {timeRanges.map((range, index) => (
-          <ViewportReveal key={range} variant="up" delay={240 + index * 35} duration="fast">
-            <button
-              type="button"
-              onClick={() => onChange(range)}
-              className={cx(
-                "border font-mono transition-colors",
-                compact ? "h-7 min-w-8 px-2 text-[10px]" : "h-8 min-w-10 px-3 text-xs",
-                range === value
-                  ? "border-[#666666] bg-[#222222] text-white"
-                  : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
-              )}
-            >
-              {range}
-            </button>
-          </ViewportReveal>
-        ))}
-      </div>
-    </ViewportReveal>
-  );
-}
-
-function DesktopPerformancePanel({
-  view,
-  timeRange,
-  onTimeRangeChange,
-}: {
-  view: DashboardViewModel;
-  timeRange: TimeRange;
-  onTimeRangeChange: (range: TimeRange) => void;
-}) {
-  return (
-    <section className="flex min-h-0 flex-col px-10 py-9">
-      <ViewportReveal variant="blur" duration="slow" className="mb-9">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Overview</div>
-          <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Alexis' terminal</h1>
-        </div>
-        <ViewportReveal variant="expand" delay={120} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
-      </ViewportReveal>
-      <div className="grid grid-cols-4 gap-4">
-        {view.metrics.map((metric, index) => (
-          <DesktopMetricBlock key={metric.label} {...metric} index={index} />
-        ))}
-      </div>
-      <ViewportReveal variant="fade" delay={360} duration="slow" className="mt-10 flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#1A1A1A] px-7 py-5">
-            <ViewportReveal variant="left" delay={400} duration="fast">
-              <h2 className="font-mono text-lg text-[#CFCFCF]">Portfolio Chart</h2>
-            </ViewportReveal>
-            <TimeRangeSelector value={timeRange} onChange={onTimeRangeChange} animated />
-          </div>
-          <ViewportReveal variant="blur" delay={480} duration="slow" className="min-h-[340px] flex-1 p-6">
-            <PortfolioChart data={view.chartData} variant="desktop" />
-          </ViewportReveal>
-        </div>
-      </ViewportReveal>
-    </section>
+    </nav>
   );
 }
 
@@ -1239,16 +1004,20 @@ function WalletPanel({
   balances,
   agentMode,
   compact = false,
+  desktop = false,
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
   compact?: boolean;
+  desktop?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
   const paperMode = agentMode === "PAPER";
   const totalValue = balances.reduce((sum, balance) => sum + (balance.valueUsd ?? 0), 0);
-  const headerPadding = compact ? "px-4 py-4" : "px-5 py-5";
+  const flat = panelUsesFlatChrome(compact, desktop);
+  const headerPadding = compact ? "px-4 py-4" : desktop ? "px-0 py-0 pb-4" : "px-5 py-5";
+  const tableCompact = flat;
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
@@ -1257,10 +1026,12 @@ function WalletPanel({
   return (
     <section
       className={cx(
-        compact ? "flex min-h-0 flex-1 flex-col px-4 pt-4" : "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
+        compact && "flex min-h-0 flex-1 flex-col px-4 pt-4",
+        desktop && "flex min-h-0 flex-1 flex-col px-8 pt-6",
+        !flat && "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
       )}
     >
-      <div className={cx("border-b border-[#1A1A1A]", headerPadding, compact && "shrink-0")}>
+      <div className={cx("border-b border-[#1A1A1A]", headerPadding, flat && "shrink-0")}>
         <div className="flex items-start justify-between gap-4">
           <ViewportReveal variant="blur" duration="slow" className="min-w-0">
             <div>
@@ -1268,7 +1039,7 @@ function WalletPanel({
               <h1
                 className={cx(
                   "mt-1 font-mono font-semibold leading-tight text-white",
-                  compact ? "text-[28px]" : "text-[32px]",
+                  flat ? "text-[28px]" : "text-[32px]",
                 )}
               >
                 Live Holdings
@@ -1291,14 +1062,16 @@ function WalletPanel({
             ) : null}
           </div>
         </div>
-        <ViewportReveal variant="expand" delay={220} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
+        {flat ? (
+          <ViewportReveal variant="expand" delay={220} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
+        ) : null}
       </div>
 
       <div
         ref={scrollRef}
         className={cx(
           "console-scroll overflow-x-auto overflow-y-auto",
-          compact ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
+          flat ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
         )}
       >
         <table className="w-full table-fixed border-collapse text-left">
@@ -1322,7 +1095,7 @@ function WalletPanel({
                 key={`${balance.chain}-${balance.symbol}`}
                 balance={balance}
                 index={index}
-                compact={compact}
+                compact={tableCompact}
                 scrollRoot={scrollRoot}
               />
             ))}
@@ -1847,15 +1620,19 @@ function ActivePositionsPanel({
   totalPositionValue,
   agentMode,
   compact = false,
+  desktop = false,
 }: {
   rows: PositionRow[];
   totalPositionValue: string;
   agentMode: string;
   compact?: boolean;
+  desktop?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
   const paperMode = agentMode === "PAPER";
+  const flat = panelUsesFlatChrome(compact, desktop);
+  const tableCompact = flat;
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
@@ -1865,22 +1642,24 @@ function ActivePositionsPanel({
     <section
       className={cx(
         "flex min-h-0 flex-col",
-        compact ? "flex-1 px-4 pt-4" : "px-10 py-9",
+        compact && "flex-1 px-4 pt-4",
+        desktop && "flex-1 px-8 pt-6",
+        !flat && "px-10 py-9",
       )}
     >
-      <div className={cx(compact ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6")}>
+      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6")}>
         <ViewportReveal variant="blur" duration="slow">
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
           <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
             <h1
               className={cx(
                 "font-mono font-semibold leading-tight text-white",
-                compact ? "text-[28px]" : "text-[32px]",
+                flat ? "text-[28px]" : "text-[32px]",
               )}
             >
               Active Positions
             </h1>
-            {compact ? (
+            {flat ? (
               <div className="shrink-0 text-right font-mono">
                 <ViewportReveal variant="fade" delay={70} duration="fast">
                   <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
@@ -1897,7 +1676,7 @@ function ActivePositionsPanel({
               </ViewportReveal>
             )}
           </div>
-          {!compact ? (
+          {!flat ? (
             <ViewportReveal variant="left" delay={140}>
               <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
                 Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
@@ -1906,12 +1685,12 @@ function ActivePositionsPanel({
             </ViewportReveal>
           ) : null}
         </ViewportReveal>
-        {!compact ? (
+        {!flat ? (
           <ViewportReveal variant="expand" delay={180} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
         ) : null}
       </div>
 
-      {!compact ? (
+      {!flat ? (
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
           <ViewportReveal variant="fade" delay={100}>
             <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
@@ -1928,7 +1707,7 @@ function ActivePositionsPanel({
         </div>
       ) : null}
 
-      {!compact ? (
+      {!flat ? (
         <ViewportReveal variant="fade" delay={200}>
           <div className="border border-[#2A2A2A] bg-black/88">
             <div className="border-b border-[#1A1A1A] px-5 py-5">
@@ -1937,13 +1716,13 @@ function ActivePositionsPanel({
               </ViewportReveal>
             </div>
             <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
-              <ActivePositionsTable rows={rows} compact={compact} scrollRoot={scrollRoot} />
+              <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
           </div>
         </ViewportReveal>
       ) : (
         <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <ActivePositionsTable rows={rows} compact={compact} scrollRoot={scrollRoot} />
+          <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
         </div>
       )}
     </section>
@@ -2193,6 +1972,7 @@ function ActivityPanel({
   latestDecision,
   agentRunning,
   compact = false,
+  desktop = false,
 }: {
   activityRows: ActivityRow[];
   logRows: ActivityRow[];
@@ -2200,20 +1980,57 @@ function ActivityPanel({
   latestDecision: StatusPayload["latestDecision"];
   agentRunning: boolean;
   compact?: boolean;
+  desktop?: boolean;
 }) {
   const [view, setView] = useState<ActivityView>("sys");
+  const flat = panelUsesFlatChrome(compact, desktop);
+
+  if (desktop) {
+    return (
+      <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
+        <div className="shrink-0 border-b border-[#1A1A1A] pb-4">
+          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+            <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
+          </ViewportReveal>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-x-8 pt-5">
+          <div className="flex min-h-0 flex-col border-r border-[#1A1A1A] pr-8">
+            <div className="mb-3 shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#757575]">
+              Logs
+            </div>
+            <SysLogsPanel
+              rows={logRows}
+              agentLog={agentLog}
+              latestDecision={latestDecision}
+              agentRunning={agentRunning}
+              compact
+            />
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <div className="mb-3 shrink-0 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#757575]">
+              Tx
+            </div>
+            <TxActivityPanel rows={activityRows} compact />
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
       className={cx(
         "flex min-h-0 flex-col",
-        compact ? "flex-1 px-4 pt-4" : "px-10 py-9",
+        compact && "flex-1 px-4 pt-4",
+        !flat && "px-10 py-9",
       )}
     >
       <div
         className={cx(
           "flex justify-between gap-4",
-          compact ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
+          flat ? "shrink-0 items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
         )}
       >
         <ViewportReveal variant="blur" duration="slow" className="min-w-0">
@@ -2222,31 +2039,31 @@ function ActivityPanel({
             <h1
               className={cx(
                 "mt-2 font-mono font-semibold leading-tight text-white",
-                compact ? "text-[28px]" : "text-[32px]",
+                flat ? "text-[28px]" : "text-[32px]",
               )}
             >
               Activity
             </h1>
           </div>
         </ViewportReveal>
-        <ActivityTabSelector value={view} onChange={setView} compact={compact} />
+        <ActivityTabSelector value={view} onChange={setView} compact={flat} />
       </div>
 
-      {!compact ? (
+      {!flat ? (
         <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#1A1A1A]" />
       ) : null}
 
       <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
         {(activeView) =>
           activeView === "txs" ? (
-            <TxActivityPanel rows={activityRows} compact={compact} />
+            <TxActivityPanel rows={activityRows} compact={flat} />
           ) : (
             <SysLogsPanel
               rows={logRows}
               agentLog={agentLog}
               latestDecision={latestDecision}
               agentRunning={agentRunning}
-              compact={compact}
+              compact={flat}
             />
           )
         }
@@ -2275,10 +2092,15 @@ function DesktopDashboard({
   return (
     <div className="relative isolate hidden min-h-screen bg-black text-white lg:flex">
       <AsciiRaccoonWatermark />
-      <DesktopSidebar activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] technical-grid min-w-0 flex-1">
+      <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
+      <main className="relative z-[1] technical-grid flex min-h-screen min-w-0 flex-1 flex-col">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-        <SectionTransition section={activeSection} enabled={sectionTransitionEnabled}>
+        <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} fullWidth />
+        <SectionTransition
+          section={activeSection}
+          enabled={sectionTransitionEnabled}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           {(section) =>
             section === "activity" ? (
               <ActivityPanel
@@ -2287,21 +2109,21 @@ function DesktopDashboard({
                 agentLog={resolveAgentLogLine(data)}
                 latestDecision={data?.latestDecision ?? null}
                 agentRunning={Boolean(data?.health.agentRunning)}
+                desktop
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} desktop />
             ) : section === "positions" ? (
               <ActivePositionsPanel
                 rows={view.positionRows}
                 totalPositionValue={view.totalPositionValue}
                 agentMode={view.agentMode}
+                desktop
               />
             ) : section === "algorithm" ? (
-              <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} />
+              <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} desktop />
             ) : (
-              <section className="h-[calc(100vh-36px)] min-h-0">
-                <DesktopPerformancePanel view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-              </section>
+              <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             )
           }
         </SectionTransition>
@@ -2310,12 +2132,89 @@ function DesktopDashboard({
   );
 }
 
-function MobileHomeTopBar({
+function DesktopOverviewSection({
+  view,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  view: DashboardViewModel;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <DesktopHeroMetrics view={view} />
+      <DesktopPerformanceWidget view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+    </section>
+  );
+}
+
+function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
+  return (
+    <section className="shrink-0 px-8 pt-6">
+      <div className="grid grid-cols-4 divide-x divide-[#1A1A1A]">
+        {view.metrics.map((metric, index) => (
+          <ViewportReveal
+            key={metric.label}
+            variant={homeMetricVariant(metric.label, metric.tone)}
+            delay={index * 60}
+            duration={metric.label.includes("Balance") ? "slow" : "normal"}
+            className="min-w-0 px-6 text-center first:pl-0 last:pr-0"
+          >
+            <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">{metric.label}</div>
+            <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+              <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+              {metric.unit ? <span className="font-mono text-[13px] text-[#B8B8B8]">{metric.unit}</span> : null}
+              {metric.delta ? (
+                <span
+                  className={cx(
+                    "font-mono text-[14px] font-bold tabular-nums",
+                    metric.tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                  )}
+                >
+                  ({metric.delta})
+                </span>
+              ) : null}
+            </div>
+          </ViewportReveal>
+        ))}
+      </div>
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-5 h-px w-full bg-[#1A1A1A]" />
+    </section>
+  );
+}
+
+function DesktopPerformanceWidget({
+  view,
+  timeRange,
+  onTimeRangeChange,
+}: {
+  view: DashboardViewModel;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
+}) {
+  return (
+    <ViewportReveal variant="fade" delay={200} duration="slow" className="mx-8 mb-6 mt-4 flex min-h-0 flex-1 flex-col">
+      <section className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
+        <div className="relative min-h-0 flex-1">
+          <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+          <ViewportReveal variant="blur" delay={320} duration="slow" className="absolute inset-0 flex flex-col p-5">
+            <PortfolioChart data={view.chartData} variant="desktop" />
+          </ViewportReveal>
+        </div>
+      </section>
+    </ViewportReveal>
+  );
+}
+
+function OverviewTopBar({
   activeSection,
   enabled,
+  fullWidth = false,
 }: {
   activeSection: DashboardSection;
   enabled: boolean;
+  fullWidth?: boolean;
 }) {
   const isHome = activeSection === "overview";
   const [rendered, setRendered] = useState(isHome);
@@ -2395,7 +2294,10 @@ function MobileHomeTopBar({
         href={projectRepository.url}
         target="_blank"
         rel="noreferrer"
-        className="mx-auto flex max-w-[640px] items-center justify-between gap-3 px-4 py-2.5"
+        className={cx(
+          "flex items-center justify-between gap-3 py-2.5",
+          fullWidth ? "px-8" : "mx-auto w-full max-w-[640px] px-4",
+        )}
         aria-label="Open No Named Yet Bot on GitHub"
       >
         <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-[0.06em] text-white">
@@ -2445,7 +2347,7 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   );
 }
 
-function MobileChartFilterMenu({
+function ChartFilterMenu({
   timeRange,
   onTimeRangeChange,
 }: {
@@ -2532,7 +2434,7 @@ function MobilePerformanceWidget({
     <ViewportReveal variant="fade" delay={200} duration="slow" className="mx-4 mt-3 flex min-h-0 flex-1 flex-col">
       <section className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
         <div className="relative min-h-0 flex-1">
-          <MobileChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+          <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
           <ViewportReveal variant="blur" delay={320} duration="slow" className="absolute inset-0 flex flex-col px-2 py-2">
             <PortfolioChart data={view.mobileChartData} variant="mobile" />
           </ViewportReveal>
@@ -2559,7 +2461,7 @@ function MobileBottomNav({
         className="mx-auto grid max-w-[640px] grid-cols-5 px-0.5"
         style={{ height: MOBILE_NAV_HEIGHT }}
       >
-        {mobileNavItems.map((item) => {
+        {dashboardNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.section === activeSection;
 
@@ -2615,7 +2517,7 @@ function MobileDashboard({
         className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
         style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
       >
-        <MobileHomeTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
+        <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
