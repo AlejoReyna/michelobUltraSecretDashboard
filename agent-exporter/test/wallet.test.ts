@@ -85,6 +85,24 @@ test("execution log tx hashes become wallet movements", () => {
   assert.equal(movement.toSymbol, "BNB");
 });
 
+test("portfolio balances backfill chain balances when balance commands are empty", () => {
+  const wallet = normalizeTwakWallet(
+    telemetry({
+      bscBalance: failed("NETWORK_ERROR"),
+      portfolio: command([
+        { chain: "bsc", symbol: "USDC", balance: "7.11", usdValue: 7.11 },
+        { chain: "bsc", symbol: "AAVE", balance: "0.0055", usdValue: 0.4 },
+        { chain: "base", symbol: "ETH", balance: "0.00055", usdValue: 0.86 },
+      ]),
+    }),
+    "2026-06-05T00:00:00.000Z",
+  );
+
+  assert.equal(wallet.balances.length, 3);
+  assert.equal(wallet.balances.find((balance) => balance.symbol === "AAVE")?.amount, 0.0055);
+  assert.ok(wallet.portfolioTotalUsd !== null && Math.abs(wallet.portfolioTotalUsd - 8.37) < 0.01);
+});
+
 test("matching TWAK history and execution rows merge by tx hash", () => {
   const wallet = buildWalletTelemetry(
     telemetry({

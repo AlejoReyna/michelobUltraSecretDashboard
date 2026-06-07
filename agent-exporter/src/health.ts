@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { FILES, readLastLogLine, sourceFile } from "./files.js";
+import { readLatestAgentLogLine } from "./files.js";
 import { redact, safeError } from "./redact.js";
 
 const execFileAsync = promisify(execFile);
@@ -10,13 +10,14 @@ export type Health = {
   agentRunning: boolean;
   pids: string[];
   lastLogLine: string | null;
+  lastLogSource: string | null;
   serverTime: string;
   sourcePath: string;
   error?: string;
 };
 
 export async function getHealth(sourcePath: string): Promise<Health> {
-  const lastLogLine = await readLastLogLine(sourceFile(sourcePath, FILES.agentLog));
+  const { line: lastLogLine, source: lastLogSource } = await readLatestAgentLogLine(sourcePath);
 
   try {
     const { stdout } = await execFileAsync("pgrep", ["-af", "src.main"], {
@@ -30,6 +31,7 @@ export async function getHealth(sourcePath: string): Promise<Health> {
       agentRunning: pids.length > 0,
       pids,
       lastLogLine,
+      lastLogSource,
       serverTime: new Date().toISOString(),
       sourcePath,
     };
@@ -39,6 +41,7 @@ export async function getHealth(sourcePath: string): Promise<Health> {
       agentRunning: false,
       pids: [],
       lastLogLine,
+      lastLogSource,
       serverTime: new Date().toISOString(),
       sourcePath,
       error: safeError(error),

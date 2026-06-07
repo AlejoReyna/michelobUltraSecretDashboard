@@ -11,8 +11,12 @@ export type FileStatus = {
   error?: string;
 };
 
+/** Live bot stdout is often redirected to bot_live.log; agent.log may be stale. */
+export const AGENT_LOG_CANDIDATES = ["bot_live.log", "agent.log"] as const;
+
 export const FILES = {
   agentLog: "agent.log",
+  botLiveLog: "bot_live.log",
   decisionLog: "decision_log.jsonl",
   executionLog: "execution_log.jsonl",
   positions: "positions.json",
@@ -53,6 +57,37 @@ export async function readLastLogLine(filePath: string): Promise<string | null> 
   } catch {
     return null;
   }
+}
+
+export async function readLatestAgentLogLine(
+  sourcePath: string,
+): Promise<{ line: string | null; source: string | null }> {
+  let best: { line: string; source: string; mtimeMs: number } | null = null;
+
+  for (const fileName of AGENT_LOG_CANDIDATES) {
+    const filePath = sourceFile(sourcePath, fileName);
+
+    try {
+      const stat = await fs.stat(filePath);
+      const line = await readLastLogLine(filePath);
+
+      if (!line) {
+        continue;
+      }
+
+      if (!best || stat.mtimeMs > best.mtimeMs) {
+        best = { line, source: fileName, mtimeMs: stat.mtimeMs };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!best) {
+    return { line: null, source: null };
+  }
+
+  return { line: best.line, source: best.source };
 }
 
 export async function fileStatuses(sourcePath: string): Promise<Record<keyof typeof FILES, FileStatus>> {

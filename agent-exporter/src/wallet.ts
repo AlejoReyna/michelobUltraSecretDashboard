@@ -418,6 +418,63 @@ function normalizeBalancesForChain(twak: TwakTelemetry, key: "bscBalance" | "bas
   return rows;
 }
 
+function balanceRowKey(row: WalletBalance) {
+  return `${row.chain.toLowerCase()}:${row.symbol.toUpperCase()}`;
+}
+
+function mergeBalanceRows(primary: WalletBalance[], fallback: WalletBalance[]): WalletBalance[] {
+  const merged = [...primary];
+  const seen = new Set(primary.map(balanceRowKey));
+
+  for (const row of fallback) {
+    const key = balanceRowKey(row);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(row);
+  }
+
+  return merged;
+}
+
+function normalizeBalancesFromPortfolio(twak: TwakTelemetry): WalletBalance[] {
+  const result = twak.portfolio;
+  if (!result?.ok || !Array.isArray(result.data)) {
+    return [];
+  }
+
+  const rows: WalletBalance[] = [];
+
+  for (const item of result.data) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+    const chain = directString(item, CHAIN_KEYS) ?? "unknown";
+    const symbol = directString(item, SYMBOL_KEYS);
+    const amount = directNumber(item, AMOUNT_KEYS);
+    const valueUsd = directNumber(item, VALUE_USD_KEYS);
+    const tokenAddress = directString(item, TOKEN_ADDRESS_KEYS);
+
+    if (!symbol || (amount === null && valueUsd === null)) {
+      continue;
+    }
+
+    addBalanceRow(rows, {
+      chain,
+      symbol,
+      amount,
+      valueUsd,
+      tokenAddress,
+      raw: redact(item),
+    });
+  }
+
+  return rows;
+}
+
 function collectHistoryRows(value: unknown, rows: unknown[], seen: WeakSet<object>) {
   if (Array.isArray(value)) {
     rows.push(...value);
@@ -512,10 +569,13 @@ export function normalizeTwakWallet(twak: TwakTelemetry, refreshedAt = new Date(
     refreshedAt,
     portfolioTotalUsd:
       findNumberByKeys(twak.portfolio.data, PORTFOLIO_TOTAL_KEYS) ?? sumPortfolioUsdValue(twak.portfolio.data),
-    balances: [
-      ...normalizeBalancesForChain(twak, "bscBalance", "bsc"),
-      ...normalizeBalancesForChain(twak, "baseBalance", "base"),
-    ],
+    balances: mergeBalanceRows(
+      [
+        ...normalizeBalancesForChain(twak, "bscBalance", "bsc"),
+        ...normalizeBalancesForChain(twak, "baseBalance", "base"),
+      ],
+      normalizeBalancesFromPortfolio(twak),
+    ),
     movements: [
       ...normalizeHistoryForChain(twak, "bscHistory", "bsc"),
       ...normalizeHistoryForChain(twak, "baseHistory", "base"),

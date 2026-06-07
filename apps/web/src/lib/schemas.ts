@@ -89,6 +89,7 @@ export const healthSchema = z
     agentRunning: z.boolean(),
     pids: z.array(z.string()),
     lastLogLine: z.string().nullable(),
+    lastLogSource: z.string().nullable().optional(),
     serverTime: z.string(),
     sourcePath: z.string(),
     error: z.string().optional(),

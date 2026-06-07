@@ -15,23 +15,30 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio-chart";
-import { boughtTokensFromTelemetry, COMPETITION_TOKENS, type WalletHolding } from "@/lib/competition-tokens";
+import {
+  agentModeLabel,
+  liveWalletBalancesFromTelemetry,
+  realActiveTradeCount,
+  type WalletBalanceRow,
+} from "@/lib/competition-tokens";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
-const navItems: Array<{ label: string; icon: LucideIcon; active?: boolean }> = [
-  { label: "Overview", icon: Home, active: true },
+type DashboardSection = "overview" | "logs" | "chart";
+
+const navItems: Array<{ label: string; icon: LucideIcon; section?: DashboardSection }> = [
+  { label: "Overview", icon: Home, section: "overview" },
   { label: "Bot Performance", icon: Activity },
   { label: "Deployments", icon: Rocket },
-  { label: "Logs", icon: FileText },
+  { label: "Logs", icon: FileText, section: "logs" },
   { label: "Analytics", icon: BarChart3 },
   { label: "Settings", icon: Settings },
 ];
 
-const mobileNavItems = [
-  { label: "Overview", icon: Home, active: true },
-  { label: "Logs", icon: FileText },
-  { label: "Chart", icon: BarChart3 },
-  { label: "Settings", icon: Settings },
+const mobileNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
+  { label: "Overview", icon: Home, section: "overview" },
+  { label: "Logs", icon: FileText, section: "logs" },
+  { label: "Chart", icon: BarChart3, section: "chart" },
+  { label: "Settings", icon: Settings, section: "overview" },
 ];
 
 const projectRepository = {
@@ -107,7 +114,10 @@ type SystemView = {
 type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
-  walletHoldings: WalletHolding[];
+  logRows: ActivityRow[];
+  walletBalances: WalletBalanceRow[];
+  agentMode: string;
+  telemetryError: string | null;
   chartData: PortfolioChartPoint[];
   mobileChartData: PortfolioChartPoint[];
   totalBalance: string;
@@ -382,6 +392,95 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   return [];
 }
 
+function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
+  const decisionRows =
+    data?.decisions
+      .slice()
+      .reverse()
+      .map((decision) => {
+        const action = decision.action;
+        const symbol = decision.symbol ?? "strategy";
+        const reason = decision.reason ? ` — ${decision.reason}` : "";
+        const factors =
+          typeof decision.true_factor_count === "number" ? ` (${decision.true_factor_count}/6 factors)` : "";
+
+        return {
+          amount: `${action} ${symbol}${factors}${reason}`,
+          hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
+          explorerUrl: null,
+          status: action,
+          tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+        } satisfies ActivityRow;
+      }) ?? [];
+
+  if (decisionRows.length > 0) {
+    return decisionRows;
+  }
+
+  const executionRows =
+    data?.executions
+      .slice()
+      .reverse()
+      .map((execution) => {
+        const failed = executionFailed(execution);
+        const pending = !executionSucceeded(execution) && !failed;
+        const from = execution.from_symbol ?? "";
+        const to = execution.to_symbol ?? "";
+        const txHash =
+          execution.tx_hash ?? stringFromUnknown(execution.result?.tx_hash) ?? stringFromUnknown(execution.result?.hash);
+
+        return {
+          amount:
+            typeof execution.amount_in === "number"
+              ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
+              : `${from}->${to}`,
+          hash: shortHash(txHash),
+          explorerUrl: explorerUrlFromExecution(execution),
+          status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
+          tone: failed ? "red" : pending ? "yellow" : "green",
+        } satisfies ActivityRow;
+      }) ?? [];
+
+  if (executionRows.length > 0) {
+    return executionRows;
+  }
+
+  const lastLogLine = data?.health.lastLogLine?.trim();
+  if (lastLogLine) {
+    return [
+      {
+        amount: lastLogLine,
+        hash: "agent.log",
+        explorerUrl: null,
+        status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
+        tone: data?.health.agentRunning ? "green" : "red",
+      },
+    ];
+  }
+
+  const fileRows = [
+    { label: "agent.log", file: data?.files.agentLog },
+    { label: "decision_log.jsonl", file: data?.files.decisionLog },
+    { label: "execution_log.jsonl", file: data?.files.executionLog },
+  ].flatMap(({ label, file }) => {
+    if (!file) {
+      return [];
+    }
+
+    return [
+      {
+        amount: file.exists ? `${label} on EC2, waiting for records` : `${label} not found on EC2`,
+        hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
+        explorerUrl: null,
+        status: file.exists ? "READY" : "MISSING",
+        tone: file.exists ? "yellow" : "red",
+      } satisfies ActivityRow,
+    ];
+  });
+
+  return fileRows;
+}
+
 function systemView(data: StatusPayload | null, error: string | null, latencyMs: number | null): SystemView {
   if (error || data?.connection?.source === "error") {
     return {
@@ -409,7 +508,7 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
   const latest = latestPortfolioValue(data);
   const pnl = pnlFromWindow(values);
   const pnlTone = (pnl.absolute ?? 0) >= 0 ? "positive" : "negative";
-  const activeTrades = data?.positions.positions.length ?? data?.latestDecision?.position_count ?? 0;
+  const activeTrades = realActiveTradeCount(data);
   const successRate = executionSuccessRate(data?.executions ?? []);
   const chart = chartPoints(data);
   const performanceDelta = formatPercent(pnl.percent);
@@ -434,7 +533,7 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
       {
         label: "Active Trades",
         value: String(activeTrades ?? 0),
-        tooltip: "Open positions reported by positions.json or latest decision telemetry.",
+        tooltip: "On-chain or positions.json holdings only. Paper-mode signals are excluded.",
       },
       {
         label: "Execution Rate",
@@ -443,7 +542,10 @@ function buildViewModel(data: StatusPayload | null, error: string | null, latenc
       },
     ],
     activityRows: activityFromTelemetry(data),
-    walletHoldings: boughtTokensFromTelemetry(data),
+    logRows: logRowsFromTelemetry(data),
+    walletBalances: liveWalletBalancesFromTelemetry(data),
+    agentMode: agentModeLabel(data),
+    telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
     mobileChartData: chart.slice(-16).length > 1 ? chart.slice(-16) : chart,
     totalBalance: formatUsd(latest),
@@ -492,10 +594,7 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
       href={projectRepository.url}
       target="_blank"
       rel="noreferrer"
-      className={cx(
-        "group block w-full border border-[#1A1A1A] bg-[#070707] text-left transition-colors hover:border-[#2A2A2A] hover:bg-[#0B0B0B]",
-        compact ? "p-2" : "p-3",
-      )}
+      className="group block w-full border-0 bg-[#070707] text-left transition-colors hover:bg-[#0B0B0B]"
       aria-label="Open cascade-ai project on GitHub"
     >
         <span className={cx("flex min-w-0 justify-between", compact ? "items-center gap-2" : "items-start gap-3")}>
@@ -521,7 +620,7 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
           />
         </span>
         {compact ? (
-          <span className="mt-1.5 flex min-w-0 items-center gap-2">
+          <span className="mt-2 flex min-w-0 items-center gap-2 border-t border-[#1A1A1A] pt-2">
             <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[8px] uppercase tracking-[0.18em] text-[#A8A8A8]">
               <PythonLogo className="h-2.5 w-2.5 shrink-0" />
               Python
@@ -529,57 +628,78 @@ function GithubRepositoryCard({ variant = "default" }: { variant?: "default" | "
             <span className="min-w-0 truncate text-[10px] leading-4 text-[#BDBDBD]">{projectRepository.description}</span>
           </span>
         ) : (
-          <>
-            <span className="mt-3 inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
+          <span className="mt-2 block border-t border-[#1A1A1A] pt-2">
+            <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[#A8A8A8]">
               <PythonLogo className="h-3 w-3 shrink-0" />
               Python
             </span>
-            <span className="mt-3 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+            <span className="mt-2 block overflow-hidden text-xs leading-5 text-[#BDBDBD] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
               {projectRepository.description}
             </span>
-          </>
+          </span>
         )}
     </a>
   );
 }
 
-function DesktopSidebar() {
+function DesktopSidebar({
+  activeSection,
+  onNavigate,
+}: {
+  activeSection: DashboardSection;
+  onNavigate: (section: DashboardSection) => void;
+}) {
   return (
     <aside className="flex min-h-screen w-[280px] shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505] 2xl:w-[320px]">
-      <div className="border-b border-[#1A1A1A] px-5 py-5">
+      <div className="border-b border-[#1A1A1A] px-4 py-4">
         <GithubRepositoryCard />
       </div>
-      <nav className="grid gap-1 px-3 py-5">
+      <nav className="grid gap-1 px-4 py-5">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const active = item.section === activeSection;
+
+          if (!item.section) {
+            return (
+              <span
+                key={item.label}
+                className="flex h-12 cursor-not-allowed items-center gap-3 border border-transparent px-3 font-mono text-[13px] text-[#555555]"
+                title="Coming soon"
+              >
+                <Icon size={17} className="shrink-0 text-[#555555]" />
+                <span>{item.label}</span>
+              </span>
+            );
+          }
 
           return (
-            <a
+            <button
               key={item.label}
+              type="button"
+              onClick={() => onNavigate(item.section!)}
               className={cx(
-                "group flex h-12 items-center gap-3 border border-transparent px-3 font-mono text-[13px] transition-colors",
-                item.active
+                "group flex h-12 w-full items-center gap-3 border border-transparent px-3 font-mono text-[13px] transition-colors",
+                active
                   ? "border-[#1A1A1A] bg-[#0D1A12] text-white shadow-[inset_3px_0_0_#00FF00]"
                   : "text-[#C9C9C9] hover:border-[#1A1A1A] hover:bg-[#0A0A0A] hover:text-white",
               )}
-              href="#"
             >
               <Icon
                 size={17}
-                className={cx("shrink-0", item.active ? "text-[#00FF00]" : "text-[#A3A3A3] group-hover:text-white")}
+                className={cx("shrink-0", active ? "text-[#00FF00]" : "text-[#A3A3A3] group-hover:text-white")}
               />
               <span>{item.label}</span>
-            </a>
+            </button>
           );
         })}
       </nav>
-      <div className="mt-auto px-3 py-4">
+      <div className="mt-auto px-4 py-4">
         <button className="flex h-12 w-full items-center gap-3 border border-[#333333] bg-[#171717] px-3 font-mono text-[13px] text-white transition-colors hover:border-[#4A4A4A] hover:bg-[#202020]">
           <Download size={17} className="shrink-0 text-[#A3A3A3]" />
           <span>Export CSV</span>
         </button>
       </div>
-      <div className="border-t border-[#1A1A1A] px-5 py-5">
+      <div className="border-t border-[#1A1A1A] px-4 py-4">
         <div className="flex items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center border border-[#2A2A2A] bg-[#0A0A0A] text-[#D8D8D8]">
             <CircleUserRound size={19} />
@@ -689,65 +809,123 @@ function formatTokenAmount(value: number | null) {
   return value.toPrecision(4);
 }
 
-function WalletSection({ holdings, compact = false }: { holdings: WalletHolding[]; compact?: boolean }) {
+function TelemetryBanner({ message }: { message: string }) {
   return (
-    <section className="border border-[#2A2A2A] bg-black/88">
-      <div className={cx("border-b border-[#1A1A1A]", compact ? "px-4 py-4" : "px-5 py-5")}>
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Competition Wallet</div>
-        <h2 className={cx("mt-1 font-mono text-[#DADADA]", compact ? "text-base" : "text-xl")}>Bought Tokens</h2>
-        <p className="mt-1 font-mono text-[11px] text-[#8A8A8A]">
-          Eligible BSC holdings from the {COMPETITION_TOKENS.length}-token allowlist
-        </p>
+    <div className="border-b border-[#3A2200] bg-[#1B1200] px-5 py-3 font-mono text-[12px] leading-5 text-[#FFD21A]">
+      <span className="font-bold uppercase tracking-[0.12em]">Telemetry:</span> {message}
+      <span className="mt-1 block text-[#CFCFCF]">
+        Local dev: set `AGENT_EXPORTER_URL` in `apps/web/.env.local` to the same EC2 HTTPS URL used on Vercel, or run the
+        local exporter on port 8787.
+      </span>
+    </div>
+  );
+}
+
+function WalletSection({
+  balances,
+  agentMode,
+  compact = false,
+  desktopFill = false,
+}: {
+  balances: WalletBalanceRow[];
+  agentMode: string;
+  compact?: boolean;
+  desktopFill?: boolean;
+}) {
+  const paperMode = agentMode === "PAPER";
+
+  const headerPadding = desktopFill ? "px-3 py-2" : compact ? "px-4 py-4" : "px-5 py-5";
+  const sectionPadding = desktopFill ? "px-3 py-2" : compact ? "px-4 py-3" : "px-5 py-3";
+
+  const balancesTable = (
+    <div className={cx(desktopFill && "mt-2 border-t border-[#1A1A1A] pt-2")}>
+      <div className={cx("font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]", sectionPadding)}>
+        Balances
       </div>
-      <div className={cx("console-scroll overflow-x-auto", compact ? "max-h-[220px]" : "max-h-[280px]")}>
-        <table className="w-full table-fixed border-collapse text-left">
-          <colgroup>
-            <col className="w-[28%]" />
-            <col className="w-[30%]" />
-            <col className="w-[22%]" />
-            <col className="w-[20%]" />
-          </colgroup>
-          <thead className="sticky top-0 z-10 border-b border-[#1A1A1A] bg-[#050505] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
-            <tr>
-              <th className="px-4 py-3">Token</th>
-              <th className="px-2 py-3">Amount</th>
-              <th className="px-2 py-3">Value</th>
-              <th className="px-4 py-3 text-right">Entry</th>
+      <table className="w-full table-fixed border-collapse text-left">
+        <colgroup>
+          <col className="w-[22%]" />
+          <col className="w-[22%]" />
+          <col className="w-[32%]" />
+          <col className="w-[24%]" />
+        </colgroup>
+        <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+          <tr>
+            <th className="px-3 py-2">Chain</th>
+            <th className="px-2 py-2">Token</th>
+            <th className="px-2 py-2">Amount</th>
+            <th className="px-3 py-2 text-right">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {balances.map((balance) => (
+            <tr key={`${balance.chain}-${balance.symbol}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+              <td className="truncate px-3 py-3 font-mono text-[12px] uppercase text-[#A8A8A8]">{balance.chain}</td>
+              <td className="truncate px-2 py-3 font-mono text-[13px] font-bold text-[#F2F2F2]">{balance.symbol}</td>
+              <td className="truncate px-2 py-3 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                {formatTokenAmount(balance.amount)}
+              </td>
+              <td className="truncate px-3 py-3 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                {formatUsd(balance.valueUsd)}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {holdings.map((holding) => (
-              <tr key={holding.symbol} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
-                <td className="truncate px-4 py-4 font-mono text-[13px] font-bold text-[#F2F2F2]">{holding.symbol}</td>
-                <td className="truncate px-2 py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                  {formatTokenAmount(holding.amount)}
-                </td>
-                <td className="truncate px-2 py-4 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
-                  {formatUsd(holding.valueUsd)}
-                </td>
-                <td className="truncate px-4 py-4 text-right font-mono text-[12px] tabular-nums text-[#A8A8A8]">
-                  {formatUsd(holding.entryValueUsd)}
-                </td>
-              </tr>
-            ))}
-            {holdings.length === 0 ? (
-              <tr className="border-b border-[#1A1A1A]">
-                <td className="px-4 py-5 font-mono text-[12px] leading-5 text-[#8A8A8A]" colSpan={4}>
-                  No eligible bought tokens yet. Only in-scope BSC assets from the hackathon allowlist are shown here.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+          ))}
+          {balances.length === 0 ? (
+            <tr className="border-b border-[#1A1A1A]">
+              <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
+                Waiting for TWAK wallet balances
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <section
+      className={cx(
+        desktopFill ? "flex h-full min-h-0 flex-col bg-black/88" : "border border-[#2A2A2A] bg-black/88",
+      )}
+    >
+      <div className={cx("shrink-0", !desktopFill && "border-b border-[#1A1A1A]", headerPadding)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
+            <h2 className={cx("mt-1 font-mono text-[#DADADA]", compact ? "text-base" : desktopFill ? "text-lg" : "text-xl")}>
+              Live Holdings
+            </h2>
+          </div>
+          <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
+        </div>
+        {!desktopFill ? (
+          <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
+            {paperMode
+              ? "Agent is in paper mode. Below is your real TWAK wallet; CAKE signals are simulated only."
+              : "Real token balances from TWAK portfolio telemetry."}
+          </p>
+        ) : null}
       </div>
+
+      {desktopFill ? (
+        <div className="console-scroll min-h-0 flex-1 overflow-auto">{balancesTable}</div>
+      ) : (
+        balancesTable
+      )}
     </section>
   );
 }
 
-function DesktopWalletPanel({ holdings }: { holdings: WalletHolding[] }) {
+function DesktopWalletPanel({
+  balances,
+  agentMode,
+}: {
+  balances: WalletBalanceRow[];
+  agentMode: string;
+}) {
   return (
-    <section className="flex min-h-0 flex-col border-l border-[#1A1A1A] bg-black/72 px-5 py-9 2xl:px-7">
-      <WalletSection holdings={holdings} />
+    <section className="flex min-h-0 flex-col overflow-hidden bg-black/72">
+      <WalletSection balances={balances} agentMode={agentMode} desktopFill />
     </section>
   );
 }
@@ -805,12 +983,58 @@ function RecentActivity({ rows, compact = false }: { rows: ActivityRow[]; compac
 
 function DesktopRecentActivity({ rows }: { rows: ActivityRow[] }) {
   return (
-    <section className="flex min-h-0 flex-col border-l border-[#1A1A1A] bg-black/72 px-5 pb-9 2xl:px-7">
+    <section className="flex min-h-0 flex-col overflow-hidden border-t border-[#1A1A1A] bg-black/72">
+      <div className="shrink-0 border-b border-[#1A1A1A] px-3 py-3">
+        <h2 className="font-mono text-lg text-[#DADADA]">Recent Activity</h2>
+      </div>
+      <div className="console-scroll min-h-0 flex-1 overflow-auto">
+        <RecentActivity rows={rows} />
+      </div>
+    </section>
+  );
+}
+
+function LogsPanel({
+  rows,
+  lastLogLine,
+  lastLogSource,
+  agentRunning,
+  compact = false,
+}: {
+  rows: ActivityRow[];
+  lastLogLine: string | null;
+  lastLogSource: string | null;
+  agentRunning: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <section className={cx("flex min-h-0 flex-col", compact ? "mx-4 mt-9" : "px-10 py-9")}>
+      <div className="mb-6">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+        <h1 className="mt-2 font-mono text-[32px] font-semibold leading-tight text-white">Agent Logs</h1>
+        <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          Decision cycles from `decision_log.jsonl` on EC2. The latest bot stdout line comes from the most recently
+          updated log file (`bot_live.log` or `agent.log`).
+        </p>
+      </div>
+
+      {lastLogLine ? (
+        <div className="mb-6 border border-[#2A2A2A] bg-black/88 px-5 py-4">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+            Latest bot log{lastLogSource ? ` (${lastLogSource})` : ""}
+          </div>
+          <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{lastLogLine}</p>
+          <div className="mt-3">
+            <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
+          </div>
+        </div>
+      ) : null}
+
       <div className="border border-[#2A2A2A] bg-black/88">
         <div className="border-b border-[#1A1A1A] px-5 py-5">
-          <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
+          <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
         </div>
-        <div className="console-scroll overflow-x-auto">
+        <div className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
           <RecentActivity rows={rows} />
         </div>
       </div>
@@ -852,18 +1076,38 @@ function DesktopStatusBar({ system }: { system: SystemView }) {
   );
 }
 
-function DesktopDashboard({ view }: { view: DashboardViewModel }) {
+function DesktopDashboard({
+  view,
+  activeSection,
+  onNavigate,
+  data,
+}: {
+  view: DashboardViewModel;
+  activeSection: DashboardSection;
+  onNavigate: (section: DashboardSection) => void;
+  data: StatusPayload | null;
+}) {
   return (
     <div className="hidden min-h-screen bg-black text-white lg:flex">
-      <DesktopSidebar />
+      <DesktopSidebar activeSection={activeSection} onNavigate={onNavigate} />
       <main className="technical-grid min-w-0 flex-1 pb-9">
-        <section className="grid min-h-[calc(100vh-36px)] grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,65fr)_minmax(330px,35fr)] 2xl:grid-cols-[minmax(0,65fr)_minmax(400px,35fr)]">
-          <DesktopPerformancePanel view={view} />
-          <div className="flex min-h-0 flex-col">
-            <DesktopWalletPanel holdings={view.walletHoldings} />
-            <DesktopRecentActivity rows={view.activityRows} />
-          </div>
-        </section>
+        {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
+        {activeSection === "logs" ? (
+          <LogsPanel
+            rows={view.logRows}
+            lastLogLine={data?.health.lastLogLine?.trim() ?? null}
+            lastLogSource={data?.health.lastLogSource ?? null}
+            agentRunning={Boolean(data?.health.agentRunning)}
+          />
+        ) : (
+          <section className="grid h-[calc(100vh-36px)] min-h-0 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <DesktopPerformancePanel view={view} />
+            <div className="grid min-h-0 grid-rows-2 border-l border-[#1A1A1A]">
+              <DesktopWalletPanel balances={view.walletBalances} agentMode={view.agentMode} />
+              <DesktopRecentActivity rows={view.activityRows} />
+            </div>
+          </section>
+        )}
       </main>
       <DesktopStatusBar system={view.system} />
     </div>
@@ -919,10 +1163,16 @@ function MobilePerformanceWidget({ view }: { view: DashboardViewModel }) {
   );
 }
 
-function MobileWalletSection({ holdings }: { holdings: WalletHolding[] }) {
+function MobileWalletSection({
+  balances,
+  agentMode,
+}: {
+  balances: WalletBalanceRow[];
+  agentMode: string;
+}) {
   return (
     <section className="mx-4 mt-9 overflow-hidden">
-      <WalletSection holdings={holdings} compact />
+      <WalletSection balances={balances} agentMode={agentMode} compact />
     </section>
   );
 }
@@ -960,25 +1210,33 @@ function MobileSystemBar({ system }: { system: SystemView }) {
   );
 }
 
-function MobileBottomNav() {
+function MobileBottomNav({
+  activeSection,
+  onNavigate,
+}: {
+  activeSection: DashboardSection;
+  onNavigate: (section: DashboardSection) => void;
+}) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A1A1A] bg-[#050505]">
       <div className="mx-auto grid h-[76px] max-w-[640px] grid-cols-4 px-4">
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
+          const active = item.section === activeSection;
 
           return (
-            <a
+            <button
               key={item.label}
+              type="button"
+              onClick={() => onNavigate(item.section)}
               className={cx(
                 "flex min-h-11 flex-col items-center justify-center gap-1 font-mono text-[11px] font-bold uppercase",
-                item.active ? "text-[#00FF00]" : "text-[#8A8A8A]",
+                active ? "text-[#00FF00]" : "text-[#8A8A8A]",
               )}
-              href="#"
             >
               <Icon size={23} strokeWidth={2.1} />
               <span>{item.label}</span>
-            </a>
+            </button>
           );
         })}
       </div>
@@ -986,18 +1244,56 @@ function MobileBottomNav() {
   );
 }
 
-function MobileDashboard({ view }: { view: DashboardViewModel }) {
+function MobileChartSection({ view }: { view: DashboardViewModel }) {
+  return (
+    <section className="mx-4 mt-9 overflow-hidden border border-[#1A1A1A] bg-black">
+      <div className="border-b border-[#1A1A1A] px-5 py-5">
+        <h2 className="text-[24px] font-bold text-white">Portfolio Chart</h2>
+      </div>
+      <div className="p-4">
+        <PortfolioChart data={view.mobileChartData} variant="mobile" />
+      </div>
+    </section>
+  );
+}
+
+function MobileDashboard({
+  view,
+  activeSection,
+  onNavigate,
+  data,
+}: {
+  view: DashboardViewModel;
+  activeSection: DashboardSection;
+  onNavigate: (section: DashboardSection) => void;
+  data: StatusPayload | null;
+}) {
   return (
     <div className="technical-grid min-h-screen bg-black text-white lg:hidden">
       <MobileHeader />
+      {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main className="mx-auto max-w-[640px] pb-[124px]">
-        <MobileHeroMetrics view={view} />
-        <MobilePerformanceWidget view={view} />
-        <MobileWalletSection holdings={view.walletHoldings} />
-        <MobileRecentActivity rows={view.activityRows} />
+        {activeSection === "logs" ? (
+          <LogsPanel
+            rows={view.logRows}
+            lastLogLine={data?.health.lastLogLine?.trim() ?? null}
+            lastLogSource={data?.health.lastLogSource ?? null}
+            agentRunning={Boolean(data?.health.agentRunning)}
+            compact
+          />
+        ) : activeSection === "chart" ? (
+          <MobileChartSection view={view} />
+        ) : (
+          <>
+            <MobileHeroMetrics view={view} />
+            <MobilePerformanceWidget view={view} />
+            <MobileWalletSection balances={view.walletBalances} agentMode={view.agentMode} />
+            <MobileRecentActivity rows={view.activityRows} />
+          </>
+        )}
       </main>
       <MobileSystemBar system={view.system} />
-      <MobileBottomNav />
+      <MobileBottomNav activeSection={activeSection} onNavigate={onNavigate} />
     </div>
   );
 }
@@ -1006,6 +1302,7 @@ export function DashboardClient() {
   const [data, setData] = useState<StatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
 
   useEffect(() => {
     let active = true;
@@ -1052,8 +1349,8 @@ export function DashboardClient() {
 
   return (
     <>
-      <MobileDashboard view={view} />
-      <DesktopDashboard view={view} />
+      <MobileDashboard view={view} activeSection={activeSection} onNavigate={setActiveSection} data={data} />
+      <DesktopDashboard view={view} activeSection={activeSection} onNavigate={setActiveSection} data={data} />
     </>
   );
 }
