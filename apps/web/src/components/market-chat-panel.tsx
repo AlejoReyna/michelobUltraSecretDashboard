@@ -19,9 +19,9 @@ const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
 const MOBILE_NAV_HEIGHT = 52;
 const MOBILE_CHAT_FOOTER_HEIGHT = 72;
 
-const DISCLAIMER_TEXT =
-  "The information presented here isn't intended to be used as market picks or signals, use the presented data with caution. Gambling destroys.";
 const FADE_OUT_MS = 180;
+const DISCLAIMER_TEXT_DELAY_MS = 480;
+const DISCLAIMER_BUTTON_DELAY_MS = 960;
 
 type FadePhase = "visible" | "out" | "hidden";
 
@@ -117,17 +117,45 @@ function IntelSectionHeader({
 }
 
 function DisclaimerGate({ onAccept }: { onAccept: () => void }) {
+  const [showText, setShowText] = useState(false);
+  const [showButton, setShowButton] = useState(false);
+
+  useEffect(() => {
+    const textTimeout = window.setTimeout(() => {
+      setShowText(true);
+    }, DISCLAIMER_TEXT_DELAY_MS);
+
+    const buttonTimeout = window.setTimeout(() => {
+      setShowButton(true);
+    }, DISCLAIMER_BUTTON_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(textTimeout);
+      window.clearTimeout(buttonTimeout);
+    };
+  }, []);
+
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/92 px-6 backdrop-blur-[2px]">
       <div className="max-w-md text-center">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8A8A8A]">Before you continue</p>
-        <button
-          type="button"
-          onClick={onAccept}
-          className="mt-5 w-full rounded-sm border border-[#3A3A3A] bg-[#111111] px-4 py-4 font-mono text-[11px] leading-[1.6] text-[#D0D0D0] transition-colors hover:border-[#555555] hover:bg-[#181818] hover:text-white"
-        >
-          {DISCLAIMER_TEXT}
-        </button>
+        <p className="section-fade-in font-mono text-[12px] uppercase tracking-[0.16em] text-[#8A8A8A]">
+          Before you continue...
+        </p>
+        {showText ? (
+          <div className="section-fade-in mt-5 w-full rounded-sm border border-[#3A3A3A] bg-[#111111] px-4 py-4 font-mono text-[11.5px] leading-[1.6] text-[#D0D0D0]">
+            The information presented here isn&apos;t intended to be used as market picks or signals, use the presented data with caution.{" "}
+            <strong className="font-bold">Gambling destroys</strong>.
+            {showButton ? (
+              <button
+                type="button"
+                onClick={onAccept}
+                className="section-fade-in mt-4 w-full rounded-sm border border-[#555555] bg-[#181818] px-4 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-colors hover:border-[#777777] hover:bg-[#222222]"
+              >
+                Proceed
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
