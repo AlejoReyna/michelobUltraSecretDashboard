@@ -199,6 +199,10 @@ textarea {
   vertical-align: baseline;
 }
 
+.typewriter-cursor-pipe {
+  animation: typewriter-blink 0.75s step-end infinite;
+}
+
 @keyframes typewriter-blink {
   0%,
   100% {

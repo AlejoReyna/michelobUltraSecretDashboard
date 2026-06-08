@@ -6,8 +6,11 @@ import { TypewriterText } from "@/components/typewriter-text";
 import {
   createAssistantMessage,
   createUserMessage,
+  pickIntelGreeting,
+  readStoredChatMessages,
   resolveMarketChatResponse,
   SUGGESTED_PROMPTS,
+  writeStoredChatMessages,
   type ChatMessage,
 } from "@/lib/market-chat-engine";
 import type { StatusPayload } from "@/lib/schemas";
@@ -18,6 +21,46 @@ const MOBILE_CHAT_FOOTER_HEIGHT = 72;
 
 const DISCLAIMER_TEXT =
   "The information presented here isn't intended to be used as market picks or signals, use the presented data with caution. Gambling destroys.";
+const FADE_OUT_MS = 180;
+
+type FadePhase = "visible" | "out" | "hidden";
+
+function formatAssistantContent(content: string) {
+  return content.startsWith(">") ? content : `> ${content}`;
+}
+
+function useNow(tickMs = 30_000) {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const interval = window.setInterval(onStoreChange, tickMs);
+      return () => window.clearInterval(interval);
+    },
+    () => Date.now(),
+    () => Date.now(),
+  );
+}
+
+function useFadePhase(initialPhase: FadePhase = "visible") {
+  const [phase, setPhase] = useState<FadePhase>(initialPhase);
+
+  function dismiss() {
+    setPhase((current) => (current === "visible" ? "out" : current));
+  }
+
+  useEffect(() => {
+    if (phase !== "out") {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPhase("hidden");
+    }, FADE_OUT_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [phase]);
+
+  return { phase, dismiss };
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -35,23 +78,40 @@ function formatMessageTime(iso: string) {
   });
 }
 
-function useNow(tickMs = 30_000) {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const interval = window.setInterval(onStoreChange, tickMs);
-      return () => window.clearInterval(interval);
-    },
-    () => Date.now(),
-    () => Date.now(),
-  );
-}
-
-function ChatSessionHeader() {
+function IntelSectionHeader({
+  compact = false,
+  desktop = false,
+  greetingPhase,
+}: {
+  compact?: boolean;
+  desktop?: boolean;
+  greetingPhase: FadePhase;
+}) {
+  const flat = compact || desktop;
   const now = useNow();
+  const [greeting] = useState(() => pickIntelGreeting());
 
   return (
-    <div className="px-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#5A5A5A]">
-      Market Intel · {formatMessageTime(new Date(now).toISOString())}
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#5A5A5A]">
+        Market Intel · {formatMessageTime(new Date(now).toISOString())}
+      </div>
+      {greetingPhase !== "hidden" ? (
+        <div className={cx(greetingPhase === "out" && "section-fade-out")}>
+          <TypewriterText
+            text={greeting}
+            className={cx(
+              "mt-2 font-mono font-semibold leading-tight text-white",
+              flat ? "text-[28px]" : "text-[32px]",
+              compact && "whitespace-nowrap",
+            )}
+            speed={24}
+            startDelay={180}
+            persistentCursor
+            cursorChar="|"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -83,6 +143,7 @@ function ChatBubble({
   compact?: boolean;
 }) {
   const isUser = message.role === "user";
+  const content = isUser ? message.content : formatAssistantContent(message.content);
 
   return (
     <div className={cx("flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -97,9 +158,9 @@ function ChatBubble({
           )}
         >
           {animate && !isUser ? (
-            <TypewriterText text={message.content} speed={14} startDelay={120} />
+            <TypewriterText text={content} speed={14} startDelay={120} />
           ) : (
-            message.content
+            content
           )}
         </div>
         <div
@@ -108,7 +169,7 @@ function ChatBubble({
             isUser ? "text-right" : "text-left",
           )}
         >
-          {isUser ? "You" : "Market Intel"} · {formatMessageTime(message.timestamp)}
+          {isUser ? "You" : "Bot"} · {formatMessageTime(message.timestamp)}
         </div>
       </div>
     </div>
@@ -185,16 +246,19 @@ function SuggestedPromptBar({
   onSelect,
   disabled,
   compact = false,
+  fading = false,
 }: {
   onSelect: (prompt: string) => void;
   disabled?: boolean;
   compact?: boolean;
+  fading?: boolean;
 }) {
   return (
     <div
       className={cx(
         "flex shrink-0 flex-wrap",
         compact ? "gap-1 px-3 pb-1 pt-0" : "gap-1.5 px-4 pb-2 pt-1",
+        fading && "section-fade-out",
       )}
     >
       {SUGGESTED_PROMPTS.map((prompt) => (
@@ -221,12 +285,16 @@ function MarketChatSurface({
   data,
   compact = false,
   blocked = false,
+  hintsPhase = "visible",
+  onChatStart,
 }: {
   data: StatusPayload | null;
   compact?: boolean;
   blocked?: boolean;
+  hintsPhase?: FadePhase;
+  onChatStart?: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
@@ -251,14 +319,24 @@ function MarketChatSurface({
     }
 
     const userMessage = createUserMessage(content);
-    setMessages((current) => [...current, userMessage]);
+    setMessages((current) => {
+      if (current.length === 0) {
+        onChatStart?.();
+      }
+      const next = [...current, userMessage];
+      writeStoredChatMessages(next);
+      return next;
+    });
     setDraft("");
     setThinking(true);
 
     window.setTimeout(() => {
       const response = resolveMarketChatResponse(content, dataRef.current);
       const assistantMessage = createAssistantMessage(response);
-      setMessages((current) => [...current, assistantMessage]);
+      const stored = readStoredChatMessages();
+      const next = [...stored, assistantMessage];
+      writeStoredChatMessages(next);
+      setMessages(next);
       setStreamingId(assistantMessage.id);
       setThinking(false);
     }, 420);
@@ -278,7 +356,6 @@ function MarketChatSurface({
         style={compact ? { paddingBottom: MOBILE_CHAT_FOOTER_HEIGHT } : undefined}
       >
         <div className="flex flex-col gap-5 py-4">
-          <ChatSessionHeader />
           {messages.map((message) => (
             <ChatBubble
               key={message.id}
@@ -301,7 +378,14 @@ function MarketChatSurface({
           className="fixed inset-x-0 z-30 mx-auto max-w-[640px]"
           style={{ bottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))` }}
         >
-          <SuggestedPromptBar onSelect={sendMessage} disabled={interactionDisabled} compact />
+          {hintsPhase !== "hidden" ? (
+            <SuggestedPromptBar
+              onSelect={sendMessage}
+              disabled={interactionDisabled}
+              compact
+              fading={hintsPhase === "out"}
+            />
+          ) : null}
           <ChatComposer
             value={draft}
             onChange={setDraft}
@@ -312,7 +396,14 @@ function MarketChatSurface({
         </div>
       ) : (
         <>
-          <SuggestedPromptBar onSelect={sendMessage} disabled={interactionDisabled} compact={compact} />
+          {hintsPhase !== "hidden" ? (
+            <SuggestedPromptBar
+              onSelect={sendMessage}
+              disabled={interactionDisabled}
+              compact={compact}
+              fading={hintsPhase === "out"}
+            />
+          ) : null}
           <ChatComposer
             value={draft}
             onChange={setDraft}
@@ -354,17 +445,48 @@ function useDisclaimerAccepted() {
 export function MarketChatPanel({
   data,
   compact = false,
+  desktop = false,
 }: {
   data: StatusPayload | null;
   compact?: boolean;
   desktop?: boolean;
 }) {
   const { accepted, ready, accept } = useDisclaimerAccepted();
+  const chatAlreadyStarted = readStoredChatMessages().length > 0;
+  const { phase: greetingPhase, dismiss: dismissGreeting } = useFadePhase(
+    chatAlreadyStarted ? "hidden" : "visible",
+  );
+  const { phase: hintsPhase, dismiss: dismissHints } = useFadePhase(chatAlreadyStarted ? "hidden" : "visible");
+
+  function handleChatStart() {
+    dismissGreeting();
+    dismissHints();
+  }
 
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <section
+      className={cx(
+        "relative flex min-h-0 flex-1 flex-col overflow-hidden",
+        compact && "px-4 pt-4",
+        desktop && "px-8 pt-6",
+      )}
+    >
       {ready && !accepted ? <DisclaimerGate onAccept={accept} /> : null}
-      <MarketChatSurface data={data} compact={compact} blocked={!accepted} />
+      <div
+        className={cx(
+          "shrink-0 border-b border-[#1A1A1A]",
+          greetingPhase === "hidden" ? "pb-2" : "pb-3",
+        )}
+      >
+        <IntelSectionHeader compact={compact} desktop={desktop} greetingPhase={greetingPhase} />
+      </div>
+      <MarketChatSurface
+        data={data}
+        compact={compact}
+        blocked={!accepted}
+        hintsPhase={hintsPhase}
+        onChatStart={handleChatStart}
+      />
     </section>
   );
 }

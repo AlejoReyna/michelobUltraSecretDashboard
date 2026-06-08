@@ -8,6 +8,56 @@ export type ChatMessage = {
   timestamp: string;
 };
 
+export const CHAT_MESSAGES_STORAGE_KEY = "cascade-market-intel-chat-messages";
+
+function isChatMessage(value: unknown): value is ChatMessage {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const message = value as ChatMessage;
+  return (
+    typeof message.id === "string" &&
+    (message.role === "user" || message.role === "assistant") &&
+    typeof message.content === "string" &&
+    typeof message.timestamp === "string"
+  );
+}
+
+export function readStoredChatMessages(): ChatMessage[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(isChatMessage);
+  } catch {
+    return [];
+  }
+}
+
+export function writeStoredChatMessages(messages: ChatMessage[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 export const SUGGESTED_PROMPTS = [
   "What's the latest market scan?",
   "How does x402 pay for CMC data?",
@@ -15,6 +65,24 @@ export const SUGGESTED_PROMPTS = [
   "When was market data last refreshed?",
   "Recent x402 micropayments",
 ] as const;
+
+export const INTEL_GREETING_PHRASES = [
+  "Hey, good to see you",
+  "Welcome back",
+  "Hi there, operator",
+  "Hey — what's up",
+  "Good to have you",
+  "Hey, welcome in",
+  "Glad you're here",
+  "Hey, pull up a seat",
+  "Welcome, operator",
+  "Hey, how's it going",
+] as const;
+
+export function pickIntelGreeting(): string {
+  const index = Math.floor(Math.random() * INTEL_GREETING_PHRASES.length);
+  return INTEL_GREETING_PHRASES[index] ?? INTEL_GREETING_PHRASES[0];
+}
 
 type FileStatus = {
   exists?: boolean;

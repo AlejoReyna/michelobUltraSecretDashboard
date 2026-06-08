@@ -11,9 +11,18 @@ type TypewriterTextProps = {
   className?: string;
   speed?: number;
   startDelay?: number;
+  persistentCursor?: boolean;
+  cursorChar?: string;
 };
 
-export function TypewriterText({ text, className, speed = 22, startDelay = 400 }: TypewriterTextProps) {
+export function TypewriterText({
+  text,
+  className,
+  speed = 22,
+  startDelay = 400,
+  persistentCursor = false,
+  cursorChar,
+}: TypewriterTextProps) {
   const [displayed, setDisplayed] = useState("");
   const [active, setActive] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -60,14 +69,26 @@ export function TypewriterText({ text, className, speed = 22, startDelay = 400 }
     return () => window.clearTimeout(timer);
   }, [active, displayed, speed, text]);
 
+  const showCursor = active && (!complete || persistentCursor);
+  const trailingCursor = cursorChar ?? "";
+
   return (
     <div className="grid">
       <p className={cx("invisible col-start-1 row-start-1", className)} aria-hidden="true">
         {text}
+        {persistentCursor ? trailingCursor : null}
       </p>
       <p className={cx("col-start-1 row-start-1", className)} aria-live="polite">
         {displayed}
-        {active && !complete ? <span className="typewriter-cursor" aria-hidden="true" /> : null}
+        {showCursor ? (
+          cursorChar ? (
+            <span className="typewriter-cursor-pipe" aria-hidden="true">
+              {cursorChar}
+            </span>
+          ) : (
+            <span className="typewriter-cursor" aria-hidden="true" />
+          )
+        ) : null}
       </p>
     </div>
   );
