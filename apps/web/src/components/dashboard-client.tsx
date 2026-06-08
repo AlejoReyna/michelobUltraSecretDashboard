@@ -97,6 +97,28 @@ const projectRepository = {
   description: "Autonomous trading bot with TWAK signing, CMC data, and strict guardrails.",
 };
 
+type DesktopNavEntry =
+  | { kind: "section"; label: string; icon: LucideIcon; section: DashboardSection }
+  | {
+      kind: "link";
+      label: string;
+      icon: LucideIcon;
+      href: string;
+      ariaLabel: string;
+    };
+
+const desktopNavItems: DesktopNavEntry[] = [
+  ...dashboardNavItems.slice(0, -1).map((item) => ({ kind: "section" as const, ...item })),
+  {
+    kind: "link",
+    label: "Repository",
+    icon: Github,
+    href: projectRepository.url,
+    ariaLabel: "Open AlejoReyna/NoNamedYetBot on GitHub",
+  },
+  { kind: "section", ...dashboardNavItems.at(-1)! },
+];
+
 const timeRanges = ["1H", "1D", "1W", "1M"] as const;
 type TimeRange = (typeof timeRanges)[number];
 
@@ -917,22 +939,15 @@ function DesktopNavRail({
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-0.5 px-3 pb-5">
-        {dashboardNavItems.map((item) => {
+        {desktopNavItems.map((item) => {
           const Icon = item.icon;
-          const active = item.section === activeSection;
-
-          return (
-            <button
-              key={item.section}
-              type="button"
-              onClick={() => onNavigate(item.section)}
-              aria-current={active ? "page" : undefined}
-              aria-label={item.label}
-              className={cx(
-                "relative flex h-11 w-full items-center gap-3 rounded-sm px-3 transition-colors",
-                active ? "text-white" : "text-[#7A7A7A] hover:text-white",
-              )}
-            >
+          const active = item.kind === "section" && item.section === activeSection;
+          const rowClassName = cx(
+            "relative flex h-11 w-full items-center gap-3 rounded-sm px-3 transition-colors",
+            active ? "text-white" : "text-[#7A7A7A] hover:text-white",
+          );
+          const rowContent = (
+            <>
               {active ? (
                 <span
                   className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-white"
@@ -943,6 +958,34 @@ function DesktopNavRail({
               <span className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.06em]">
                 {item.label}
               </span>
+            </>
+          );
+
+          if (item.kind === "link") {
+            return (
+              <a
+                key={item.label}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={item.ariaLabel}
+                className={rowClassName}
+              >
+                {rowContent}
+              </a>
+            );
+          }
+
+          return (
+            <button
+              key={item.section}
+              type="button"
+              onClick={() => onNavigate(item.section)}
+              aria-current={active ? "page" : undefined}
+              aria-label={item.label}
+              className={rowClassName}
+            >
+              {rowContent}
             </button>
           );
         })}
@@ -2614,7 +2657,6 @@ function DesktopDashboard({
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
       <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-screen min-w-0 flex-1 flex-col">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-        <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} fullWidth />
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
