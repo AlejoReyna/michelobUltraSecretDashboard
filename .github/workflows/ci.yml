@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Security check
+        run: |
+          set -euo pipefail
+          if rg -n "twak swap" agent-exporter apps/web --glob '!**/*.test.*' 2>/dev/null; then
+            echo "Found forbidden 'twak swap' command in application code"
+            exit 1
+          fi
+          if rg -n "app\.(post|put|patch|delete)\(" agent-exporter/src --glob '!**/*.test.*' -i 2>/dev/null; then
+            echo "Found mutating HTTP routes in read-only exporter"
+            exit 1
+          fi
+          echo "Security check passed"

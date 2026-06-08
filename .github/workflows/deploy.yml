@@ -1,0 +1,93 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        default: both
+        type: choice
+        options:
+          - vercel
+          - exporter
+          - both
+      environment:
+        description: Deployment environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy-vercel:
+    if: inputs.target == 'vercel' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build:web
+
+      - name: Deploy to Vercel
+        run: npx vercel deploy --prod --cwd apps/web --token "${{ secrets.VERCEL_TOKEN }}"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  deploy-exporter:
+    if: inputs.target == 'exporter' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Deploy exporter to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            DEPLOY_PATH="${{ secrets.EXPORTER_DEPLOY_PATH }}"
+            if [ -z "$DEPLOY_PATH" ]; then
+              DEPLOY_PATH="/home/ec2-user/cascade-ai-dashboard"
+            fi
+            cd "$DEPLOY_PATH"
+
+            git fetch origin
+            git checkout main
+            git pull --ff-only
+            npm ci
+            npm run build:exporter
+            sudo systemctl restart cascade-ai-exporter
+
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:8787/health > /dev/null; then
+                echo "Exporter health check passed"
+                exit 0
+              fi
+              echo "Waiting for exporter health endpoint (attempt $i/12)..."
+              sleep 5
+            done
+
+            echo "Exporter health check failed after restart"
+            exit 1
