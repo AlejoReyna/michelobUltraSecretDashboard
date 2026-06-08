@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ArrowUp } from "lucide-react";
 import { TypewriterText } from "@/components/typewriter-text";
 import {
@@ -8,13 +8,13 @@ import {
   createUserMessage,
   pickIntelGreeting,
   readStoredChatMessages,
-  SUGGESTED_PROMPTS,
   writeStoredChatMessages,
   type ChatMessage,
 } from "@/lib/market-chat-engine";
 import type { StatusPayload } from "@/lib/schemas";
 
 const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
+const MOBILE_NAV_HEIGHT = 52;
 
 const FADE_OUT_MS = 180;
 const DISCLAIMER_TEXT_DELAY_MS = 480;
@@ -277,56 +277,15 @@ function ChatComposer({
   );
 }
 
-function SuggestedPromptBar({
-  onSelect,
-  disabled,
-  compact = false,
-  fading = false,
-}: {
-  onSelect: (prompt: string) => void;
-  disabled?: boolean;
-  compact?: boolean;
-  fading?: boolean;
-}) {
-  return (
-    <div
-      className={cx(
-        "flex shrink-0 flex-wrap",
-        compact ? "gap-1 px-3 pb-1 pt-0" : "gap-1.5 px-4 pb-2 pt-1",
-        fading && "section-fade-out",
-      )}
-    >
-      {SUGGESTED_PROMPTS.map((prompt) => (
-        <button
-          key={prompt}
-          type="button"
-          disabled={disabled}
-          onClick={() => onSelect(prompt)}
-          className={cx(
-            "rounded-sm border border-[#242424] bg-[#0A0A0A] font-mono text-[#8A8A8A] transition-colors hover:border-[#3A3A3A] hover:text-[#C8C8C8] disabled:opacity-40",
-            compact
-              ? "px-1.5 py-px text-[8px] leading-3"
-              : "px-2 py-0.5 text-[9px] leading-4",
-          )}
-        >
-          {prompt}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function MarketChatSurface({
   data,
   compact = false,
   blocked = false,
-  hintsPhase = "visible",
   onChatStart,
 }: {
   data: StatusPayload | null;
   compact?: boolean;
   blocked?: boolean;
-  hintsPhase?: FadePhase;
   onChatStart?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
@@ -463,8 +422,10 @@ function MarketChatSurface({
     <div
       className={cx(
         "flex min-h-0 flex-1 flex-col",
+        compact && "pb-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom,0px))]",
         blocked && "pointer-events-none select-none opacity-40",
       )}
+      style={compact ? ({ "--mobile-nav-height": `${MOBILE_NAV_HEIGHT}px` } as CSSProperties) : undefined}
       aria-hidden={blocked}
     >
       <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto px-4">
@@ -490,14 +451,6 @@ function MarketChatSurface({
         </div>
       </div>
 
-      {hintsPhase !== "hidden" ? (
-        <SuggestedPromptBar
-          onSelect={sendMessage}
-          disabled={interactionDisabled}
-          compact={compact}
-          fading={hintsPhase === "out"}
-        />
-      ) : null}
       <ChatComposer
         value={draft}
         onChange={setDraft}
@@ -548,11 +501,8 @@ export function MarketChatPanel({
   const { phase: greetingPhase, dismiss: dismissGreeting } = useFadePhase(
     chatAlreadyStarted ? "hidden" : "visible",
   );
-  const { phase: hintsPhase, dismiss: dismissHints } = useFadePhase(chatAlreadyStarted ? "hidden" : "visible");
-
   function handleChatStart() {
     dismissGreeting();
-    dismissHints();
   }
 
   return (
@@ -577,7 +527,6 @@ export function MarketChatPanel({
         data={data}
         compact={compact}
         blocked={!accepted}
-        hintsPhase={hintsPhase}
         onChatStart={handleChatStart}
       />
     </section>

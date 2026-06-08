@@ -3065,7 +3065,7 @@ function MobileDashboard({
         style={{
           paddingBottom:
             activeSection === "market-chat"
-              ? `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))`
+              ? "0px"
               : `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)`,
         }}
       >

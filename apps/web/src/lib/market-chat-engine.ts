@@ -73,14 +73,6 @@ export function writeStoredChatMessages(messages: ChatMessage[]) {
   }
 }
 
-export const SUGGESTED_PROMPTS = [
-  "What's the latest market scan?",
-  "How does x402 pay for CMC data?",
-  "Show factor scores for the current target",
-  "When was market data last refreshed?",
-  "Recent x402 micropayments",
-] as const;
-
 export const INTEL_GREETING_PHRASES = [
   "Hey, good to see you",
   "Welcome back",
