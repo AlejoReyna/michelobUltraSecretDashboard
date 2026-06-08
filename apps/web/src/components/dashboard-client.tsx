@@ -229,14 +229,11 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function AsciiRaccoonWatermark({ enlarged = false }: { enlarged?: boolean }) {
+function AsciiRaccoonWatermark() {
   return (
     <div
       aria-hidden
-      className={cx(
-        "pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:opacity-25",
-        enlarged && "scale-[1.6]",
-      )}
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 scale-[1.6] bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:scale-100 lg:opacity-25"
     />
   );
 }
@@ -3021,11 +3018,11 @@ function MobileDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="technical-grid relative isolate flex min-h-dvh flex-col bg-black text-white lg:hidden">
-      <AsciiRaccoonWatermark enlarged={activeSection === "market-chat"} />
+    <div className="relative isolate flex min-h-dvh flex-col bg-black text-white lg:hidden">
+      <AsciiRaccoonWatermark />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
-        className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
+        className="technical-grid technical-grid--fine relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
         style={{
           paddingBottom:
             activeSection === "market-chat"

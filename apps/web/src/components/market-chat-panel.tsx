@@ -193,8 +193,8 @@ function SuggestedPromptBar({
   return (
     <div
       className={cx(
-        "flex shrink-0 flex-wrap gap-1.5 px-4",
-        compact ? "pb-1 pt-0" : "pb-2 pt-1",
+        "flex shrink-0 flex-wrap",
+        compact ? "gap-1 px-3 pb-1 pt-0" : "gap-1.5 px-4 pb-2 pt-1",
       )}
     >
       {SUGGESTED_PROMPTS.map((prompt) => (
@@ -203,7 +203,12 @@ function SuggestedPromptBar({
           type="button"
           disabled={disabled}
           onClick={() => onSelect(prompt)}
-          className="rounded-sm border border-[#242424] bg-[#0A0A0A] px-2 py-0.5 font-mono text-[9px] leading-4 text-[#8A8A8A] transition-colors hover:border-[#3A3A3A] hover:text-[#C8C8C8] disabled:opacity-40"
+          className={cx(
+            "rounded-sm border border-[#242424] bg-[#0A0A0A] font-mono text-[#8A8A8A] transition-colors hover:border-[#3A3A3A] hover:text-[#C8C8C8] disabled:opacity-40",
+            compact
+              ? "px-1.5 py-px text-[8px] leading-3"
+              : "px-2 py-0.5 text-[9px] leading-4",
+          )}
         >
           {prompt}
         </button>

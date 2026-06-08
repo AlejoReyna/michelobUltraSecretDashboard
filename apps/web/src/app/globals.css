@@ -4,6 +4,7 @@
   --background: #000000;
   --foreground: #ffffff;
   --grid-line-color: rgba(26, 26, 26, 0.72);
+  --grid-line-color-sub: rgba(26, 26, 26, 0.42);
 }
 
 @theme inline {
@@ -55,6 +56,19 @@ textarea {
     linear-gradient(90deg, var(--grid-line-color) 1px, transparent 1px);
   background-size: 5px 5px;
   background-position: -1px -1px;
+}
+
+.technical-grid--fine {
+  background-image:
+    linear-gradient(var(--grid-line-color-sub) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-color-sub) 1px, transparent 1px),
+    linear-gradient(var(--grid-line-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-color) 1px, transparent 1px);
+  background-size:
+    calc(5px / 3) calc(5px / 3),
+    calc(5px / 3) calc(5px / 3),
+    5px 5px,
+    5px 5px;
 }
 
 .console-scroll {
