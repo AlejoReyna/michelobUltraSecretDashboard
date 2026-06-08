@@ -21,3 +21,20 @@ test("redact recursively removes sensitive fields while preserving public hashes
   assert.equal(output.nested.normal, "visible");
   assert.equal(output.list[0].token, REDACTED);
 });
+
+test("redact preserves trading position numeric fields", () => {
+  const output = redact({
+    positions: [
+      {
+        symbol: "FLOKI",
+        amount_tokens: 1176.73,
+        entry_price: 0.0000199,
+        entry_value_usdc: 0.029,
+      },
+    ],
+  });
+
+  assert.equal(output.positions[0].amount_tokens, 1176.73);
+  assert.equal(output.positions[0].entry_price, 0.0000199);
+  assert.equal(output.positions[0].symbol, "FLOKI");
+});

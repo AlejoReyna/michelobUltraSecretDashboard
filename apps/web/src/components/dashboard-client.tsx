@@ -20,10 +20,12 @@ import {
   Github,
   Home,
   Layers,
+  MessageSquare,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
+import { MarketChatPanel } from "@/components/market-chat-panel";
 import {
   ViewportReveal,
   activityCellDelay,
@@ -68,13 +70,14 @@ import {
 } from "@/lib/log-event-details";
 import { statusSchema, type StatusPayload } from "@/lib/schemas";
 
-type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm";
+type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat";
 type ActivityView = "txs" | "sys";
 
 const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
   { label: "Home", icon: Home, section: "overview" },
   { label: "Positions", icon: Layers, section: "positions" },
   { label: "Activity", icon: Activity, section: "activity" },
+  { label: "Intel", icon: MessageSquare, section: "market-chat" },
   { label: "Wallet", icon: Wallet, section: "wallet" },
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
@@ -412,27 +415,159 @@ function latestPortfolioValue(data: StatusPayload | null) {
   return numericPortfolioValues(data?.decisions ?? []).at(-1) ?? null;
 }
 
-function pnlFromWindow(values: number[]) {
-  if (values.length < 2) {
+function hasLiveWalletTotal(data: StatusPayload | null): data is StatusPayload & { wallet: { portfolioTotalUsd: number } } {
+  return typeof data?.wallet.portfolioTotalUsd === "number" && Number.isFinite(data.wallet.portfolioTotalUsd);
+}
+
+function decisionsForPortfolioWindow(data: StatusPayload | null, range: TimeRange) {
+  const ranged = decisionsForRange(data, range);
+
+  if (!hasLiveWalletTotal(data)) {
+    return ranged;
+  }
+
+  // Live TWAK total is authoritative — paper-mode portfolio snapshots skew window metrics.
+  return ranged.filter((decision) => decision.mode?.toLowerCase() === "live");
+}
+
+function logWindowPnlDebug(
+  data: StatusPayload | null,
+  range: TimeRange,
+  input: {
+    rangedCount: number;
+    windowDecisions: StatusPayload["decisions"];
+    values: number[];
+    liveTotal: number | null;
+    start: number | null;
+    end: number | null;
+    absolute: number | null;
+    percent: number | null;
+  },
+) {
+  const cutoff = new Date(Date.now() - timeRangeDurationMs(range)).toISOString();
+  const decisionRow = (decision: StatusPayload["decisions"][number], used: boolean) => ({
+    used,
+    cycle: decision.cycle_number ?? null,
+    timestamp: decision.timestamp,
+    mode: decision.mode ?? null,
+    action: decision.action ?? null,
+    portfolio_value_usdc: decision.portfolio_value_usdc ?? null,
+  });
+
+  const windowIds = new Set(input.windowDecisions.map((decision) => decision.timestamp));
+
+  console.groupCollapsed(
+    `[window-pnl] ${range} → ${input.absolute === null ? "N/A" : formatSignedUsd(input.absolute)} (${input.percent === null ? "N/A" : formatPercent(input.percent)})`,
+  );
+  console.log("window", { range, cutoff, rangedDecisionCount: input.rangedCount, liveDecisionCount: input.windowDecisions.length });
+  console.log("inputs", {
+    liveWalletTotalUsd: input.liveTotal,
+    latestDecisionPortfolioUsd: data?.latestDecision?.portfolio_value_usdc ?? null,
+    latestDecisionMode: data?.latestDecision?.mode ?? null,
+    latestDecisionCycle: data?.latestDecision?.cycle_number ?? null,
+    walletRefreshedAt: data?.wallet.refreshedAt ?? null,
+  });
+  console.log("calculation", {
+    startSource: input.start !== null ? "first live decision portfolio_value_usdc in window" : null,
+    endSource:
+      input.liveTotal !== null
+        ? "wallet.portfolioTotalUsd (live TWAK)"
+        : input.end !== null
+          ? "last decision portfolio_value_usdc in window"
+          : null,
+    startUsd: input.start,
+    endUsd: input.end,
+    absoluteUsd: input.absolute,
+    percent: input.percent,
+    portfolioValuesInWindow: input.values,
+  });
+  console.table(
+    (data?.decisions ?? []).map((decision) =>
+      decisionRow(decision, windowIds.has(decision.timestamp)),
+    ),
+  );
+  console.groupEnd();
+}
+
+function windowPnl(data: StatusPayload | null, range: TimeRange) {
+  const ranged = decisionsForRange(data, range);
+  const windowDecisions = decisionsForPortfolioWindow(data, range);
+  const values = numericPortfolioValues(windowDecisions);
+  const liveTotal = hasLiveWalletTotal(data) ? data.wallet.portfolioTotalUsd : null;
+  const start = values[0] ?? null;
+  const end = liveTotal ?? values.at(-1) ?? null;
+
+  if (start === null || end === null) {
+    logWindowPnlDebug(data, range, {
+      rangedCount: ranged.length,
+      windowDecisions,
+      values,
+      liveTotal,
+      start,
+      end,
+      absolute: null,
+      percent: null,
+    });
     return { absolute: null, percent: null };
   }
 
-  const first = values[0];
-  const last = values.at(-1) ?? first;
-  const absolute = last - first;
-  const percent = first !== 0 ? (absolute / first) * 100 : null;
+  if (liveTotal === null && values.length < 2) {
+    logWindowPnlDebug(data, range, {
+      rangedCount: ranged.length,
+      windowDecisions,
+      values,
+      liveTotal,
+      start,
+      end,
+      absolute: null,
+      percent: null,
+    });
+    return { absolute: null, percent: null };
+  }
+
+  const absolute = end - start;
+  const percent = start !== 0 ? (absolute / start) * 100 : null;
+
+  logWindowPnlDebug(data, range, {
+    rangedCount: ranged.length,
+    windowDecisions,
+    values,
+    liveTotal,
+    start,
+    end,
+    absolute,
+    percent,
+  });
 
   return { absolute, percent };
 }
 
 function chartPoints(data: StatusPayload | null, range: TimeRange): PortfolioChartPoint[] {
-  const decisions = decisionsForRange(data, range);
+  const decisions = decisionsForPortfolioWindow(data, range);
   const points = decisions
     .filter((decision) => typeof decision.portfolio_value_usdc === "number")
     .map((decision, index) => ({
       label: decision.cycle_number ? `#${decision.cycle_number}` : `${index + 1}`,
       value: decision.portfolio_value_usdc ?? 0,
     }));
+
+  const liveTotal = hasLiveWalletTotal(data) ? data.wallet.portfolioTotalUsd : null;
+
+  if (liveTotal !== null) {
+    if (points.length === 0) {
+      return [
+        { label: "1", value: liveTotal },
+        { label: "2", value: liveTotal },
+      ];
+    }
+
+    const lastPoint = points.at(-1);
+    if (lastPoint && Math.abs(lastPoint.value - liveTotal) > 0.005) {
+      points.push({ label: "Live", value: liveTotal });
+    }
+
+    return points;
+  }
 
   if (points.length > 0) {
     return points;
@@ -700,15 +835,13 @@ function buildViewModel(
   error: string | null,
   timeRange: TimeRange,
 ): DashboardViewModel {
-  const rangedDecisions = decisionsForRange(data, timeRange);
-  const values = numericPortfolioValues(rangedDecisions);
   const latest = latestPortfolioValue(data);
-  const pnl = pnlFromWindow(values);
+  const pnl = windowPnl(data, timeRange);
   const pnlTone = (pnl.absolute ?? 0) >= 0 ? "positive" : "negative";
   const activeTrades = realActiveTradeCount(data);
   const successRate = executionSuccessRate(data?.executions ?? []);
   const chart = chartPoints(data, timeRange);
-  const performanceDelta =
+  const windowDelta =
     pnl.absolute !== null && pnl.absolute !== 0 ? formatPercent(pnl.percent) : undefined;
   const positionRows = activePositionRowsFromTelemetry(data);
   const totalPositionValue = positionRows.reduce((sum, row) => sum + (row.entryValueUsd ?? 0), 0);
@@ -719,16 +852,15 @@ function buildViewModel(
         label: "Total Balance",
         value: formatUsd(latest),
         unit: typeof latest === "number" ? "USD" : undefined,
-        delta: performanceDelta,
-        tone: pnlTone,
         tooltip: "Live TWAK portfolio total when available; otherwise latest strategy portfolio value.",
       },
       {
         label: "Window Profit/Loss",
         value: formatSignedUsd(pnl.absolute),
-        delta: performanceDelta,
+        delta: windowDelta,
         tone: pnlTone,
-        tooltip: "Portfolio movement across the decision window currently returned by the exporter.",
+        tooltip:
+          "Change from the first live decision in the selected window to the current TWAK portfolio total. Paper-mode snapshots are excluded when live wallet data is available.",
       },
       {
         label: "Active Trades",
@@ -752,7 +884,7 @@ function buildViewModel(
     mobileChartData: chart.slice(-16).length > 1 ? chart.slice(-16) : chart,
     totalBalance: formatUsd(latest),
     pnlValue: formatSignedUsd(pnl.absolute),
-    pnlDelta: performanceDelta,
+    pnlDelta: windowDelta,
     pnlTone,
   };
 }
@@ -2496,6 +2628,8 @@ function DesktopDashboard({
               />
             ) : section === "algorithm" ? (
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} desktop />
+            ) : section === "market-chat" ? (
+              <MarketChatPanel data={data} desktop />
             ) : (
               <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             )
@@ -2832,7 +2966,7 @@ function MobileBottomNav({
       aria-label="Mobile navigation"
     >
       <div
-        className="mx-auto grid max-w-[640px] grid-cols-5 px-0.5"
+        className="mx-auto grid max-w-[640px] grid-cols-6 px-0.5"
         style={{ height: MOBILE_NAV_HEIGHT }}
       >
         {dashboardNavItems.map((item) => {
@@ -2889,7 +3023,12 @@ function MobileDashboard({
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
         className="relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
-        style={{ paddingBottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)` }}
+        style={{
+          paddingBottom:
+            activeSection === "market-chat"
+              ? `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))`
+              : `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)`,
+        }}
       >
         <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
         <SectionTransition
@@ -2919,6 +3058,8 @@ function MobileDashboard({
               />
             ) : section === "algorithm" ? (
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
+            ) : section === "market-chat" ? (
+              <MarketChatPanel data={data} compact />
             ) : (
               <section className="flex min-h-0 flex-1 flex-col">
                 <MobileHeroMetrics view={view} />

@@ -351,6 +351,18 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
         sizeBytes: 116,
         modifiedAt: isoMinutesAgo(4),
       },
+      priceCache: {
+        path: "mock://price_cache.json",
+        exists: true,
+        sizeBytes: 48240,
+        modifiedAt: isoMinutesAgo(1),
+      },
+      volumeCache: {
+        path: "mock://volume_cache.json",
+        exists: true,
+        sizeBytes: 31880,
+        modifiedAt: isoMinutesAgo(1),
+      },
     },
     connection: {
       source: "mock",

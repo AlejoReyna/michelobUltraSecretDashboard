@@ -79,7 +79,49 @@ export async function GET() {
       );
     }
 
-    return json(parsed.data);
+    const payload = parsed.data;
+    const liveDecisions = payload.decisions.filter((decision) => decision.mode?.toLowerCase() === "live");
+    const firstLive = liveDecisions[0] ?? null;
+    const lastLive = liveDecisions.at(-1) ?? null;
+
+    console.info("[window-pnl:api]", {
+      walletPortfolioTotalUsd: payload.wallet.portfolioTotalUsd,
+      walletRefreshedAt: payload.wallet.refreshedAt,
+      latestDecision: payload.latestDecision
+        ? {
+            cycle: payload.latestDecision.cycle_number,
+            mode: payload.latestDecision.mode,
+            portfolio_value_usdc: payload.latestDecision.portfolio_value_usdc,
+            timestamp: payload.latestDecision.timestamp,
+          }
+        : null,
+      decisionCounts: {
+        total: payload.decisions.length,
+        live: liveDecisions.length,
+        paper: payload.decisions.filter((decision) => decision.mode?.toLowerCase() === "paper").length,
+      },
+      firstLiveDecision: firstLive
+        ? {
+            cycle: firstLive.cycle_number,
+            portfolio_value_usdc: firstLive.portfolio_value_usdc,
+            timestamp: firstLive.timestamp,
+          }
+        : null,
+      lastLiveDecision: lastLive
+        ? {
+            cycle: lastLive.cycle_number,
+            portfolio_value_usdc: lastLive.portfolio_value_usdc,
+            timestamp: lastLive.timestamp,
+          }
+        : null,
+      impliedWindowPnlFromFirstLive:
+        typeof payload.wallet.portfolioTotalUsd === "number" &&
+        typeof firstLive?.portfolio_value_usdc === "number"
+          ? payload.wallet.portfolioTotalUsd - firstLive.portfolio_value_usdc
+          : null,
+    });
+
+    return json(payload);
   } catch (error) {
     return json(
       createUnavailableStatus(`Exporter unreachable: ${safeMessage(error)}`),
