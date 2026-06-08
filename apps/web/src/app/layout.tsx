@@ -5,7 +5,9 @@ export const metadata: Metadata = {
   title: "NoNamedYetBot",
   description: "Industrial trading bot dashboard for crypto operations.",
   icons: {
-    icon: "/raccoon.png",
+    icon: [{ url: "/raccoon.png", type: "image/png" }],
+    shortcut: "/raccoon.png",
+    apple: "/raccoon.png",
   },
 };
 

@@ -217,20 +217,23 @@ function ChatComposer({
   onSubmit,
   disabled,
   compact = false,
+  desktop = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
   compact?: boolean;
+  desktop?: boolean;
 }) {
   const canSend = value.trim().length > 0 && !disabled;
 
   return (
     <form
       className={cx(
-        "flex w-full shrink-0 items-center gap-2 border-t border-[#1A1A1A] bg-black/90 px-4 py-2.5",
-        !compact && "sticky bottom-0 z-10",
+        "flex w-full shrink-0 items-center gap-2 border-t border-[#2A2A2A] bg-[#1C1C1C]",
+        compact && "px-4 py-2.5",
+        desktop && "sticky bottom-0 z-10 px-8 py-[18.4px]",
         disabled && "opacity-50",
       )}
       onSubmit={(event) => {
@@ -256,7 +259,7 @@ function ChatComposer({
         disabled={disabled}
         className={cx(
           "max-h-28 min-h-0 flex-1 resize-none bg-transparent py-0 font-mono text-white outline-none placeholder:text-[#5A5A5A]",
-          compact ? "text-[12px] leading-5" : "text-[13px] leading-6",
+          compact ? "text-[12px] leading-5" : desktop ? "text-[15px] leading-[44.8px]" : "text-[15px] leading-[28px]",
         )}
         aria-label="Market chat message"
       />
@@ -265,13 +268,14 @@ function ChatComposer({
         disabled={!canSend}
         aria-label="Send message"
         className={cx(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border transition-colors",
+          "flex shrink-0 items-center justify-center rounded-sm border transition-colors",
+          compact ? "h-8 w-8" : desktop ? "h-[59.2px] w-[59.2px]" : "h-[37px] w-[37px]",
           canSend
             ? "border-[#444444] bg-white text-black hover:bg-[#E8E8E8]"
-            : "border-[#222222] bg-[#111111] text-[#444444]",
+            : "border-[#3A3A3A] bg-[#252525] text-[#888888]",
         )}
       >
-        <ArrowUp size={16} strokeWidth={2.25} aria-hidden="true" />
+        <ArrowUp size={compact ? 16 : 18} strokeWidth={2.25} aria-hidden="true" />
       </button>
     </form>
   );
@@ -280,11 +284,13 @@ function ChatComposer({
 function MarketChatSurface({
   data,
   compact = false,
+  desktop = false,
   blocked = false,
   onChatStart,
 }: {
   data: StatusPayload | null;
   compact?: boolean;
+  desktop?: boolean;
   blocked?: boolean;
   onChatStart?: () => void;
 }) {
@@ -428,7 +434,13 @@ function MarketChatSurface({
       style={compact ? ({ "--mobile-nav-height": `${MOBILE_NAV_HEIGHT}px` } as CSSProperties) : undefined}
       aria-hidden={blocked}
     >
-      <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto px-4">
+      <div
+        ref={scrollRef}
+        className={cx(
+          "console-scroll min-h-0 flex-1 overflow-y-auto",
+          compact ? "px-4" : desktop ? "px-8" : "px-4",
+        )}
+      >
         <div className="flex flex-col gap-5 py-4">
           {messages.map((message) => (
             <ChatBubble
@@ -457,6 +469,7 @@ function MarketChatSurface({
         onSubmit={() => sendMessage(draft)}
         disabled={interactionDisabled}
         compact={compact}
+        desktop={desktop}
       />
     </div>
   );
@@ -510,7 +523,7 @@ export function MarketChatPanel({
       className={cx(
         "relative flex min-h-0 flex-1 flex-col overflow-hidden",
         compact && "pt-4",
-        desktop && "px-8 pt-6",
+        desktop && "pt-6",
       )}
     >
       {ready && !accepted ? <DisclaimerGate onAccept={accept} /> : null}
@@ -518,6 +531,7 @@ export function MarketChatPanel({
         className={cx(
           "shrink-0 border-b border-[#1A1A1A]",
           compact && "px-4",
+          desktop && "px-8",
           greetingPhase === "hidden" ? "pb-2" : "pb-3",
         )}
       >
@@ -526,6 +540,7 @@ export function MarketChatPanel({
       <MarketChatSurface
         data={data}
         compact={compact}
+        desktop={desktop}
         blocked={!accepted}
         onChatStart={handleChatStart}
       />

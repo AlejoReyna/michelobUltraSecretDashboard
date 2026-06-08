@@ -1,0 +1,11 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">No Named NN Chart Line Logo</title>
+  <desc id="desc">A minimal white NN monogram logo with an upward crypto trading chart line, using Geist font. The chart line colors are inverted with black outer stroke and white inner stroke.</desc>
+
+  <g font-family="Geist, Arial, Helvetica, sans-serif" font-weight="900" font-size="610" letter-spacing="-92">
+    <text x="74" y="578" fill="#FFFFFF">NN</text>
+  </g>
+
+  <path d="M104 612L436 286L684 448L1090 42" stroke="#000000" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M104 612L436 286L684 448L1090 42" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

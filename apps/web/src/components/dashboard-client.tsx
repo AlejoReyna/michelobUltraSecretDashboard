@@ -233,7 +233,7 @@ function AsciiRaccoonWatermark() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 scale-[1.6] bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-20 mix-blend-screen lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:scale-100 lg:opacity-25"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 scale-[1.6] bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-25 mix-blend-screen lg:left-[54%] lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:scale-[2.35] lg:opacity-20"
     />
   );
 }
@@ -902,7 +902,21 @@ function DesktopNavRail({
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
-      <div className="flex flex-1 flex-col gap-0.5 px-3 py-5">
+      <div className="shrink-0 px-3 pb-4 pt-5">
+        <div className="relative w-[62%]">
+          <span className="absolute bottom-[12%] left-[79%] z-0 whitespace-nowrap font-mono text-[7.2px] leading-tight tracking-[0.04em] text-[#D8D8D8]">
+            by Alexis Reyna
+          </span>
+          <img
+            src="/inverted.svg"
+            alt="No Named"
+            className="relative z-10 h-auto w-full"
+            width={1200}
+            height={700}
+          />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-0.5 px-3 pb-5">
         {dashboardNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.section === activeSection;
@@ -2598,7 +2612,7 @@ function DesktopDashboard({
     <div className="relative isolate hidden min-h-screen bg-black text-white lg:flex">
       <AsciiRaccoonWatermark />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] technical-grid flex min-h-screen min-w-0 flex-1 flex-col">
+      <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-screen min-w-0 flex-1 flex-col">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} fullWidth />
         <SectionTransition
@@ -2804,7 +2818,7 @@ function OverviewTopBar({
         rel="noreferrer"
         className={cx(
           "flex items-center justify-between gap-3 py-2.5",
-          fullWidth ? "px-8" : "mx-auto w-full max-w-[640px] px-4",
+          fullWidth ? "px-8" : "w-full px-4",
         )}
         aria-label="Open No Named Yet Bot on GitHub"
       >
@@ -3006,7 +3020,7 @@ function MobileBottomNav({
       aria-label="Mobile navigation"
     >
       <div
-        className="mx-auto flex max-w-[640px] items-center justify-between px-1"
+        className="flex w-full items-center justify-between px-1"
         style={{ height: MOBILE_NAV_HEIGHT }}
       >
         <div className="flex flex-1 items-center justify-evenly">
@@ -3061,7 +3075,7 @@ function MobileDashboard({
       <AsciiRaccoonWatermark />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
-        className="technical-grid technical-grid--fine relative z-[1] mx-auto flex min-h-0 w-full max-w-[640px] flex-1 flex-col"
+        className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col"
         style={{
           paddingBottom:
             activeSection === "market-chat"
