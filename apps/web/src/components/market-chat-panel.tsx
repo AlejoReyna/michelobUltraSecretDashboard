@@ -13,6 +13,8 @@ import {
 import type { StatusPayload } from "@/lib/schemas";
 
 const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
+const MOBILE_NAV_HEIGHT = 52;
+const MOBILE_CHAT_FOOTER_HEIGHT = 72;
 
 const DISCLAIMER_TEXT =
   "The information presented here isn't intended to be used as market picks or signals, use the presented data with caution. Gambling destroys.";
@@ -131,7 +133,8 @@ function ChatComposer({
   return (
     <form
       className={cx(
-        "sticky bottom-0 z-10 flex w-full shrink-0 items-center gap-2 border-t border-[#1A1A1A] bg-black/90 px-4 py-2.5",
+        "flex w-full shrink-0 items-center gap-2 border-t border-[#1A1A1A] bg-black/90 px-4 py-2.5",
+        !compact && "sticky bottom-0 z-10",
         disabled && "opacity-50",
       )}
       onSubmit={(event) => {
@@ -264,7 +267,11 @@ function MarketChatSurface({
       )}
       aria-hidden={blocked}
     >
-      <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto px-4">
+      <div
+        ref={scrollRef}
+        className="console-scroll min-h-0 flex-1 overflow-y-auto px-4"
+        style={compact ? { paddingBottom: MOBILE_CHAT_FOOTER_HEIGHT } : undefined}
+      >
         <div className="flex flex-col gap-5 py-4">
           <ChatSessionHeader />
           {messages.map((message) => (
@@ -284,14 +291,32 @@ function MarketChatSurface({
         </div>
       </div>
 
-      <SuggestedPromptBar onSelect={sendMessage} disabled={interactionDisabled} compact={compact} />
-      <ChatComposer
-        value={draft}
-        onChange={setDraft}
-        onSubmit={() => sendMessage(draft)}
-        disabled={interactionDisabled}
-        compact={compact}
-      />
+      {compact ? (
+        <div
+          className="fixed inset-x-0 z-30 mx-auto max-w-[640px]"
+          style={{ bottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))` }}
+        >
+          <SuggestedPromptBar onSelect={sendMessage} disabled={interactionDisabled} compact />
+          <ChatComposer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => sendMessage(draft)}
+            disabled={interactionDisabled}
+            compact
+          />
+        </div>
+      ) : (
+        <>
+          <SuggestedPromptBar onSelect={sendMessage} disabled={interactionDisabled} compact={compact} />
+          <ChatComposer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => sendMessage(draft)}
+            disabled={interactionDisabled}
+            compact={compact}
+          />
+        </>
+      )}
     </div>
   );
 }
