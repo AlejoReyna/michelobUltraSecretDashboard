@@ -20,7 +20,7 @@ import {
   Github,
   Home,
   Layers,
-  MessageSquare,
+  Terminal,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -77,7 +77,7 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
   { label: "Home", icon: Home, section: "overview" },
   { label: "Positions", icon: Layers, section: "positions" },
   { label: "Activity", icon: Activity, section: "activity" },
-  { label: "Intel", icon: MessageSquare, section: "market-chat" },
+  { label: "Intel", icon: Terminal, section: "market-chat" },
   { label: "Wallet", icon: Wallet, section: "wallet" },
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
@@ -2952,6 +2952,66 @@ function MobilePerformanceWidget({
   );
 }
 
+// Guide is desktop-only; mobile bar is 2 | terminal | 2.
+const mobileNavSideItems = {
+  left: dashboardNavItems.slice(0, 2),
+  center: dashboardNavItems[3]!,
+  right: [dashboardNavItems[2]!, dashboardNavItems[4]!],
+} as const;
+
+function MobileNavItemButton({
+  item,
+  active,
+  onNavigate,
+  variant = "default",
+}: {
+  item: (typeof dashboardNavItems)[number];
+  active: boolean;
+  onNavigate: (section: DashboardSection) => void;
+  variant?: "default" | "terminal";
+}) {
+  const Icon = item.icon;
+  const isTerminal = variant === "terminal";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(item.section)}
+      aria-current={active ? "page" : undefined}
+      aria-label={item.label}
+      className={cx(
+        "relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
+        isTerminal ? "min-w-[52px]" : "",
+        active ? "text-white" : "text-[#7A7A7A] active:text-white",
+      )}
+    >
+      {active && !isTerminal ? (
+        <span className="absolute top-0 h-0.5 w-4 rounded-full bg-white" aria-hidden="true" />
+      ) : null}
+      {isTerminal ? (
+        <span
+          className={cx(
+            "-mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-colors",
+            active
+              ? "border-white bg-white/10 text-white"
+              : "border-[#2A2A2A] bg-[#0A0A0A] text-[#9A9A9A] active:border-white/60 active:text-white",
+          )}
+          aria-hidden="true"
+        >
+          <Icon size={20} strokeWidth={active ? 2.25 : 1.85} />
+        </span>
+      ) : (
+        <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+      )}
+      {!isTerminal ? (
+        <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-[0.06em]">
+          {item.label}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function MobileBottomNav({
   activeSection,
   onNavigate,
@@ -2966,35 +3026,35 @@ function MobileBottomNav({
       aria-label="Mobile navigation"
     >
       <div
-        className="mx-auto grid max-w-[640px] grid-cols-6 px-0.5"
+        className="mx-auto flex max-w-[640px] items-center justify-between px-1"
         style={{ height: MOBILE_NAV_HEIGHT }}
       >
-        {dashboardNavItems.map((item) => {
-          const Icon = item.icon;
-          const active = item.section === activeSection;
-
-          return (
-            <button
+        <div className="flex flex-1 items-center justify-evenly">
+          {mobileNavSideItems.left.map((item) => (
+            <MobileNavItemButton
               key={item.section}
-              type="button"
-              onClick={() => onNavigate(item.section)}
-              aria-current={active ? "page" : undefined}
-              aria-label={item.label}
-              className={cx(
-                "relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
-                active ? "text-white" : "text-[#7A7A7A] active:text-white",
-              )}
-            >
-              {active ? (
-                <span className="absolute top-0 h-0.5 w-4 rounded-full bg-white" aria-hidden="true" />
-              ) : null}
-              <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-              <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-[0.06em]">
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
+              item={item}
+              active={item.section === activeSection}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+        <MobileNavItemButton
+          item={mobileNavSideItems.center}
+          active={mobileNavSideItems.center.section === activeSection}
+          onNavigate={onNavigate}
+          variant="terminal"
+        />
+        <div className="flex flex-1 items-center justify-evenly">
+          {mobileNavSideItems.right.map((item) => (
+            <MobileNavItemButton
+              key={item.section}
+              item={item}
+              active={item.section === activeSection}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
       </div>
     </nav>
   );
