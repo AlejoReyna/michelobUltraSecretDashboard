@@ -255,11 +255,26 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function AsciiRaccoonWatermark() {
+function AsciiRaccoonWatermark({ glitch = false }: { glitch?: boolean }) {
+  const layout =
+    "pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] bg-contain bg-center bg-no-repeat mix-blend-screen lg:left-[54%] lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)]";
+
+  if (glitch) {
+    return (
+      <div
+        aria-hidden
+        className={cx(layout, "ascii-watermark-glitch bg-[url(/ascii-raccoon-glitch.png)]")}
+      />
+    );
+  }
+
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[min(240px,28vh)] w-[min(240px,44vw)] -translate-x-1/2 -translate-y-1/2 scale-[1.6] bg-[url(/ascii-raccoon.png)] bg-contain bg-center bg-no-repeat opacity-25 mix-blend-screen lg:left-[54%] lg:h-[min(280px,36vh)] lg:w-[min(280px,48vw)] lg:scale-[2.35] lg:opacity-20"
+      className={cx(
+        layout,
+        "-translate-x-1/2 -translate-y-1/2 scale-[1.6] opacity-25 lg:scale-[2.35] lg:opacity-20 bg-[url(/ascii-raccoon.png)]",
+      )}
     />
   );
 }
@@ -3025,7 +3040,7 @@ function DesktopDashboard({
 }) {
   return (
     <div className="relative isolate hidden min-h-dvh flex-1 bg-black text-white lg:flex">
-      <AsciiRaccoonWatermark />
+      <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
       <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
@@ -3069,58 +3084,99 @@ function DesktopDashboard({
 }
 
 const HOME_SUMMARY_ROW_LIMIT = 5;
+const HOME_SUMMARY_MOBILE_ROW_LIMIT = 3;
 const homeActivityGridClass = "grid grid-cols-3";
 
 function HomePositionsSummary({
   positionRows,
   totalPositionValue,
+  compact = false,
 }: {
   positionRows: PositionRow[];
   totalPositionValue: string;
+  compact?: boolean;
 }) {
+  const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
   const rows = [...positionRows]
     .sort((left, right) => (right.entryValueUsd ?? 0) - (left.entryValueUsd ?? 0))
-    .slice(0, HOME_SUMMARY_ROW_LIMIT);
+    .slice(0, rowLimit);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
-      <div className="flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+      <div
+        className={cx(
+          "flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A]",
+          compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
+        )}
+      >
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-          <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Active Positions</h2>
+          <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
+            Active Positions
+          </h2>
         </div>
-        <span className="font-mono text-[13px] tabular-nums text-[#B8B8B8]">{totalPositionValue}</span>
+        <span className={cx("font-mono tabular-nums text-[#B8B8B8]", compact ? "text-[11px]" : "text-[13px]")}>
+          {totalPositionValue}
+        </span>
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[1.5fr_1fr_1fr] border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+        <div
+          className={cx(
+            "border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            compact
+              ? "grid grid-cols-[1fr_auto] px-3 py-1.5 text-[9px]"
+              : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 text-[10px]",
+          )}
+        >
           <span>Token</span>
           <span className="text-right">Value</span>
-          <span className="text-right">Stop</span>
+          {!compact ? <span className="text-right">Stop</span> : null}
         </div>
         {rows.length === 0 ? (
-          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">No open positions in positions.json</div>
+          <div className={cx("font-mono text-[#666666]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+            No open positions in positions.json
+          </div>
         ) : (
           <div className="divide-y divide-[#1A1A2A]">
             {rows.map((row) => (
-              <div key={row.id} className="grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#070707]">
-                <span className="truncate font-mono text-[13px] text-[#D0D0D0]">
+              <div
+                key={row.id}
+                className={cx(
+                  compact
+                    ? "grid grid-cols-[1fr_auto] px-3 py-1.5 hover:bg-[#070707]"
+                    : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#070707]",
+                )}
+              >
+                <span className={cx("truncate font-mono text-[#D0D0D0]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <TokenIcon symbol={row.symbol} size={14} />
+                    <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
                   </span>
                 </span>
-                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#D0D0D0]">
+                <span
+                  className={cx(
+                    "truncate text-right font-mono tabular-nums text-[#D0D0D0]",
+                    compact ? "text-[11px]" : "text-[13px]",
+                  )}
+                >
                   {formatUsd(row.entryValueUsd)}
                 </span>
-                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#FFD21A]">
-                  {formatPrice(row.trailingStopPrice)}
-                </span>
+                {!compact ? (
+                  <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#FFD21A]">
+                    {formatPrice(row.trailingStopPrice)}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>
         )}
       </div>
-      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+      <div
+        className={cx(
+          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
+        )}
+      >
         {positionRows.length} total {positionRows.length === 1 ? "position" : "positions"}
       </div>
     </div>
@@ -3131,57 +3187,109 @@ function homeActivityToken(row: ActivityRow): string | null {
   return row.token ?? tokenFromAmountLabel(row.amount);
 }
 
-function HomeActivitySummary({ activityRows }: { activityRows: ActivityRow[] }) {
-  const rows = activityRows.slice(0, HOME_SUMMARY_ROW_LIMIT);
+function HomeActivitySummary({ activityRows, compact = false }: { activityRows: ActivityRow[]; compact?: boolean }) {
+  const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
+  const rows = activityRows.slice(0, rowLimit);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
-      <div className="shrink-0 border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+      <div className={cx("shrink-0 border-b border-[#1A1A2A]", compact ? "px-2 py-1.5" : "px-4 pb-3 pt-4")}>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-        <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Recent Activity</h2>
+        <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[11px]" : "mt-1 text-[16px]")}>
+          Recent Activity
+        </h2>
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            homeActivityGridClass,
-            "border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]",
+            "border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            compact
+              ? "grid grid-cols-[1fr_auto] px-2 py-1 text-[8px]"
+              : cx(homeActivityGridClass, "px-4 py-2 text-[10px]"),
           )}
         >
-          <span className="text-left">Date</span>
-          <span className="text-center">Token</span>
-          <span className="text-center">Status</span>
+          <span className="text-left">{compact ? "Event" : "Date"}</span>
+          {!compact ? <span className="text-center">Token</span> : null}
+          <span className={compact ? "text-right" : "text-center"}>Status</span>
         </div>
         {rows.length === 0 ? (
-          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">No recent activity</div>
+          <div className={cx("font-mono text-[#666666]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
+            No recent activity
+          </div>
         ) : (
           <div className="divide-y divide-[#1A1A2A]">
             {rows.map((row) => {
               const token = homeActivityToken(row);
 
-              return (
-              <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#070707]")}>
-                <span className="truncate text-left font-mono text-[13px] font-bold tabular-nums text-[#F2F2F2]">
-                  {formatOpenedAt(row.timestamp)}
-                </span>
-                <span className="flex items-center justify-center">
-                  {token ? (
-                    <span title={token} aria-label={token}>
-                      <TokenIcon symbol={token} size={18} />
+              if (compact) {
+                const eventContent = (
+                  <span className="truncate font-mono text-[10px] font-bold text-[#F2F2F2]">{row.amount}</span>
+                );
+
+                return (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[1fr_auto] items-center px-2 py-1 hover:bg-[#070707]"
+                  >
+                    <span className="min-w-0 truncate text-left">
+                      {row.explorerUrl ? (
+                        <a
+                          href={row.explorerUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="truncate font-mono text-[10px] font-bold text-[#8FD9FF] transition-colors hover:text-white"
+                          title={row.explorerUrl}
+                        >
+                          {row.amount}
+                        </a>
+                      ) : (
+                        eventContent
+                      )}
                     </span>
-                  ) : (
-                    <span className="font-mono text-[13px] text-[#666666]">—</span>
-                  )}
-                </span>
-                <span className="flex items-center justify-center">
-                  <ActivityStatusIndicator status={row.status} tone={row.tone} compact />
-                </span>
-              </div>
+                    <span className="flex items-center justify-end gap-1">
+                      <StatusDot status={row.status} tone={row.tone} />
+                      <span
+                        className={cx(
+                          "truncate font-mono text-[8px] uppercase",
+                          statusToneTextClass(row.tone),
+                        )}
+                      >
+                        {row.status}
+                      </span>
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#070707]")}>
+                  <span className="truncate text-left font-mono text-[13px] font-bold tabular-nums text-[#F2F2F2]">
+                    {formatOpenedAt(row.timestamp)}
+                  </span>
+                  <span className="flex items-center justify-center">
+                    {token ? (
+                      <span title={token} aria-label={token}>
+                        <TokenIcon symbol={token} size={18} />
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[13px] text-[#666666]">—</span>
+                    )}
+                  </span>
+                  <span className="flex items-center justify-center">
+                    <ActivityStatusIndicator status={row.status} tone={row.tone} compact />
+                  </span>
+                </div>
               );
             })}
           </div>
         )}
       </div>
-      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+      <div
+        className={cx(
+          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          compact ? "px-2 py-0.5 text-[9px]" : "px-4 py-2 text-[10px]",
+        )}
+      >
         {activityRows.length} total {activityRows.length === 1 ? "event" : "events"}
       </div>
     </div>
@@ -3191,48 +3299,92 @@ function HomeActivitySummary({ activityRows }: { activityRows: ActivityRow[] }) 
 function HomeWalletSummary({
   walletBalances,
   agentMode,
+  compact = false,
 }: {
   walletBalances: WalletBalanceRow[];
   agentMode: string;
+  compact?: boolean;
 }) {
   const paperMode = agentMode === "PAPER";
+  const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
   const rows = [...walletBalances]
     .sort((left, right) => (right.valueUsd ?? 0) - (left.valueUsd ?? 0))
-    .slice(0, HOME_SUMMARY_ROW_LIMIT);
+    .slice(0, rowLimit);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
-      <div className="flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+      <div
+        className={cx(
+          "flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A]",
+          compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
+        )}
+      >
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
-          <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Live Holdings</h2>
+          <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
+            Live Holdings
+          </h2>
         </div>
         {paperMode ? (
-          <span className="border border-[#2A2A2A] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+          <span
+            className={cx(
+              "border border-[#2A2A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+              compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
+            )}
+          >
             Paper mode
           </span>
         ) : null}
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="grid grid-cols-[1fr_1.5fr_1fr] border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+        <div
+          className={cx(
+            "grid border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            compact
+              ? "grid-cols-[auto_1fr_auto] px-3 py-1.5 text-[9px]"
+              : "grid-cols-[1fr_1.5fr_1fr] px-4 py-2 text-[10px]",
+          )}
+        >
           <span>Chain</span>
           <span>Token</span>
           <span className="text-right">Value</span>
         </div>
         {rows.length === 0 ? (
-          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">Waiting for TWAK wallet balances</div>
+          <div className={cx("font-mono text-[#666666]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+            Waiting for TWAK wallet balances
+          </div>
         ) : (
           <div className="divide-y divide-[#1A1A2A]">
             {rows.map((row) => (
-              <div key={`${row.chain}-${row.symbol}`} className="grid grid-cols-[1fr_1.5fr_1fr] px-4 py-2 hover:bg-[#070707]">
-                <span className="truncate font-mono text-[13px] uppercase text-[#8A8A8A]">{row.chain}</span>
-                <span className="truncate font-mono text-[13px] text-[#D0D0D0]">
+              <div
+                key={`${row.chain}-${row.symbol}`}
+                className={cx(
+                  "hover:bg-[#070707]",
+                  compact
+                    ? "grid grid-cols-[auto_1fr_auto] px-3 py-1.5"
+                    : "grid grid-cols-[1fr_1.5fr_1fr] px-4 py-2",
+                )}
+              >
+                <span
+                  className={cx(
+                    "truncate font-mono uppercase text-[#8A8A8A]",
+                    compact ? "text-[11px]" : "text-[13px]",
+                  )}
+                >
+                  {row.chain}
+                </span>
+                <span className={cx("truncate font-mono text-[#D0D0D0]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <TokenIcon symbol={row.symbol} size={14} />
+                    <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
                   </span>
                 </span>
-                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#D0D0D0]">
+                <span
+                  className={cx(
+                    "truncate text-right font-mono tabular-nums text-[#D0D0D0]",
+                    compact ? "text-[11px]" : "text-[13px]",
+                  )}
+                >
                   {formatUsd(row.valueUsd)}
                 </span>
               </div>
@@ -3240,7 +3392,12 @@ function HomeWalletSummary({
           </div>
         )}
       </div>
-      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+      <div
+        className={cx(
+          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
+        )}
+      >
         {walletBalances.length} total {walletBalances.length === 1 ? "asset" : "assets"}
       </div>
     </div>
@@ -3427,7 +3584,7 @@ function OverviewTopBar({
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="shrink-0 px-4 pt-4">
+    <section className="shrink-0 px-4 py-2">
       <div className="grid grid-cols-2 gap-x-4">
         <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
           <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Total Balance</div>
@@ -3458,7 +3615,7 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
           </div>
         </ViewportReveal>
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#1A1A1A]" />
     </section>
   );
 }
@@ -3547,26 +3704,38 @@ function MobileOverviewSection({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
       <MobileHeroMetrics view={view} />
-      <div className="flex min-h-0 flex-1 flex-col p-4">
-        <ViewportReveal
-          variant="fade"
-          delay={200}
-          duration="slow"
-          className="relative flex h-[300px] shrink-0 flex-col border border-[#2A2A2A] bg-black/80"
-        >
-          <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-          <div className="flex min-h-0 flex-1 flex-col px-2 py-2">
-            <PortfolioChart data={view.mobileChartData} variant="mobile" />
-          </div>
-        </ViewportReveal>
-        <div className="mt-3 min-h-0 flex-1 space-y-3 pb-24">
-          <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} />
-          <HomeActivitySummary activityRows={view.activityRows} />
-          <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} />
+      <ViewportReveal
+        variant="fade"
+        delay={120}
+        duration="normal"
+        className="relative mx-4 shrink-0 h-[140px] border border-[#2A2A2A] bg-black/80"
+      >
+        <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+        <div className="absolute inset-0 p-2">
+          <PortfolioChart data={view.mobileChartData} variant="mobile" />
         </div>
-      </div>
+      </ViewportReveal>
+      <ViewportReveal
+        variant="up"
+        delay={200}
+        duration="normal"
+        className="flex min-h-0 flex-1 flex-col px-4 pb-4"
+      >
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
+          <div className="col-span-1 flex min-h-0 flex-col">
+            <HomePositionsSummary
+              positionRows={view.positionRows}
+              totalPositionValue={view.totalPositionValue}
+              compact
+            />
+          </div>
+          <div className="col-span-1 flex min-h-0 flex-col">
+            <HomeActivitySummary activityRows={view.activityRows} compact />
+          </div>
+        </div>
+      </ViewportReveal>
     </section>
   );
 }
@@ -3620,14 +3789,10 @@ function MobileBottomNav({
 }) {
   return (
     <nav
-      className="relative z-40 shrink-0 border-t border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A2A] bg-black/95 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
-      <div
-        className="flex w-full items-center justify-between px-1"
-        style={{ height: MOBILE_NAV_HEIGHT }}
-      >
+      <div className="flex h-full w-full items-center justify-between px-1">
         <div className="flex flex-1 items-center justify-evenly">
           {mobileNavSideItems.left.map((item) => (
             <MobileNavItemButton
@@ -3676,20 +3841,17 @@ function MobileDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative isolate flex min-h-dvh flex-1 flex-col bg-black text-white lg:hidden">
-      <AsciiRaccoonWatermark />
+    <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-black text-white lg:hidden">
+      <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main
-        className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col"
-        style={{
-          paddingBottom: activeSection === "market-chat" ? "0px" : "16px",
-        }}
-      >
-        <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
+      <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div className="shrink-0">
+          <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
+        </div>
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
-          className="flex min-h-0 flex-1 flex-col"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
           {(section) =>
             section === "activity" ? (
@@ -3716,7 +3878,11 @@ function MobileDashboard({
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} compact />
             ) : (
-              <MobileOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+              <MobileOverviewSection
+                view={view}
+                timeRange={timeRange}
+                onTimeRangeChange={onTimeRangeChange}
+              />
             )
           }
         </SectionTransition>
