@@ -14,6 +14,6 @@
     "build:web": "npm run build --workspace apps/web",
     "build:exporter": "npm run build --workspace agent-exporter",
     "lint": "npm run lint --workspace apps/web",
-    "test": "npm run test --workspace agent-exporter"
+    "test": "npm run test --workspace agent-exporter && npm run test --workspace apps/web"
   }
 }

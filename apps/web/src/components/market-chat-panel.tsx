@@ -8,7 +8,6 @@ import {
   createUserMessage,
   pickIntelGreeting,
   readStoredChatMessages,
-  resolveMarketChatResponse,
   SUGGESTED_PROMPTS,
   writeStoredChatMessages,
   type ChatMessage,
@@ -16,8 +15,6 @@ import {
 import type { StatusPayload } from "@/lib/schemas";
 
 const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
-const MOBILE_NAV_HEIGHT = 52;
-const MOBILE_CHAT_FOOTER_HEIGHT = 72;
 
 const FADE_OUT_MS = 180;
 const DISCLAIMER_TEXT_DELAY_MS = 480;
@@ -164,10 +161,12 @@ function DisclaimerGate({ onAccept }: { onAccept: () => void }) {
 function ChatBubble({
   message,
   animate = false,
+  streaming = false,
   compact = false,
 }: {
   message: ChatMessage;
   animate?: boolean;
+  streaming?: boolean;
   compact?: boolean;
 }) {
   const isUser = message.role === "user";
@@ -176,6 +175,11 @@ function ChatBubble({
   return (
     <div className={cx("flex w-full", isUser ? "justify-end" : "justify-start")}>
       <div className={cx("max-w-[min(100%,42rem)]", isUser ? "text-right" : "text-left")}>
+        {!isUser && message.fallback ? (
+          <div className="mb-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A6A3A]">
+            offline mode
+          </div>
+        ) : null}
         <div
           className={cx(
             "inline-block text-left font-mono leading-[1.55] whitespace-pre-wrap break-words",
@@ -188,7 +192,10 @@ function ChatBubble({
           {animate && !isUser ? (
             <TypewriterText text={content} speed={14} startDelay={120} />
           ) : (
-            content
+            <>
+              {content}
+              {streaming ? <span className="typewriter-cursor" aria-hidden="true" /> : null}
+            </>
           )}
         </div>
         <div
@@ -326,6 +333,7 @@ function MarketChatSurface({
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -340,13 +348,18 @@ function MarketChatSurface({
     node.scrollTop = node.scrollHeight;
   }, [messages, thinking]);
 
-  function sendMessage(raw: string) {
+  async function sendMessage(raw: string) {
     const content = raw.trim();
     if (!content || interactionDisabled) {
       return;
     }
 
     const userMessage = createUserMessage(content);
+    const historyForApi = [...messages, userMessage].map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+
     setMessages((current) => {
       if (current.length === 0) {
         onChatStart?.();
@@ -357,17 +370,93 @@ function MarketChatSurface({
     });
     setDraft("");
     setThinking(true);
+    setRequestError(null);
 
-    window.setTimeout(() => {
-      const response = resolveMarketChatResponse(content, dataRef.current);
-      const assistantMessage = createAssistantMessage(response);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: historyForApi,
+          telemetrySnapshot: dataRef.current,
+        }),
+      });
+
+      if (!response.ok && response.status === 400) {
+        setRequestError("Invalid message format");
+        setThinking(false);
+        return;
+      }
+
+      const fallbackMode = response.headers.get("X-Fallback-Mode") === "true";
+      const contentType = response.headers.get("Content-Type") ?? "";
+
+      if (fallbackMode || contentType.includes("application/json")) {
+        const payload = (await response.json()) as {
+          response?: string;
+        };
+        const assistantMessage = {
+          ...createAssistantMessage(payload.response ?? "No response available."),
+          fallback: true,
+        };
+        const stored = readStoredChatMessages();
+        const next = [...stored, assistantMessage];
+        writeStoredChatMessages(next);
+        setMessages(next);
+        setStreamingId(assistantMessage.id);
+        setThinking(false);
+        return;
+      }
+
+      const assistantMessage = createAssistantMessage("");
+      const placeholder = [...readStoredChatMessages(), assistantMessage];
+      writeStoredChatMessages(placeholder);
+      setMessages(placeholder);
+      setStreamingId(assistantMessage.id);
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Missing response stream");
+      }
+
+      const decoder = new TextDecoder();
+      let streamed = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        streamed += decoder.decode(value, { stream: true });
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantMessage.id ? { ...message, content: streamed } : message,
+          ),
+        );
+      }
+
+      const finalMessage = { ...assistantMessage, content: streamed };
+      const stored = readStoredChatMessages().filter((message) => message.id !== assistantMessage.id);
+      const next = [...stored, finalMessage];
+      writeStoredChatMessages(next);
+      setMessages(next);
+      setStreamingId(null);
+      setThinking(false);
+    } catch {
+      const assistantMessage = {
+        ...createAssistantMessage("⚠ Intel offline. Using local rules.\n\nRequest failed — try again."),
+        fallback: true,
+      };
       const stored = readStoredChatMessages();
       const next = [...stored, assistantMessage];
       writeStoredChatMessages(next);
       setMessages(next);
       setStreamingId(assistantMessage.id);
       setThinking(false);
-    }, 420);
+    }
   }
 
   return (
@@ -378,21 +467,21 @@ function MarketChatSurface({
       )}
       aria-hidden={blocked}
     >
-      <div
-        ref={scrollRef}
-        className="console-scroll min-h-0 flex-1 overflow-y-auto px-4"
-        style={compact ? { paddingBottom: MOBILE_CHAT_FOOTER_HEIGHT } : undefined}
-      >
+      <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-5 py-4">
           {messages.map((message) => (
             <ChatBubble
               key={message.id}
               message={message}
-              animate={message.id === streamingId && message.role === "assistant"}
+              animate={message.id === streamingId && message.role === "assistant" && message.fallback === true}
+              streaming={message.id === streamingId && message.role === "assistant" && !message.fallback && thinking}
               compact={compact}
             />
           ))}
-          {thinking ? (
+          {requestError ? (
+            <div className="px-1 font-mono text-[11px] text-[#B07070]">{requestError}</div>
+          ) : null}
+          {thinking && !streamingId ? (
             <div className="px-1 font-mono text-[12px] text-[#8A8A8A]">
               Reading x402 telemetry
               <span className="typewriter-cursor" aria-hidden="true" />
@@ -401,46 +490,21 @@ function MarketChatSurface({
         </div>
       </div>
 
-      {compact ? (
-        <div
-          className="fixed inset-x-0 z-30 mx-auto max-w-[640px]"
-          style={{ bottom: `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px))` }}
-        >
-          {hintsPhase !== "hidden" ? (
-            <SuggestedPromptBar
-              onSelect={sendMessage}
-              disabled={interactionDisabled}
-              compact
-              fading={hintsPhase === "out"}
-            />
-          ) : null}
-          <ChatComposer
-            value={draft}
-            onChange={setDraft}
-            onSubmit={() => sendMessage(draft)}
-            disabled={interactionDisabled}
-            compact
-          />
-        </div>
-      ) : (
-        <>
-          {hintsPhase !== "hidden" ? (
-            <SuggestedPromptBar
-              onSelect={sendMessage}
-              disabled={interactionDisabled}
-              compact={compact}
-              fading={hintsPhase === "out"}
-            />
-          ) : null}
-          <ChatComposer
-            value={draft}
-            onChange={setDraft}
-            onSubmit={() => sendMessage(draft)}
-            disabled={interactionDisabled}
-            compact={compact}
-          />
-        </>
-      )}
+      {hintsPhase !== "hidden" ? (
+        <SuggestedPromptBar
+          onSelect={sendMessage}
+          disabled={interactionDisabled}
+          compact={compact}
+          fading={hintsPhase === "out"}
+        />
+      ) : null}
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={() => sendMessage(draft)}
+        disabled={interactionDisabled}
+        compact={compact}
+      />
     </div>
   );
 }
@@ -495,7 +559,7 @@ export function MarketChatPanel({
     <section
       className={cx(
         "relative flex min-h-0 flex-1 flex-col overflow-hidden",
-        compact && "px-4 pt-4",
+        compact && "pt-4",
         desktop && "px-8 pt-6",
       )}
     >
@@ -503,6 +567,7 @@ export function MarketChatPanel({
       <div
         className={cx(
           "shrink-0 border-b border-[#1A1A1A]",
+          compact && "px-4",
           greetingPhase === "hidden" ? "pb-2" : "pb-3",
         )}
       >

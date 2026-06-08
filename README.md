@@ -56,6 +56,29 @@ npm run test
 npm run build
 ```
 
+## GPT Integration
+
+Market Intel chat (`/api/chat`) uses the OpenAI Responses API server-side. The browser never sees `OPENAI_API_KEY`.
+
+Required Vercel env vars for GPT:
+
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_FALLBACK_MODEL=gpt-4.1-nano
+OPENAI_TIMEOUT_MS=15000
+```
+
+Behavior:
+
+- Every chat message re-fetches live telemetry from the agent-exporter before calling OpenAI.
+- Responses stream as plain text to preserve the terminal typewriter UX.
+- If OpenAI or the exporter is unavailable, the route falls back to the local rule-based `resolveMarketChatResponse()` engine and sets `X-Fallback-Mode: true`.
+- Telemetry sent to OpenAI is trimmed and redacted (no wallet addresses, capped history arrays).
+- `store: false` — conversations are not persisted on OpenAI servers.
+
+Local dev without OpenAI: omit `OPENAI_API_KEY` and the chat panel uses rule-based fallback automatically.
+
 ## Environment Files
 
 Vercel dashboard env (`apps/web/.env.example`):
@@ -64,6 +87,10 @@ Vercel dashboard env (`apps/web/.env.example`):
 AGENT_EXPORTER_URL=
 AGENT_EXPORTER_TOKEN=
 USE_MOCK_AGENT_DATA=false
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_FALLBACK_MODEL=gpt-4.1-nano
+OPENAI_TIMEOUT_MS=15000
 ```
 
 EC2 exporter env (`agent-exporter/.env.example`):

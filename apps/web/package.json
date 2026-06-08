@@ -6,11 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "npx tsx --test src/lib/market-chat-context.test.ts src/lib/market-chat-engine.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
     "next": "16.2.7",
+    "openai": "^6.42.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.0.0",

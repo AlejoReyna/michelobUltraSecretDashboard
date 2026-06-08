@@ -6,9 +6,23 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  fallback?: boolean;
 };
 
 export const CHAT_MESSAGES_STORAGE_KEY = "cascade-market-intel-chat-messages";
+
+export const FALLBACK_REASONS = {
+  OPENAI_RATE_LIMIT: "openai_rate_limit",
+  OPENAI_TIMEOUT: "openai_timeout",
+  OPENAI_AUTH: "openai_auth",
+  OPENAI_BAD_REQUEST: "openai_bad_request",
+  OPENAI_SERVER: "openai_server",
+  EXPORTER_UNREACHABLE: "exporter_unreachable",
+  EXPORTER_TIMEOUT: "exporter_timeout",
+  UNEXPECTED: "unexpected",
+} as const;
+
+export type FallbackReason = (typeof FALLBACK_REASONS)[keyof typeof FALLBACK_REASONS];
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (typeof value !== "object" || value === null) {
@@ -20,7 +34,8 @@ function isChatMessage(value: unknown): value is ChatMessage {
     typeof message.id === "string" &&
     (message.role === "user" || message.role === "assistant") &&
     typeof message.content === "string" &&
-    typeof message.timestamp === "string"
+    typeof message.timestamp === "string" &&
+    (message.fallback === undefined || typeof message.fallback === "boolean")
   );
 }
 
