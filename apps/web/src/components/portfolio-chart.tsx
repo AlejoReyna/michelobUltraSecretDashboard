@@ -10,7 +10,7 @@ export type PortfolioChartPoint = {
 const chartFrame = {
   width: 1000,
   height: 420,
-  top: 26,
+  top: 10,
   right: 20,
   bottom: 38,
   left: 20,
@@ -51,7 +51,7 @@ export function PortfolioChart({
 
   const chartSvg = (
     <svg
-      className={isMobile ? "block min-h-0 w-full flex-1" : "block size-full overflow-visible"}
+      className="block h-full min-h-0 w-full flex-1 overflow-visible"
       viewBox={`0 0 ${chartFrame.width} ${chartFrame.height}`}
       preserveAspectRatio="none"
       role="img"
@@ -113,5 +113,5 @@ export function PortfolioChart({
     );
   }
 
-  return chartSvg;
+  return <div className="flex h-full min-h-0 w-full flex-1 flex-col">{chartSvg}</div>;
 }

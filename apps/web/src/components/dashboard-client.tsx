@@ -24,6 +24,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
 import {
@@ -47,6 +48,7 @@ import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio
 import { TokenIcon } from "@/components/token-icon";
 import {
   agentModeLabel,
+  isQuoteAsset,
   liveWalletBalancesFromTelemetry,
   realActiveTradeCount,
   type WalletBalanceRow,
@@ -157,6 +159,8 @@ type MetricView = {
 type ActivityRow = {
   id: string;
   amount: string;
+  timestamp: string | null;
+  token: string | null;
   hash: string;
   explorerUrl: string | null;
   status: string;
@@ -629,17 +633,303 @@ function amountLabel(row: StatusPayload["wallet"]["movements"][number]) {
   return amount ? `${amount} ${pair}` : pair.toUpperCase();
 }
 
+function activityTokenLabel(from: string | null | undefined, to: string | null | undefined): string | null {
+  const normalizedTo = to?.trim();
+  const normalizedFrom = from?.trim();
+
+  if (normalizedTo) {
+    const toSymbol = normalizedTo.toUpperCase();
+    if (!isQuoteAsset(toSymbol) || !normalizedFrom) {
+      return toSymbol;
+    }
+  }
+
+  if (normalizedFrom) {
+    return normalizedFrom.toUpperCase();
+  }
+
+  return normalizedTo ? normalizedTo.toUpperCase() : null;
+}
+
+const TX_HASH_VALUE_RE = /^0x[a-fA-F0-9]{64}$/;
+
+function findTxHashInValue(value: unknown, depth = 0): string | null {
+  if (depth > 3 || value == null) {
+    return null;
+  }
+
+  if (typeof value === "string" && TX_HASH_VALUE_RE.test(value.trim())) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findTxHashInValue(item, depth + 1);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value === "object") {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      const found = findTxHashInValue(nested, depth + 1);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return null;
+}
+
+function movementTxHash(movement: StatusPayload["wallet"]["movements"][number]): string | null {
+  return (
+    movementStringField(movement, ["txHash", "tx_hash", "hash", "transactionHash", "tx"]) ??
+    findTxHashInValue(movement)
+  );
+}
+
+function chainFallbackToken(movement: StatusPayload["wallet"]["movements"][number]): string | null {
+  const chain = movement.chain?.toLowerCase();
+  if (chain === "bsc") {
+    return "BNB";
+  }
+
+  if (chain === "base") {
+    return "ETH";
+  }
+
+  return null;
+}
+
+function executionTxHash(execution: StatusPayload["executions"][number]): string | null {
+  return (
+    execution.tx_hash ??
+    stringFromUnknown(execution.result?.tx_hash) ??
+    stringFromUnknown(execution.result?.hash) ??
+    null
+  );
+}
+
+function symbolFromMovementRecord(movement: StatusPayload["wallet"]["movements"][number]): string | null {
+  const record = movement as Record<string, unknown>;
+
+  for (const key of ["toSymbol", "to_symbol", "to", "symbol", "token", "asset", "currency"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim().toUpperCase();
+    }
+  }
+
+  const raw = record.raw;
+  if (raw && typeof raw === "object") {
+    for (const key of ["toSymbol", "to_symbol", "to", "symbol", "token", "asset", "currency"]) {
+      const value = (raw as Record<string, unknown>)[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim().toUpperCase();
+      }
+    }
+  }
+
+  return null;
+}
+
+function movementStringField(
+  movement: StatusPayload["wallet"]["movements"][number],
+  keys: string[],
+): string | null {
+  const record = movement as Record<string, unknown>;
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function parseSymbolFromAmount(value: string | null | undefined): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parts = value.trim().split(/\s+/);
+  const candidate = parts.at(-1);
+  return candidate && /[a-z]/i.test(candidate) ? candidate.toUpperCase() : null;
+}
+
+function tokenFromAmountLabel(amount: string): string | null {
+  const pairMatch = amount.match(/\s([A-Za-z][A-Za-z0-9]{1,11})[-–>→]+([A-Za-z][A-Za-z0-9]{1,11})$/i);
+  return pairMatch ? pairMatch[2].toUpperCase() : null;
+}
+
+function executionTokenByTxHash(data: StatusPayload | null): Map<string, string> {
+  const tokens = new Map<string, string>();
+
+  for (const execution of data?.executions ?? []) {
+    const txHash = executionTxHash(execution);
+    const token = activityTokenLabel(execution.from_symbol, execution.to_symbol);
+
+    if (txHash && token) {
+      const normalized = txHash.toLowerCase();
+      tokens.set(normalized, token);
+
+      if (normalized.length > 10) {
+        tokens.set(normalized.slice(0, 10), token);
+      }
+    }
+  }
+
+  return tokens;
+}
+
+function executionTokenByTimestamp(data: StatusPayload | null): Map<string, string> {
+  const tokens = new Map<string, string>();
+
+  for (const execution of data?.executions ?? []) {
+    const token = activityTokenLabel(execution.from_symbol, execution.to_symbol);
+    if (execution.timestamp && token) {
+      tokens.set(execution.timestamp, token);
+    }
+  }
+
+  return tokens;
+}
+
+function tokenFromExecutionMatch(
+  movement: StatusPayload["wallet"]["movements"][number],
+  data: StatusPayload | null,
+  executionTokens: Map<string, string>,
+  executionTimestampTokens: Map<string, string>,
+): string | null {
+  const txHash = movementTxHash(movement)?.toLowerCase();
+
+  if (txHash) {
+    const direct =
+      executionTokens.get(txHash) ??
+      executionTokens.get(txHash.slice(0, 10)) ??
+      executionTokens.get(txHash.slice(0, 6));
+
+    if (direct) {
+      return direct;
+    }
+
+    for (const execution of data?.executions ?? []) {
+      const executionHash = executionTxHash(execution)?.toLowerCase();
+      if (
+        executionHash &&
+        (executionHash === txHash ||
+          executionHash.startsWith(txHash) ||
+          txHash.startsWith(executionHash) ||
+          executionHash.slice(0, 10) === txHash.slice(0, 10))
+      ) {
+        const token = activityTokenLabel(execution.from_symbol, execution.to_symbol);
+        if (token) {
+          return token;
+        }
+      }
+    }
+  }
+
+  const timestamp = movement.timestamp;
+  if (timestamp) {
+    const exact = executionTimestampTokens.get(timestamp);
+    if (exact) {
+      return exact;
+    }
+
+    const movementTime = Date.parse(timestamp);
+    if (Number.isFinite(movementTime)) {
+      for (const execution of data?.executions ?? []) {
+        if (!execution.timestamp) {
+          continue;
+        }
+
+        const executionTime = Date.parse(execution.timestamp);
+        if (!Number.isFinite(executionTime) || Math.abs(executionTime - movementTime) > 120_000) {
+          continue;
+        }
+
+        const token = activityTokenLabel(execution.from_symbol, execution.to_symbol);
+        if (token) {
+          return token;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function activityTokenFromMovement(
+  movement: StatusPayload["wallet"]["movements"][number],
+  data: StatusPayload | null,
+  executionTokens: Map<string, string>,
+  executionTimestampTokens: Map<string, string>,
+): string | null {
+  const fromSymbol = movementStringField(movement, ["fromSymbol", "from_symbol"]);
+  const toSymbol = movementStringField(movement, ["toSymbol", "to_symbol"]);
+  const fromSymbols = activityTokenLabel(fromSymbol, toSymbol);
+  if (fromSymbols) {
+    return fromSymbols;
+  }
+
+  const fromRecord = symbolFromMovementRecord(movement);
+  if (fromRecord) {
+    return fromRecord;
+  }
+
+  const input = movementStringField(movement, ["input", "Input"]);
+  const fromInput = parseSymbolFromAmount(input);
+  if (fromInput) {
+    return fromInput;
+  }
+
+  const output = movementStringField(movement, ["output", "Output"]) ?? movement.output;
+  const fromOutput = parseSymbolFromAmount(output);
+  if (fromOutput) {
+    return fromOutput;
+  }
+
+  const fromExecution = tokenFromExecutionMatch(movement, data, executionTokens, executionTimestampTokens);
+  if (fromExecution) {
+    return fromExecution;
+  }
+
+  const fromAmount = tokenFromAmountLabel(amountLabel(movement));
+  if (fromAmount) {
+    return fromAmount;
+  }
+
+  const pairMatch = movement.action?.match(/([A-Za-z][A-Za-z0-9]{1,11})\s*[-–>→]+\s*([A-Za-z][A-Za-z0-9]{1,11})/i);
+  if (pairMatch) {
+    return pairMatch[2].toUpperCase();
+  }
+
+  return chainFallbackToken(movement);
+}
+
 function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
+  const executionTokens = executionTokenByTxHash(data);
+  const executionTimestampTokens = executionTokenByTimestamp(data);
+
   const movements =
     data?.wallet.movements.slice(0, 7).map((movement, index) => {
       const failed = Boolean(movement.error) || String(movement.status ?? "").toLowerCase().includes("failed");
-      const pending = !movement.txHash && !failed;
+      const txHash = movementTxHash(movement);
+      const pending = !txHash && !failed;
 
       return {
-        id: `movement-${movement.txHash ?? movement.timestamp ?? index}`,
+        id: `movement-${txHash ?? movement.timestamp ?? index}`,
         amount: amountLabel(movement),
-        hash: shortHash(movement.txHash),
-        explorerUrl: movement.explorerUrl ?? explorerUrlFor(movement.chain, movement.txHash),
+        timestamp: movement.timestamp ?? null,
+        token: activityTokenFromMovement(movement, data, executionTokens, executionTimestampTokens),
+        hash: shortHash(txHash),
+        explorerUrl: movement.explorerUrl ?? explorerUrlFor(movement.chain, txHash),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
         tone: failed ? "red" : pending ? "yellow" : "green",
         details: detailsFromMovement(movement),
@@ -666,6 +956,8 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
           typeof execution.amount_in === "number"
             ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
             : `${from}->${to}`,
+        timestamp: execution.timestamp ?? null,
+        token: activityTokenLabel(from, to),
         hash: shortHash(txHash),
         explorerUrl: explorerUrlFromExecution(execution),
         status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
@@ -688,6 +980,8 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: formatDecisionEvent(decision),
+          timestamp: decision.timestamp ?? null,
+          token: decision.symbol?.trim() || null,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
@@ -706,6 +1000,8 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       {
         id: "agent-log-latest",
         amount: agentLog.line,
+        timestamp: data?.health.lastLogModifiedAt ?? null,
+        token: null,
         hash: agentLog.source ?? "agent.log",
         explorerUrl: null,
         status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
@@ -727,6 +1023,8 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       {
         id: `file-${label}-${index}`,
         amount: file.exists ? `${label} detected, waiting for records` : `${label} not found`,
+        timestamp: file.modifiedAt ?? null,
+        token: null,
         hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
         explorerUrl: null,
         status: file.exists ? "READY" : "MISSING",
@@ -753,6 +1051,8 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: formatDecisionEvent(decision),
+          timestamp: decision.timestamp ?? null,
+          token: decision.symbol?.trim() || null,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
@@ -783,6 +1083,8 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
             typeof execution.amount_in === "number"
               ? `${compactNumberFormatter.format(execution.amount_in)} ${from}->${to}`
               : `${from}->${to}`,
+          timestamp: execution.timestamp ?? null,
+          token: activityTokenLabel(from, to),
           hash: shortHash(txHash),
           explorerUrl: explorerUrlFromExecution(execution),
           status: failed ? "FAILED" : pending ? "PENDING" : "SUCCESS",
@@ -801,6 +1103,8 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       {
         id: "agent-log-latest",
         amount: agentLog.line,
+        timestamp: data?.health.lastLogModifiedAt ?? null,
+        token: null,
         hash: agentLog.source ?? "agent.log",
         explorerUrl: null,
         status: data?.health.agentRunning ? "RUNNING" : "OFFLINE",
@@ -822,6 +1126,8 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
       {
         id: `file-${label}-${index}`,
         amount: file.exists ? `${label} on EC2, waiting for records` : `${label} not found on EC2`,
+        timestamp: file.modifiedAt ?? null,
+        token: null,
         hash: file.modifiedAt ? timeReference(file.modifiedAt) : "file check",
         explorerUrl: null,
         status: file.exists ? "READY" : "MISSING",
@@ -920,23 +1226,12 @@ function DesktopNavRail({
 }) {
   return (
     <nav
-      className="relative z-[1] flex min-h-screen shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      className="relative z-[1] flex h-full shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
       <div className="shrink-0 px-3 pb-4 pt-5">
-        <div className="relative w-[62%]">
-          <span className="absolute bottom-[12%] left-[79%] z-0 whitespace-nowrap font-mono text-[7.2px] leading-tight tracking-[0.04em] text-[#D8D8D8]">
-            by Alexis Reyna
-          </span>
-          <img
-            src="/inverted.svg"
-            alt="No Named"
-            className="relative z-10 h-auto w-full"
-            width={1200}
-            height={700}
-          />
-        </div>
+        <BrandMark variant="nav" />
       </div>
       <div className="flex flex-1 flex-col gap-0.5 px-3 pb-5">
         {desktopNavItems.map((item) => {
@@ -1025,6 +1320,62 @@ function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" 
       title={status}
       aria-label={status}
     />
+  );
+}
+
+function activityStatusGlyph(status: string): string | null {
+  switch (status.toUpperCase()) {
+    case "ENTER":
+      return "▲";
+    case "WAIT":
+      return "○";
+    case "HALT":
+      return "■";
+    default:
+      return null;
+  }
+}
+
+function ActivityStatusIndicator({
+  status,
+  tone,
+  compact = false,
+}: {
+  status: string;
+  tone: "green" | "yellow" | "red";
+  compact?: boolean;
+}) {
+  const glyph = activityStatusGlyph(status);
+
+  if (glyph) {
+    return (
+      <span
+        className={cx(
+          "inline-flex shrink-0 items-center justify-center font-mono font-bold leading-none",
+          compact ? "text-[13px]" : "text-[15px]",
+          statusToneTextClass(tone),
+        )}
+        title={status}
+        aria-label={status}
+      >
+        {glyph}
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <StatusDot status={status} tone={tone} />
+      <span
+        className={cx(
+          "truncate font-mono font-bold uppercase tracking-[0.06em]",
+          compact ? "text-[8px]" : "text-[10px]",
+          statusToneTextClass(tone),
+        )}
+      >
+        {status}
+      </span>
+    </>
   );
 }
 
@@ -1328,7 +1679,7 @@ function ActivityHeaderCell({
   mode,
   expandable = false,
 }: {
-  column: "event" | "reference" | "status";
+  column: "event" | "token" | "reference" | "status";
   label: string;
   className?: string;
   mode: ActivityFeedMode;
@@ -1419,7 +1770,30 @@ function ActivityTableRow({
                 )}
               </span>
             ) : null}
-            <span className="truncate">{row.amount}</span>
+            <span className="truncate tabular-nums">{formatOpenedAt(row.timestamp)}</span>
+          </ViewportReveal>
+        </td>
+        <td
+          className={cx(
+            "truncate font-mono text-[#D0D0D0]",
+            dense ? "px-1 py-1.5 text-[8px] leading-4" : compact ? "px-2 py-2 text-[12px]" : "px-2 py-5 text-[12px]",
+          )}
+        >
+          <ViewportReveal
+            as="span"
+            variant={activityColumnVariant("token")}
+            delay={activityCellDelay(index, "token")}
+            root={scrollRoot}
+            className="inline-flex min-w-0 items-center gap-1.5"
+          >
+            {row.token ? (
+              <>
+                <TokenIcon symbol={row.token} size={dense ? 12 : 14} />
+                <span className="truncate">{row.token}</span>
+              </>
+            ) : (
+              <span className="text-[#666666]">—</span>
+            )}
           </ViewportReveal>
         </td>
         <td
@@ -1457,24 +1831,15 @@ function ActivityTableRow({
             variant={activityStatusVariant(row.tone)}
             delay={activityCellDelay(index, "status")}
             root={scrollRoot}
-            className="flex min-w-0 items-center gap-1"
+            className="flex min-w-0 items-center justify-center gap-1"
           >
-            <StatusDot status={row.status} tone={row.tone} />
-            <span
-              className={cx(
-                "truncate font-mono font-bold uppercase tracking-[0.06em]",
-                dense ? "text-[8px]" : "text-[10px]",
-                statusToneTextClass(row.tone),
-              )}
-            >
-              {row.status}
-            </span>
+            <ActivityStatusIndicator status={row.status} tone={row.tone} compact={dense} />
           </ViewportReveal>
         </td>
       </tr>
       {expanded && row.details ? (
         <tr className="border-b border-[#1A1A1A] bg-[#050505]">
-          <td colSpan={3}>
+          <td colSpan={4}>
             <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
               <ActivityDetailPanel details={row.details} />
             </ViewportReveal>
@@ -1616,9 +1981,10 @@ function RecentActivity({
       >
         <table className="w-full table-fixed border-collapse text-left">
           <colgroup>
-            <col className={expandable ? "w-[36%]" : "w-[34%]"} />
-            <col className="w-[32%]" />
-            <col className="w-[32%]" />
+            <col className={expandable ? "w-[28%]" : "w-[26%]"} />
+            <col className="w-[18%]" />
+            <col className="w-[28%]" />
+            <col className="w-[26%]" />
           </colgroup>
           <thead
             className={cx(
@@ -1630,10 +1996,16 @@ function RecentActivity({
             <tr>
               <ActivityHeaderCell
                 column="event"
-                label="Event"
+                label="Date"
                 mode={mode}
                 expandable={expandable}
                 className={cx(dense ? "px-1 py-1.5" : compact ? "px-3 py-2" : "px-4 py-4")}
+              />
+              <ActivityHeaderCell
+                column="token"
+                label="Token"
+                mode={mode}
+                className={cx(dense ? "px-1 py-1.5" : compact ? "px-2 py-2" : "px-2 py-4")}
               />
               <ActivityHeaderCell
                 column="reference"
@@ -1671,7 +2043,7 @@ function RecentActivity({
                     "font-mono text-[#8A8A8A]",
                     dense ? "px-1 py-3 text-[9px]" : compact ? "px-3 py-4 text-[12px]" : "px-4 py-5 text-[12px]",
                   )}
-                  colSpan={3}
+                  colSpan={4}
                 >
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     Waiting for telemetry
@@ -2652,15 +3024,15 @@ function DesktopDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative isolate hidden min-h-screen bg-black text-white lg:flex">
+    <div className="relative isolate hidden min-h-dvh flex-1 bg-black text-white lg:flex">
       <AsciiRaccoonWatermark />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-screen min-w-0 flex-1 flex-col">
+      <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
-          className="flex min-h-0 flex-1 flex-col"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
           {(section) =>
             section === "activity" ? (
@@ -2696,6 +3068,185 @@ function DesktopDashboard({
   );
 }
 
+const HOME_SUMMARY_ROW_LIMIT = 5;
+const homeActivityGridClass = "grid grid-cols-3";
+
+function HomePositionsSummary({
+  positionRows,
+  totalPositionValue,
+}: {
+  positionRows: PositionRow[];
+  totalPositionValue: string;
+}) {
+  const rows = [...positionRows]
+    .sort((left, right) => (right.entryValueUsd ?? 0) - (left.entryValueUsd ?? 0))
+    .slice(0, HOME_SUMMARY_ROW_LIMIT);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
+      <div className="flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
+          <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Active Positions</h2>
+        </div>
+        <span className="font-mono text-[13px] tabular-nums text-[#B8B8B8]">{totalPositionValue}</span>
+      </div>
+      <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="grid grid-cols-[1.5fr_1fr_1fr] border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+          <span>Token</span>
+          <span className="text-right">Value</span>
+          <span className="text-right">Stop</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">No open positions in positions.json</div>
+        ) : (
+          <div className="divide-y divide-[#1A1A2A]">
+            {rows.map((row) => (
+              <div key={row.id} className="grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#070707]">
+                <span className="truncate font-mono text-[13px] text-[#D0D0D0]">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <TokenIcon symbol={row.symbol} size={14} />
+                    <span className="truncate">{row.symbol}</span>
+                  </span>
+                </span>
+                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#D0D0D0]">
+                  {formatUsd(row.entryValueUsd)}
+                </span>
+                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#FFD21A]">
+                  {formatPrice(row.trailingStopPrice)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+        {positionRows.length} total {positionRows.length === 1 ? "position" : "positions"}
+      </div>
+    </div>
+  );
+}
+
+function homeActivityToken(row: ActivityRow): string | null {
+  return row.token ?? tokenFromAmountLabel(row.amount);
+}
+
+function HomeActivitySummary({ activityRows }: { activityRows: ActivityRow[] }) {
+  const rows = activityRows.slice(0, HOME_SUMMARY_ROW_LIMIT);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
+      <div className="shrink-0 border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+        <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Recent Activity</h2>
+      </div>
+      <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
+        <div
+          className={cx(
+            homeActivityGridClass,
+            "border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]",
+          )}
+        >
+          <span className="text-left">Date</span>
+          <span className="text-center">Token</span>
+          <span className="text-center">Status</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">No recent activity</div>
+        ) : (
+          <div className="divide-y divide-[#1A1A2A]">
+            {rows.map((row) => {
+              const token = homeActivityToken(row);
+
+              return (
+              <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#070707]")}>
+                <span className="truncate text-left font-mono text-[13px] font-bold tabular-nums text-[#F2F2F2]">
+                  {formatOpenedAt(row.timestamp)}
+                </span>
+                <span className="flex items-center justify-center">
+                  {token ? (
+                    <span title={token} aria-label={token}>
+                      <TokenIcon symbol={token} size={18} />
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[13px] text-[#666666]">—</span>
+                  )}
+                </span>
+                <span className="flex items-center justify-center">
+                  <ActivityStatusIndicator status={row.status} tone={row.tone} compact />
+                </span>
+              </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+        {activityRows.length} total {activityRows.length === 1 ? "event" : "events"}
+      </div>
+    </div>
+  );
+}
+
+function HomeWalletSummary({
+  walletBalances,
+  agentMode,
+}: {
+  walletBalances: WalletBalanceRow[];
+  agentMode: string;
+}) {
+  const paperMode = agentMode === "PAPER";
+  const rows = [...walletBalances]
+    .sort((left, right) => (right.valueUsd ?? 0) - (left.valueUsd ?? 0))
+    .slice(0, HOME_SUMMARY_ROW_LIMIT);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
+      <div className="flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A] px-4 pb-3 pt-4">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
+          <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Live Holdings</h2>
+        </div>
+        {paperMode ? (
+          <span className="border border-[#2A2A2A] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+            Paper mode
+          </span>
+        ) : null}
+      </div>
+      <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="grid grid-cols-[1fr_1.5fr_1fr] border-b border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+          <span>Chain</span>
+          <span>Token</span>
+          <span className="text-right">Value</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="px-4 py-4 font-mono text-[13px] text-[#666666]">Waiting for TWAK wallet balances</div>
+        ) : (
+          <div className="divide-y divide-[#1A1A2A]">
+            {rows.map((row) => (
+              <div key={`${row.chain}-${row.symbol}`} className="grid grid-cols-[1fr_1.5fr_1fr] px-4 py-2 hover:bg-[#070707]">
+                <span className="truncate font-mono text-[13px] uppercase text-[#8A8A8A]">{row.chain}</span>
+                <span className="truncate font-mono text-[13px] text-[#D0D0D0]">
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <TokenIcon symbol={row.symbol} size={14} />
+                    <span className="truncate">{row.symbol}</span>
+                  </span>
+                </span>
+                <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#D0D0D0]">
+                  {formatUsd(row.valueUsd)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shrink-0 border-t border-[#1A1A2A] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+        {walletBalances.length} total {walletBalances.length === 1 ? "asset" : "assets"}
+      </div>
+    </div>
+  );
+}
+
 function DesktopOverviewSection({
   view,
   timeRange,
@@ -2706,9 +3257,33 @@ function DesktopOverviewSection({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <DesktopHeroMetrics view={view} />
-      <DesktopPerformanceWidget view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+      <div className="flex min-h-0 flex-1 flex-col px-8 pb-6 pt-3">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-5">
+          <ViewportReveal
+            variant="fade"
+            delay={200}
+            duration="slow"
+            className="relative col-span-3 h-full min-h-0 overflow-hidden border border-[#2A2A2A] bg-black/80"
+          >
+            <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+            <div className="absolute inset-0">
+              <PortfolioChart data={view.chartData} variant="desktop" />
+            </div>
+          </ViewportReveal>
+
+          <ViewportReveal variant="up" delay={400} duration="normal" className="flex h-full min-h-0 flex-col">
+            <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} />
+          </ViewportReveal>
+          <ViewportReveal variant="up" delay={460} duration="normal" className="flex h-full min-h-0 flex-col">
+            <HomeActivitySummary activityRows={view.activityRows} />
+          </ViewportReveal>
+          <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
+            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} />
+          </ViewportReveal>
+        </div>
+      </div>
     </section>
   );
 }
@@ -2743,31 +3318,8 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
           </ViewportReveal>
         ))}
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-5 h-px w-full bg-[#1A1A1A]" />
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
     </section>
-  );
-}
-
-function DesktopPerformanceWidget({
-  view,
-  timeRange,
-  onTimeRangeChange,
-}: {
-  view: DashboardViewModel;
-  timeRange: TimeRange;
-  onTimeRangeChange: (range: TimeRange) => void;
-}) {
-  return (
-    <ViewportReveal variant="fade" delay={200} duration="slow" className="mx-8 mb-6 mt-4 flex min-h-0 flex-1 flex-col">
-      <section className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
-        <div className="relative min-h-0 flex-1">
-          <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-          <ViewportReveal variant="blur" delay={320} duration="slow" className="absolute inset-0 flex flex-col p-5">
-            <PortfolioChart data={view.chartData} variant="desktop" />
-          </ViewportReveal>
-        </div>
-      </section>
-    </ViewportReveal>
   );
 }
 
@@ -2985,7 +3537,7 @@ function ChartFilterMenu({
   );
 }
 
-function MobilePerformanceWidget({
+function MobileOverviewSection({
   view,
   timeRange,
   onTimeRangeChange,
@@ -2995,16 +3547,27 @@ function MobilePerformanceWidget({
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
   return (
-    <ViewportReveal variant="fade" delay={200} duration="slow" className="mx-4 mt-3 flex min-h-0 flex-1 flex-col">
-      <section className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/80">
-        <div className="relative min-h-0 flex-1">
+    <section className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <MobileHeroMetrics view={view} />
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <ViewportReveal
+          variant="fade"
+          delay={200}
+          duration="slow"
+          className="relative flex h-[300px] shrink-0 flex-col border border-[#2A2A2A] bg-black/80"
+        >
           <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-          <ViewportReveal variant="blur" delay={320} duration="slow" className="absolute inset-0 flex flex-col px-2 py-2">
+          <div className="flex min-h-0 flex-1 flex-col px-2 py-2">
             <PortfolioChart data={view.mobileChartData} variant="mobile" />
-          </ViewportReveal>
+          </div>
+        </ViewportReveal>
+        <div className="mt-3 min-h-0 flex-1 space-y-3 pb-24">
+          <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} />
+          <HomeActivitySummary activityRows={view.activityRows} />
+          <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} />
         </div>
-      </section>
-    </ViewportReveal>
+      </div>
+    </section>
   );
 }
 
@@ -3057,7 +3620,7 @@ function MobileBottomNav({
 }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      className="relative z-40 shrink-0 border-t border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       aria-label="Mobile navigation"
     >
@@ -3113,16 +3676,13 @@ function MobileDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative isolate flex min-h-dvh flex-col bg-black text-white lg:hidden">
+    <div className="relative isolate flex min-h-dvh flex-1 flex-col bg-black text-white lg:hidden">
       <AsciiRaccoonWatermark />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main
         className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col"
         style={{
-          paddingBottom:
-            activeSection === "market-chat"
-              ? "0px"
-              : `calc(${MOBILE_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 16px)`,
+          paddingBottom: activeSection === "market-chat" ? "0px" : "16px",
         }}
       >
         <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
@@ -3156,10 +3716,7 @@ function MobileDashboard({
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} compact />
             ) : (
-              <section className="flex min-h-0 flex-1 flex-col">
-                <MobileHeroMetrics view={view} />
-                <MobilePerformanceWidget view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-              </section>
+              <MobileOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             )
           }
         </SectionTransition>
@@ -3216,7 +3773,7 @@ export function DashboardClient() {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   return (
-    <>
+    <div className="flex min-h-dvh flex-1 flex-col">
       <MobileDashboard
         view={view}
         activeSection={activeSection}
@@ -3235,6 +3792,6 @@ export function DashboardClient() {
         onTimeRangeChange={setTimeRange}
         sectionTransitionEnabled={isDesktop}
       />
-    </>
+    </div>
   );
 }

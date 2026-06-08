@@ -132,13 +132,15 @@ export function walletCellDelay(rowIndex: number, column: WalletColumn): number 
   return rowIndex * 55 + columnOffset;
 }
 
-export type ActivityColumn = "event" | "reference" | "status";
+export type ActivityColumn = "event" | "token" | "reference" | "status";
 export type ActivityFeedMode = "logs" | "txs";
 
 export function activityColumnVariant(column: ActivityColumn): RevealVariant {
   switch (column) {
     case "event":
       return "scale";
+    case "token":
+      return "fade";
     case "reference":
       return "left";
     case "status":
@@ -166,7 +168,7 @@ export function activityStatusVariant(tone: "green" | "yellow" | "red"): RevealV
 }
 
 export function activityCellDelay(rowIndex: number, column: ActivityColumn): number {
-  const columnOffset = { event: 0, reference: 45, status: 90 }[column];
+  const columnOffset = { event: 0, token: 30, reference: 60, status: 90 }[column];
   return rowIndex * 50 + columnOffset;
 }
 
