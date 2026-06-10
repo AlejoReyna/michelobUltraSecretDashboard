@@ -1,4 +1,5 @@
 import { siteBranding } from "@/lib/site-branding";
+import Image from "next/image";
 
 type BrandMarkVariant = "nav" | "footer";
 
@@ -24,12 +25,13 @@ export function BrandMark({ variant = "nav" }: { variant?: BrandMarkVariant }) {
   return (
     <div className={styles.container}>
       <span className={styles.signature}>{siteBranding.signature}</span>
-      <img
+      <Image
         src={siteBranding.logo.src}
         alt={siteBranding.logo.alt}
         className="relative z-10 h-auto w-full"
         width={1200}
         height={700}
+        priority
       />
     </div>
   );

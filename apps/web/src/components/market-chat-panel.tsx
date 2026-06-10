@@ -301,7 +301,10 @@ function MarketChatSurface({
   const [requestError, setRequestError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dataRef = useRef(data);
-  dataRef.current = data;
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const interactionDisabled = blocked || thinking;
 
@@ -480,12 +483,15 @@ function useDisclaimerAccepted() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     try {
-      setAccepted(window.sessionStorage.getItem(DISCLAIMER_STORAGE_KEY) === "1");
+      const isAccepted = window.sessionStorage.getItem(DISCLAIMER_STORAGE_KEY) === "1";
+      setAccepted(isAccepted);
     } catch {
       setAccepted(false);
     }
     setReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   function accept() {

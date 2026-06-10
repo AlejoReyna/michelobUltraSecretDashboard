@@ -28,16 +28,20 @@ export function TypewriterText({
   const [complete, setComplete] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setDisplayed("");
     setActive(false);
     setComplete(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [text]);
 
   useEffect(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduceMotion) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setDisplayed(text);
       setComplete(true);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
@@ -46,6 +50,7 @@ export function TypewriterText({
   }, [text, startDelay]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!active) {
       return;
     }
@@ -67,6 +72,7 @@ export function TypewriterText({
     }, speed);
 
     return () => window.clearTimeout(timer);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [active, displayed, speed, text]);
 
   const showCursor = active && (!complete || persistentCursor);

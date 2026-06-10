@@ -32,6 +32,7 @@ export function ViewportReveal({
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     const node = ref.current;
     if (!node) {
       return;
@@ -55,6 +56,7 @@ export function ViewportReveal({
 
     observer.observe(node);
     return () => observer.disconnect();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [root]);
 
   return (

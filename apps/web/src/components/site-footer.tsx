@@ -1,6 +1,7 @@
 "use client";
 
 import { Github, Globe, Linkedin, Mail, type LucideIcon } from "lucide-react";
+import Image from "next/image";
 import { ViewportReveal } from "@/components/viewport-reveal";
 import { siteBranding, siteSocialLinks } from "@/lib/site-branding";
 
@@ -38,12 +39,13 @@ export function SiteFooter() {
         variant="fade"
         className="footer-reveal-group flex flex-col items-center gap-2.5 px-4 py-3 text-center sm:px-6 lg:px-8"
       >
-        <img
+        <Image
           src={siteBranding.footerLogo.src}
           alt={siteBranding.footerLogo.alt}
           className="footer-reveal-item footer-reveal-item--logo h-7 w-auto sm:h-8"
           width={1200}
           height={700}
+          priority
         />
         <div className="footer-reveal-item footer-reveal-item--copy flex max-w-md flex-col items-center gap-0.5 font-mono text-[9px] leading-snug tracking-[0.02em] text-[#7A7A7A] sm:text-[10px]">
           <p>This project was built for the</p>

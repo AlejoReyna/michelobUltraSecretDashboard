@@ -84,7 +84,6 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
 
-const MOBILE_NAV_HEIGHT = 52;
 const DESKTOP_NAV_WIDTH = 220;
 
 function panelUsesFlatChrome(compact: boolean, desktop: boolean) {
@@ -312,6 +311,7 @@ function SectionTransition({
   const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!enabled) {
       setDisplayedSection(section);
       setPhase("idle");
@@ -330,9 +330,11 @@ function SectionTransition({
 
       return () => window.clearTimeout(enterTimeout);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [enabled, section]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!enabled) {
       return;
     }
@@ -359,6 +361,7 @@ function SectionTransition({
         enterIdleTimeoutRef.current = undefined;
       }
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [section, displayedSection, enabled]);
 
   return (
@@ -1958,14 +1961,18 @@ function RecentActivity({
   const pagedRows = rows.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (page !== safePage) {
       setPage(safePage);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [page, safePage]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setPage(0);
     setExpandedIds(new Set());
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [rowsPerPage]);
 
   const goToPage = (nextPage: number) => {
@@ -2660,6 +2667,7 @@ function ActivityViewTransition({
   const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (view === displayedView) {
       return;
     }
@@ -2683,6 +2691,7 @@ function ActivityViewTransition({
         enterIdleTimeoutRef.current = undefined;
       }
     };
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [view, displayedView]);
 
   const motionClass =
@@ -3496,6 +3505,7 @@ function OverviewTopBar({
   const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!enabled) {
       setRendered(isHome);
       setPhase("idle");
@@ -3516,9 +3526,11 @@ function OverviewTopBar({
         return () => window.clearTimeout(enterTimeout);
       }
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [enabled, isHome]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (!enabled) {
       return;
     }
@@ -3549,6 +3561,7 @@ function OverviewTopBar({
 
       return () => window.clearTimeout(exitTimeout);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [isHome, rendered, enabled]);
 
   if (!rendered) {

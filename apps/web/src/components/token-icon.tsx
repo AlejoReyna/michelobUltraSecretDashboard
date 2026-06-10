@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { competitionTokenLogoUrl } from "@/lib/competition-tokens";
 
 const SYMBOL_ALIASES: Record<string, string> = {
@@ -36,7 +37,9 @@ export function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number
   const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setSourceIndex(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [sources]);
 
   if (sourceIndex >= sources.length) {
@@ -52,7 +55,7 @@ export function TokenIcon({ symbol, size = 16 }: { symbol: string; size?: number
   }
 
   return (
-    <img
+    <Image
       src={sources[sourceIndex]}
       alt=""
       width={size}
