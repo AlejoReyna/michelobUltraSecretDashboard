@@ -94,7 +94,7 @@ function panelUsesFlatChrome(compact: boolean, desktop: boolean) {
 const projectRepository = {
   owner: "AlejoReyna",
   name: "no-named-yet-bot",
-  url: "https://github.com/AlejoReyna/ultraSecretYetPublicProject/tree/main/no-named-yet-bot",
+  url: "https://github.com/AlejoReyna/no-named-yet-bot/tree/main",
   title: "No Named Yet Bot",
   description: "Autonomous trading bot with TWAK signing, CMC data, and strict guardrails.",
 };
