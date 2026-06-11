@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp } from "lucide-react";
 import { TypewriterText } from "@/components/typewriter-text";
 import {
@@ -14,8 +14,6 @@ import {
 import type { StatusPayload } from "@/lib/schemas";
 
 const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
-const MOBILE_NAV_HEIGHT = 52;
-
 const FADE_OUT_MS = 180;
 const DISCLAIMER_TEXT_DELAY_MS = 480;
 const DISCLAIMER_BUTTON_DELAY_MS = 960;
@@ -95,18 +93,15 @@ function IntelSectionHeader({
       </div>
       {greetingPhase !== "hidden" ? (
         <div className={cx(greetingPhase === "out" && "section-fade-out")}>
-          <TypewriterText
-            text={greeting}
+          <div
             className={cx(
-              "mt-2 font-mono font-semibold leading-tight text-white",
+              "section-fade-in mt-2 font-mono font-semibold leading-tight text-white",
               flat ? "text-[28px]" : "text-[32px]",
               compact && "whitespace-nowrap",
             )}
-            speed={24}
-            startDelay={180}
-            persistentCursor
-            cursorChar="|"
-          />
+          >
+            {greeting}
+          </div>
         </div>
       ) : null}
     </div>
@@ -140,8 +135,7 @@ function DisclaimerGate({ onAccept }: { onAccept: () => void }) {
         </p>
         {showText ? (
           <div className="section-fade-in mt-5 w-full rounded-sm border border-[#3A3A3A] bg-[#111111] px-4 py-4 font-mono text-[11.5px] leading-[1.6] text-[#D0D0D0]">
-            The information presented here isn&apos;t intended to be used as market picks or signals, use the presented data with caution.{" "}
-            <strong className="font-bold">Gambling destroys</strong>.
+            This chat reads the dashboard&apos;s current telemetry snapshot: scans, x402 payment records, factor scores, executions, positions, and wallet state. It is read-only and can only explain the data already available to the dashboard.
             {showButton ? (
               <button
                 type="button"
@@ -232,7 +226,7 @@ function ChatComposer({
     <form
       className={cx(
         "flex w-full shrink-0 items-center gap-2 border-t border-[#2A2A2A] bg-[#1C1C1C]",
-        compact && "px-4 py-2.5",
+        compact && "px-4 py-[9px]",
         desktop && "sticky bottom-0 z-10 px-8 py-[18.4px]",
         disabled && "opacity-50",
       )}
@@ -259,7 +253,7 @@ function ChatComposer({
         disabled={disabled}
         className={cx(
           "max-h-28 min-h-0 flex-1 resize-none bg-transparent py-0 font-mono text-white outline-none placeholder:text-[#5A5A5A]",
-          compact ? "text-[12px] leading-5" : desktop ? "text-[15px] leading-[44.8px]" : "text-[15px] leading-[28px]",
+          compact ? "text-[12px] leading-[18px]" : desktop ? "text-[15px] leading-[44.8px]" : "text-[15px] leading-[28px]",
         )}
         aria-label="Market chat message"
       />
@@ -269,13 +263,13 @@ function ChatComposer({
         aria-label="Send message"
         className={cx(
           "flex shrink-0 items-center justify-center rounded-sm border transition-colors",
-          compact ? "h-8 w-8" : desktop ? "h-[59.2px] w-[59.2px]" : "h-[37px] w-[37px]",
+          compact ? "h-[29px] w-[29px]" : desktop ? "h-[59.2px] w-[59.2px]" : "h-[37px] w-[37px]",
           canSend
             ? "border-[#444444] bg-white text-black hover:bg-[#E8E8E8]"
             : "border-[#3A3A3A] bg-[#252525] text-[#888888]",
         )}
       >
-        <ArrowUp size={compact ? 16 : 18} strokeWidth={2.25} aria-hidden="true" />
+        <ArrowUp size={compact ? 15 : 18} strokeWidth={2.25} aria-hidden="true" />
       </button>
     </form>
   );
@@ -431,10 +425,8 @@ function MarketChatSurface({
     <div
       className={cx(
         "flex min-h-0 flex-1 flex-col",
-        compact && "pb-[calc(var(--mobile-nav-height)+env(safe-area-inset-bottom,0px))]",
         blocked && "pointer-events-none select-none opacity-40",
       )}
-      style={compact ? ({ "--mobile-nav-height": `${MOBILE_NAV_HEIGHT}px` } as CSSProperties) : undefined}
       aria-hidden={blocked}
     >
       <div

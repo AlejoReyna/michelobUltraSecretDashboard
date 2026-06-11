@@ -63,7 +63,8 @@ import {
   inferCycleIntervalMs,
   nextCycleAt,
 } from "@/lib/cycle-timing";
-import { resolveStrategyMode } from "@/lib/factor-scoring";
+import { entryFactorStats, resolveStrategyMode } from "@/lib/factor-scoring";
+import { scalpingFactorStats } from "@/lib/scalping-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -84,7 +85,7 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
 
-const DESKTOP_NAV_WIDTH = 220;
+const DESKTOP_NAV_WIDTH = 56;
 
 function panelUsesFlatChrome(compact: boolean, desktop: boolean) {
   return compact || desktop;
@@ -158,6 +159,7 @@ type MetricView = {
 type ActivityRow = {
   id: string;
   amount: string;
+  narrative?: string;
   timestamp: string | null;
   token: string | null;
   hash: string;
@@ -169,6 +171,7 @@ type ActivityRow = {
 
 const ACTIVITY_ROWS_PER_PAGE = 10;
 const ACTIVITY_ROWS_PER_PAGE_MOBILE = 7;
+const ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE = 5;
 
 type PositionRow = {
   id: string;
@@ -262,7 +265,7 @@ function AsciiRaccoonWatermark({ glitch = false }: { glitch?: boolean }) {
     return (
       <div
         aria-hidden
-        className={cx(layout, "ascii-watermark-glitch bg-[url(/ascii-raccoon-glitch.png)]")}
+        className={cx(layout, "ascii-watermark-glitch bg-[url(/ascii-raccoon.png)]")}
       />
     );
   }
@@ -931,6 +934,28 @@ function activityTokenFromMovement(
   return chainFallbackToken(movement);
 }
 
+function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number]): string {
+  const symbol = decision.symbol?.trim() || "candidate";
+  const action = String(decision.action ?? "WAIT").toUpperCase();
+  const strategyMode = resolveStrategyMode(decision);
+  const priced =
+    decision.priced_target_count != null
+      ? ` across ${decision.priced_target_count} priced targets`
+      : "";
+
+  if (strategyMode === "scalping") {
+    const stats = scalpingFactorStats(decision);
+    const result = stats.met ? "cleared the entry bar" : "stayed below the entry bar";
+
+    return `Analyzed ${symbol}${priced}: checked micro-momentum, slippage, regime, whale flow, and gas, then scored ${stats.score}/${stats.max}; ${result} before ${action}.`;
+  }
+
+  const stats = entryFactorStats(decision);
+  const result = stats.met ? "all gates aligned" : "not enough gates aligned";
+
+  return `Analyzed ${symbol}${priced}: refreshed market data, tested breakout, regime, RSI, slippage, and derivatives risk, then logged ${stats.passed}/${stats.total} factors; ${result} before ${action}.`;
+}
+
 function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   const executionTokens = executionTokenByTxHash(data);
   const executionTimestampTokens = executionTokenByTimestamp(data);
@@ -998,6 +1023,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: formatDecisionEvent(decision),
+          narrative: decisionAnalysisNarrative(decision),
           timestamp: decision.timestamp ?? null,
           token: decision.symbol?.trim() || null,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
@@ -1069,6 +1095,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         return {
           id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
           amount: formatDecisionEvent(decision),
+          narrative: decisionAnalysisNarrative(decision),
           timestamp: decision.timestamp ?? null,
           token: decision.symbol?.trim() || null,
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
@@ -1244,19 +1271,19 @@ function DesktopNavRail({
 }) {
   return (
     <nav
-      className="relative z-[1] flex h-full shrink-0 flex-col border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      className="relative z-[1] flex h-full shrink-0 flex-col items-center border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
-      <div className="shrink-0 px-3 pb-4 pt-5">
-        <BrandMark variant="nav" />
+      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111111]">
+        <BrandMark variant="rail" />
       </div>
-      <div className="flex flex-1 flex-col gap-0.5 px-3 pb-5">
+      <div className="flex w-full flex-1 flex-col items-center gap-1 px-2 py-3">
         {desktopNavItems.map((item) => {
           const Icon = item.icon;
           const active = item.kind === "section" && item.section === activeSection;
           const rowClassName = cx(
-            "relative flex h-11 w-full items-center gap-3 rounded-sm px-3 transition-colors",
+            "relative flex h-10 w-10 items-center justify-center rounded-sm transition-colors",
             active ? "text-white" : "text-[#7A7A7A] hover:text-white",
           );
           const rowContent = (
@@ -1267,10 +1294,7 @@ function DesktopNavRail({
                   aria-hidden="true"
                 />
               ) : null}
-              <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-              <span className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.06em]">
-                {item.label}
-              </span>
+              <Icon size={19} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
             </>
           );
 
@@ -1282,6 +1306,7 @@ function DesktopNavRail({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={item.ariaLabel}
+                title={item.label}
                 className={rowClassName}
               >
                 {rowContent}
@@ -1296,6 +1321,7 @@ function DesktopNavRail({
               onClick={() => onNavigate(item.section)}
               aria-current={active ? "page" : undefined}
               aria-label={item.label}
+              title={item.label}
               className={rowClassName}
             >
               {rowContent}
@@ -1349,6 +1375,17 @@ function activityStatusGlyph(status: string): string | null {
       return "○";
     case "HALT":
       return "■";
+    case "SUCCESS":
+      return "✓";
+    case "PENDING":
+      return "◐";
+    case "FAILED":
+    case "MISSING":
+    case "OFFLINE":
+      return "×";
+    case "RUNNING":
+    case "READY":
+      return "●";
     default:
       return null;
   }
@@ -1650,9 +1687,9 @@ function detailValueToneClass(tone: LogEventDetails["items"][number]["tone"]) {
   return "text-[#DADADA]";
 }
 
-function ActivityDetailPanel({ details }: { details: LogEventDetails }) {
+function ActivityDetailPanel({ details, compact = false }: { details: LogEventDetails; compact?: boolean }) {
   return (
-    <div className="space-y-4 px-4 py-4">
+    <div className={cx("space-y-4", compact ? "" : "px-4 py-4")}>
       <dl className="grid gap-3 sm:grid-cols-2">
         {details.items.map((item) => (
           <div key={item.label} className="min-w-0">
@@ -1859,7 +1896,7 @@ function ActivityTableRow({
         <tr className="border-b border-[#1A1A1A] bg-[#050505]">
           <td colSpan={4}>
             <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
-              <ActivityDetailPanel details={row.details} />
+              <ActivityDetailPanel details={row.details} compact={dense} />
             </ViewportReveal>
           </td>
         </tr>
@@ -2083,6 +2120,173 @@ function RecentActivity({
         pageSize={rowsPerPage}
         onPageChange={goToPage}
         compact={compact || dense}
+      />
+    </div>
+  );
+}
+
+function MobileLogFeed({
+  rows,
+  scrollRoot = null,
+  scrollContainerRef,
+  rowsPerPage = ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE,
+}: {
+  rows: ActivityRow[];
+  scrollRoot?: Element | null;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  rowsPerPage?: number;
+}) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedRows = rows.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
+  const rowTrackCount = Math.max(1, pagedRows.length);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (page !== safePage) {
+      setPage(safePage);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [page, safePage]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setPage(0);
+    setExpandedIds(new Set());
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [rows, rowsPerPage]);
+
+  const goToPage = (nextPage: number) => {
+    setPage(Math.max(0, Math.min(nextPage, totalPages - 1)));
+    setExpandedIds(new Set());
+  };
+
+  const toggleRow = (id: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div
+        ref={scrollContainerRef}
+        className="console-scroll min-h-0 flex-1 overflow-y-auto border-t border-[#202024] bg-black/45"
+      >
+        {pagedRows.length === 0 ? (
+          <div className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]">
+            <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+              Waiting for telemetry
+            </ViewportReveal>
+          </div>
+        ) : (
+          <div
+            className="grid min-h-full divide-y divide-[#18181C]"
+            style={{ gridTemplateRows: `repeat(${rowTrackCount}, minmax(0, 1fr))` }}
+          >
+            {pagedRows.map((row, index) => {
+              const expanded = expandedIds.has(row.id);
+              const canExpand = Boolean(row.details);
+              const token = row.token ?? tokenFromAmountLabel(row.amount);
+
+              return (
+                <div key={row.id} className="min-h-0 bg-[#030303]/70">
+                  <button
+                    type="button"
+                    onClick={canExpand ? () => toggleRow(row.id) : undefined}
+                    disabled={!canExpand}
+                    className={cx(
+                      "grid h-full w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2 text-left",
+                      canExpand && "active:bg-[#080808]",
+                    )}
+                  >
+                    <ViewportReveal
+                      variant={activityLeadEventVariant(index, "logs")}
+                      delay={activityCellDelay(index, "event")}
+                      duration={index === 0 ? "slow" : "normal"}
+                      root={scrollRoot}
+                      className="flex items-center gap-1.5"
+                    >
+                      <span className="shrink-0 text-[#757575]">
+                        {canExpand ? (
+                          expanded ? (
+                            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          )
+                        ) : null}
+                      </span>
+                      {token ? (
+                        <TokenIcon symbol={token} size={18} />
+                      ) : (
+                        <span className="h-[18px] w-[18px] rounded-full border border-[#2A2A2A]" aria-hidden="true" />
+                      )}
+                    </ViewportReveal>
+
+                    <ViewportReveal
+                      variant={activityColumnVariant("reference")}
+                      delay={activityCellDelay(index, "reference")}
+                      root={scrollRoot}
+                      className="min-w-0"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8A8A8A]">
+                          {row.hash}
+                        </span>
+                        <span className="h-1 w-1 shrink-0 rounded-full bg-[#3A3A3A]" aria-hidden="true" />
+                        <span className="truncate font-mono text-[10px] tabular-nums text-[#6F6F6F]">
+                          {formatOpenedAt(row.timestamp)}
+                        </span>
+                      </div>
+                      <p
+                        className="mt-1 overflow-hidden break-words font-mono text-[11px] font-semibold leading-4 text-[#E6E6E6]"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                      >
+                        {row.narrative ?? row.amount}
+                      </p>
+                    </ViewportReveal>
+
+                    <ViewportReveal
+                      variant={activityStatusVariant(row.tone)}
+                      delay={activityCellDelay(index, "status")}
+                      root={scrollRoot}
+                      className="flex justify-end"
+                    >
+                      <ActivityStatusIndicator status={row.status} tone={row.tone} compact />
+                    </ViewportReveal>
+                  </button>
+                  {expanded && row.details ? (
+                    <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
+                      <div className="border-t border-[#18181C] px-3 py-3">
+                        <ActivityDetailPanel details={row.details} compact />
+                      </div>
+                    </ViewportReveal>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <RowPaginator
+        page={safePage}
+        totalPages={totalPages}
+        totalRows={rows.length}
+        pageSize={rowsPerPage}
+        onPageChange={goToPage}
+        compact
       />
     </div>
   );
@@ -2419,12 +2623,14 @@ function LiveScanPanel({
   agentRunning,
   compact = false,
   mobileFit = false,
+  mobileTabs = null,
 }: {
   latestDecision: StatusPayload["latestDecision"];
   decisions: StatusPayload["decisions"];
   agentRunning: boolean;
   compact?: boolean;
   mobileFit?: boolean;
+  mobileTabs?: ReactNode;
 }) {
   const now = useNow();
   const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
@@ -2453,20 +2659,23 @@ function LiveScanPanel({
   return (
     <div
       className={cx(
-        "border border-[#2A2A2A] bg-black/88",
-        mobileFit && "flex min-h-0 flex-col overflow-hidden px-4 py-4",
+        !mobileFit && "border border-[#2A2A2A] bg-black/88",
+        mobileFit && "flex min-h-0 flex-col overflow-hidden px-3 py-3 shadow-[0_0_24px_rgba(255,255,255,0.04)]",
         !mobileFit && compact && "px-4 py-4",
         !mobileFit && !compact && "px-5 py-5",
       )}
     >
-      {mobileFit && latestDecision?.cycle_number != null ? (
-        <div className="shrink-0 pb-2 font-mono text-[11px] leading-none text-[#8A8A8A]">
-          Cycle #{latestDecision.cycle_number}
+      {mobileFit ? (
+        <div className="flex shrink-0 items-start justify-between gap-3 pb-2">
+          <div className="font-mono text-[11px] leading-none text-[#8A8A8A]">
+            Cycle #{latestDecision?.cycle_number ?? "N/A"}
+          </div>
+          {mobileTabs}
         </div>
       ) : null}
       {mobileFit ? (
-        <div className="flex shrink-0 items-stretch border-b border-[#1A1A1A] pb-2">
-          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center text-center">
+        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#1A1A1A] pb-2">
+          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-sm border border-[#181818] bg-[#050505]/80 px-2 py-2 text-center">
             <div className={labelClass}>Next query</div>
             <div
               className={cx(
@@ -2479,10 +2688,11 @@ function LiveScanPanel({
           </div>
           {symbol ? (
             <>
-              <div className="w-px shrink-0 self-stretch bg-[#1A1A1A]" aria-hidden="true" />
-              <div className="flex min-w-0 flex-1 basis-0 items-center justify-center">
-                <div className="flex max-w-full items-start gap-2">
-                  <TokenIcon symbol={symbol} size={40} />
+              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-sm border border-[#333333] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
+                <span className="pointer-events-none absolute inset-x-3 top-1 h-px bg-white/35" aria-hidden="true" />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#FF173D]/20 blur-xl" aria-hidden="true" />
+                <div className="relative flex max-w-full items-center gap-2">
+                  <TokenIcon symbol={symbol} size={42} />
                   <div className="min-w-0 text-center">
                     <div className="truncate font-mono text-[18px] font-semibold leading-tight text-white">{symbol}</div>
                     {latestDecision?.priced_target_count != null ? (
@@ -2496,8 +2706,7 @@ function LiveScanPanel({
             </>
           ) : (
             <>
-              <div className="w-px shrink-0 self-stretch bg-[#1A1A1A]" aria-hidden="true" />
-              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center text-center font-mono text-[10px] leading-4 text-[#8A8A8A]">
+              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-sm border border-[#181818] bg-[#050505]/80 px-2 py-2 text-center font-mono text-[10px] leading-4 text-[#8A8A8A]">
                 Waiting for decision…
               </p>
             </>
@@ -2721,6 +2930,7 @@ function SysLogsPanel({
   compact = false,
   feedOnly = false,
   mobileSplit = false,
+  mobileNarrative = false,
   fillHeight = false,
   rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
@@ -2731,6 +2941,7 @@ function SysLogsPanel({
   compact?: boolean;
   feedOnly?: boolean;
   mobileSplit?: boolean;
+  mobileNarrative?: boolean;
   fillHeight?: boolean;
   rowsPerPage?: number;
 }) {
@@ -2766,17 +2977,26 @@ function SysLogsPanel({
       ) : null}
 
       {compact ? (
-        <RecentActivity
-          rows={rows}
-          expandable
-          compact
-          dense={mobileSplit}
-          mode="logs"
-          scrollRoot={scrollRoot}
-          scrollContainerRef={scrollRef}
-          className={cx("min-h-0 flex-1", fillHeight && "h-full")}
-          rowsPerPage={rowsPerPage}
-        />
+        mobileNarrative ? (
+          <MobileLogFeed
+            rows={rows}
+            scrollRoot={scrollRoot}
+            scrollContainerRef={scrollRef}
+            rowsPerPage={rowsPerPage}
+          />
+        ) : (
+          <RecentActivity
+            rows={rows}
+            expandable
+            compact
+            dense={mobileSplit}
+            mode="logs"
+            scrollRoot={scrollRoot}
+            scrollContainerRef={scrollRef}
+            className={cx("min-h-0 flex-1", fillHeight && "h-full")}
+            rowsPerPage={rowsPerPage}
+          />
+        )
       ) : (
         <ViewportReveal variant="fade" delay={80}>
           <div className="border border-[#2A2A2A] bg-black/88">
@@ -2934,66 +3154,72 @@ function ActivityPanel({
     <section
       className={cx(
         "flex min-h-0 flex-col overflow-hidden",
-        compact && "flex-1 px-4 pt-4",
+        compact && "flex-1",
         desktop && "flex-1 px-8 pt-6",
         !flat && "px-10 py-9",
       )}
     >
-      <div
-        className={cx(
-          "flex shrink-0 justify-between gap-4",
-          flat ? "items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
-        )}
-      >
-        <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-            <h1
-              className={cx(
-                "mt-2 font-mono font-semibold leading-tight text-white",
-                flat ? "text-[28px]" : "text-[32px]",
-              )}
-            >
-              Activity
-            </h1>
-          </div>
-        </ViewportReveal>
-        <ActivityTabSelector value={view} onChange={setView} compact={flat} />
-      </div>
+      {!compact ? (
+        <div
+          className={cx(
+            "flex shrink-0 justify-between gap-4",
+            flat ? "items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
+          )}
+        >
+          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+              <h1
+                className={cx(
+                  "mt-2 font-mono font-semibold leading-tight text-white",
+                  flat ? "text-[28px]" : "text-[32px]",
+                )}
+              >
+                Activity
+              </h1>
+            </div>
+          </ViewportReveal>
+          <ActivityTabSelector value={view} onChange={setView} compact={flat} />
+        </div>
+      ) : null}
 
       {compact ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 overflow-hidden">
-            <LiveScanPanel
-              latestDecision={latestDecision}
-              decisions={decisions}
-              agentRunning={agentRunning}
-              mobileFit
-            />
-          </div>
-          <div className="min-h-0 flex-1 basis-0 overflow-hidden">
-            <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
-              {(activeView) =>
-                activeView === "txs" ? (
-                  <TxActivityPanel
-                    rows={activityRows}
-                    compact
-                    fillHeight
-                    rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
-                  />
-                ) : (
-                  <SysLogsPanel
-                    rows={logRows}
-                    agentLog={agentLog}
-                    agentRunning={agentRunning}
-                    compact
-                    feedOnly
-                    fillHeight
-                    rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
-                  />
-                )
-              }
-            </ActivityViewTransition>
+          <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border-y border-[#2A2A2A] bg-black/58 shadow-[0_0_28px_rgba(0,0,0,0.45)]">
+            <div className="relative z-[1] shrink-0">
+              <LiveScanPanel
+                latestDecision={latestDecision}
+                decisions={decisions}
+                agentRunning={agentRunning}
+                mobileFit
+                mobileTabs={<ActivityTabSelector value={view} onChange={setView} compact />}
+              />
+            </div>
+            <div className="relative z-[1] min-h-0 flex-1 basis-0 overflow-hidden">
+              <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
+                {(activeView) =>
+                  activeView === "txs" ? (
+                    <TxActivityPanel
+                      rows={activityRows}
+                      compact
+                      fillHeight
+                      rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
+                    />
+                  ) : (
+                    <SysLogsPanel
+                      rows={logRows}
+                      agentLog={agentLog}
+                      agentRunning={agentRunning}
+                      compact
+                      feedOnly
+                      mobileNarrative
+                      fillHeight
+                      rowsPerPage={ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE}
+                    />
+                  )
+                }
+              </ActivityViewTransition>
+            </div>
           </div>
         </div>
       ) : (
@@ -3093,7 +3319,7 @@ function DesktopDashboard({
 }
 
 const HOME_SUMMARY_ROW_LIMIT = 5;
-const HOME_SUMMARY_MOBILE_ROW_LIMIT = 3;
+const HOME_SUMMARY_MOBILE_ROW_LIMIT = 7;
 const homeActivityGridClass = "grid grid-cols-3";
 
 function HomePositionsSummary({
@@ -3111,10 +3337,10 @@ function HomePositionsSummary({
     .slice(0, rowLimit);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
+    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
       <div
         className={cx(
-          "flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A]",
+          "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
           compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
         )}
       >
@@ -3131,7 +3357,7 @@ function HomePositionsSummary({
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            "border-b border-[#141416] font-mono uppercase tracking-[0.12em] text-[#757575]",
             compact
               ? "grid grid-cols-[1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 text-[10px]",
@@ -3146,7 +3372,7 @@ function HomePositionsSummary({
             No open positions in positions.json
           </div>
         ) : (
-          <div className="divide-y divide-[#1A1A2A]">
+          <div className="divide-y divide-[#141416]">
             {rows.map((row) => (
               <div
                 key={row.id}
@@ -3182,7 +3408,7 @@ function HomePositionsSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          "shrink-0 border-t border-[#141416] font-mono uppercase tracking-[0.12em] text-[#666666]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
@@ -3196,75 +3422,213 @@ function homeActivityToken(row: ActivityRow): string | null {
   return row.token ?? tokenFromAmountLabel(row.amount);
 }
 
-function HomeActivitySummary({ activityRows, compact = false }: { activityRows: ActivityRow[]; compact?: boolean }) {
-  const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
-  const rows = activityRows.slice(0, rowLimit);
+function homeActivityScore(row: ActivityRow): string {
+  const scoreMatch = row.amount.match(/score\s+(\d+\s*\/\s*\d+)/i);
+  if (scoreMatch?.[1]) {
+    return scoreMatch[1].replace(/\s+/g, "");
+  }
+
+  const numericScore = row.details?.items.find((item) => /score/i.test(item.label) && item.value !== "N/A")?.value;
+  if (numericScore) {
+    return numericScore;
+  }
+
+  return "N/A";
+}
+
+function HomeSignalSummary({
+  latestDecision,
+}: {
+  latestDecision: StatusPayload["latestDecision"] | null;
+}) {
+  const symbol = latestDecision?.symbol ?? null;
+  const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
+  const factors = analysis?.factors ?? [];
+  // Always show exactly 6 slots
+  const slots = Array.from({ length: 6 }, (_, i) => factors[i] ?? null);
+  const action = latestDecision?.action?.toUpperCase() ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
-      <div className={cx("shrink-0 border-b border-[#1A1A2A]", compact ? "px-2 py-1.5" : "px-4 pb-3 pt-4")}>
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-        <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[11px]" : "mt-1 text-[16px]")}>
-          Recent Activity
-        </h2>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-black/30">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-[#141416] px-3 py-2">
+        <span className="font-mono text-[11px] font-semibold leading-none text-white">Signal</span>
+        {action ? (
+          <span
+            className={cx(
+              "font-mono text-[8px] uppercase tracking-[0.1em] leading-none",
+              action === "ENTER" ? "text-[#D0D0D0]" : "text-[#FF6B6B]",
+            )}
+          >
+            {action}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-3 py-3">
+        {symbol ? (
+          <div className="flex flex-col items-center justify-center gap-1">
+            <TokenIcon symbol={symbol} size={52} />
+            <span className="font-mono text-[12px] font-bold leading-none text-white">{symbol}</span>
+          </div>
+        ) : (
+          <span className="font-mono text-[10px] text-[#555555]">No signal</span>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center justify-around px-3 pb-4">
+        {slots.map((factor, i) => {
+          if (!factor) {
+            return (
+              <span
+                key={i}
+                className="h-[9px] w-[9px] shrink-0 rounded-full border border-[#5A5A5A] bg-[#202020]"
+                aria-hidden="true"
+              />
+            );
+          }
+          return (
+            <span
+              key={factor.key}
+              title={factor.label}
+              aria-label={`${factor.label}: ${factor.passed ? "pass" : "fail"}`}
+              className={cx(
+                "h-[9px] w-[9px] shrink-0 rounded-full",
+                factor.passed ? "bg-[#C8C8C8]" : "bg-[#FF4444]/60",
+              )}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HomeActivitySummary({
+  activityRows,
+  logRows = [],
+  compact = false,
+  maxRows,
+}: {
+  activityRows: ActivityRow[];
+  logRows?: ActivityRow[];
+  compact?: boolean;
+  maxRows?: number;
+}) {
+  const [view, setView] = useState<ActivityView>("sys");
+  const rowLimit = maxRows ?? (compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT);
+  const rows = (view === "sys" ? logRows : activityRows).slice(0, rowLimit);
+
+  return (
+    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
+      <div
+        className={cx(
+          "flex shrink-0 items-center justify-between border-b border-[#141416]",
+          compact ? "px-2 py-2" : "px-4 pb-3 pt-4",
+        )}
+      >
+        {compact ? (
+          <>
+            <span className="font-mono text-xs font-medium uppercase tracking-widest leading-none text-[#666666]">Activity</span>
+            <div className="flex items-center overflow-hidden rounded border border-[#333333]">
+              {(["sys", "txs"] as ActivityView[]).map((tab) => {
+                const active = tab === view;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setView(tab)}
+                    aria-pressed={active}
+                    style={{ fontSize: "9px", padding: "2px 5px", lineHeight: 1 }}
+                    className={cx(
+                      "font-mono uppercase tracking-wider transition-colors",
+                      active ? "bg-[#333333] text-white font-semibold" : "text-[#555555] hover:text-[#999999]",
+                    )}
+                  >
+                    {tab === "sys" ? "Log" : "Tx"}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
+              <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Recent Activity</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              {(["sys", "txs"] as ActivityView[]).map((tab) => {
+                const active = tab === view;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setView(tab)}
+                    aria-pressed={active}
+                    className={cx(
+                      "font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
+                      active ? "font-semibold text-white" : "font-medium text-[#555555] hover:text-[#999999]",
+                    )}
+                  >
+                    {tab === "sys" ? "Logs" : "Tx"}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cx(
-            "border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
-            compact
-              ? "grid grid-cols-[1fr_auto] px-2 py-1 text-[8px]"
-              : cx(homeActivityGridClass, "px-4 py-2 text-[10px]"),
-          )}
-        >
-          <span className="text-left">{compact ? "Event" : "Date"}</span>
-          {!compact ? <span className="text-center">Token</span> : null}
-          <span className={compact ? "text-right" : "text-center"}>Status</span>
-        </div>
+        {!compact ? (
+          <div className={cx(homeActivityGridClass, "border-b border-[#141416] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]")}>
+            <span className="text-left">Date</span>
+            <span className="text-center">Token</span>
+            <span className="text-center">Status</span>
+          </div>
+        ) : null}
         {rows.length === 0 ? (
           <div className={cx("font-mono text-[#666666]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
             No recent activity
           </div>
         ) : (
-          <div className="divide-y divide-[#1A1A2A]">
+          <div className={cx("divide-y divide-[#141416]", compact && "flex h-full flex-col")}>
             {rows.map((row) => {
               const token = homeActivityToken(row);
 
               if (compact) {
-                const eventContent = (
-                  <span className="truncate font-mono text-[10px] font-bold text-[#F2F2F2]">{row.amount}</span>
-                );
+                const score = homeActivityScore(row);
 
                 return (
                   <div
                     key={row.id}
-                    className="grid grid-cols-[1fr_auto] items-center px-2 py-1 hover:bg-[#070707]"
+                    className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 hover:bg-[#070707]"
                   >
-                    <span className="min-w-0 truncate text-left">
-                      {row.explorerUrl ? (
+                    <span className="flex items-center justify-start">
+                      {token && row.explorerUrl ? (
                         <a
                           href={row.explorerUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="truncate font-mono text-[10px] font-bold text-[#8FD9FF] transition-colors hover:text-white"
-                          title={row.explorerUrl}
+                          className="inline-flex"
+                          title={token}
+                          aria-label={token}
                         >
-                          {row.amount}
+                          <TokenIcon symbol={token} size={16} />
                         </a>
+                      ) : token ? (
+                        <span title={token} aria-label={token}>
+                          <TokenIcon symbol={token} size={16} />
+                        </span>
                       ) : (
-                        eventContent
+                        <span className="h-4 w-4 rounded-full border border-[#2A2A2A]" aria-hidden="true" />
                       )}
                     </span>
-                    <span className="flex items-center justify-end gap-1">
-                      <StatusDot status={row.status} tone={row.tone} />
-                      <span
-                        className={cx(
-                          "truncate font-mono text-[8px] uppercase",
-                          statusToneTextClass(row.tone),
-                        )}
-                      >
-                        {row.status}
-                      </span>
+                    <span className="min-w-0 truncate text-left font-mono text-[10px] font-bold tabular-nums text-[#F2F2F2]">
+                      {score}
+                    </span>
+                    <span className="flex items-center justify-end">
+                      <ActivityStatusIndicator status={row.status} tone={row.tone} compact />
                     </span>
                   </div>
                 );
@@ -3293,14 +3657,11 @@ function HomeActivitySummary({ activityRows, compact = false }: { activityRows: 
           </div>
         )}
       </div>
-      <div
-        className={cx(
-          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
-          compact ? "px-2 py-0.5 text-[9px]" : "px-4 py-2 text-[10px]",
-        )}
-      >
-        {activityRows.length} total {activityRows.length === 1 ? "event" : "events"}
-      </div>
+      {!compact ? (
+        <div className="shrink-0 border-t border-[#141416] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+          {(view === "sys" ? logRows : activityRows).length} total events
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3321,10 +3682,10 @@ function HomeWalletSummary({
     .slice(0, rowLimit);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border border-[#2A2A2A] bg-black/80">
+    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
       <div
         className={cx(
-          "flex shrink-0 items-baseline justify-between border-b border-[#1A1A2A]",
+          "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
           compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
         )}
       >
@@ -3348,7 +3709,7 @@ function HomeWalletSummary({
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "grid border-b border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            "grid border-b border-[#141416] font-mono uppercase tracking-[0.12em] text-[#757575]",
             compact
               ? "grid-cols-[auto_1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid-cols-[1fr_1.5fr_1fr] px-4 py-2 text-[10px]",
@@ -3363,7 +3724,7 @@ function HomeWalletSummary({
             Waiting for TWAK wallet balances
           </div>
         ) : (
-          <div className="divide-y divide-[#1A1A2A]">
+          <div className="divide-y divide-[#141416]">
             {rows.map((row) => (
               <div
                 key={`${row.chain}-${row.symbol}`}
@@ -3403,7 +3764,7 @@ function HomeWalletSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#1A1A2A] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          "shrink-0 border-t border-[#141416] font-mono uppercase tracking-[0.12em] text-[#666666]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
@@ -3431,7 +3792,7 @@ function DesktopOverviewSection({
             variant="fade"
             delay={200}
             duration="slow"
-            className="relative col-span-3 h-full min-h-0 overflow-hidden border border-[#2A2A2A] bg-black/80"
+            className="relative col-span-3 h-full min-h-0 overflow-hidden border border-[#1E1E1E] bg-black/80"
           >
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
@@ -3443,7 +3804,7 @@ function DesktopOverviewSection({
             <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} />
           </ViewportReveal>
           <ViewportReveal variant="up" delay={460} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomeActivitySummary activityRows={view.activityRows} />
+            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} />
           </ViewportReveal>
           <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
             <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} />
@@ -3571,7 +3932,7 @@ function OverviewTopBar({
   return (
     <header
       className={cx(
-        "sticky top-0 z-30 shrink-0 border-b border-[#1A1A1A] bg-black/88 backdrop-blur-sm",
+        "sticky top-0 z-30 shrink-0 border-b border-[#1A1A1A] bg-black/70 backdrop-blur-sm",
         enabled && phase === "in" && "home-topbar-in",
         enabled && phase === "out" && "home-topbar-out",
       )}
@@ -3711,41 +4072,72 @@ function MobileOverviewSection({
   view,
   timeRange,
   onTimeRangeChange,
+  latestDecision = null,
 }: {
   view: DashboardViewModel;
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  latestDecision?: StatusPayload["latestDecision"] | null;
 }) {
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-      <MobileHeroMetrics view={view} />
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ViewportReveal
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative mx-4 shrink-0 h-[140px] border border-[#2A2A2A] bg-black/80"
+        className="relative min-h-0 flex-1 border-b border-[#2A2A2A] bg-black/30"
       >
-        <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-        <div className="absolute inset-0 p-2">
-          <PortfolioChart data={view.mobileChartData} variant="mobile" />
+        <div className="absolute inset-0 flex flex-col">
+          <div className="grid grid-cols-2 gap-x-4 px-4 pt-3 pb-2">
+            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
+              <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Total Balance</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+                <span className="font-mono text-[11px] text-[#B8B8B8]">USD</span>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal
+              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+              delay={80}
+              duration="slow"
+              className="min-w-0 text-center"
+            >
+              <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Window P/L</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+                {view.pnlDelta ? (
+                  <span
+                    className={cx(
+                      "font-mono text-[11px] font-bold tabular-nums",
+                      view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                    )}
+                  >
+                    ({view.pnlDelta})
+                  </span>
+                ) : null}
+              </div>
+            </ViewportReveal>
+          </div>
+          <div className="relative min-h-0 flex-1">
+            <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+            <div className="absolute inset-0 p-2">
+              <PortfolioChart data={view.mobileChartData} variant="mobile" />
+            </div>
+          </div>
         </div>
       </ViewportReveal>
       <ViewportReveal
         variant="up"
         delay={200}
         duration="normal"
-        className="flex min-h-0 flex-1 flex-col px-4 pb-4"
+        className="flex shrink-0 flex-col"
       >
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
-          <div className="col-span-1 flex min-h-0 flex-col">
-            <HomePositionsSummary
-              positionRows={view.positionRows}
-              totalPositionValue={view.totalPositionValue}
-              compact
-            />
+        <div className="grid grid-cols-2" style={{ height: "30vh" }}>
+          <div className="col-span-1 flex flex-col border-r border-[#2A2A2A]">
+            <HomeSignalSummary latestDecision={latestDecision} />
           </div>
-          <div className="col-span-1 flex min-h-0 flex-col">
-            <HomeActivitySummary activityRows={view.activityRows} compact />
+          <div className="col-span-1 flex flex-col">
+            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} compact />
           </div>
         </div>
       </ViewportReveal>
@@ -3753,11 +4145,11 @@ function MobileOverviewSection({
   );
 }
 
-// Guide is desktop-only; mobile bar is 2 | Intel | 2.
+// Guide is desktop-only; mobile bar uses the logo as Home.
 const mobileNavSideItems = {
-  left: dashboardNavItems.slice(0, 2),
-  center: dashboardNavItems[3]!,
-  right: [dashboardNavItems[2]!, dashboardNavItems[4]!],
+  left: [dashboardNavItems[1]!, dashboardNavItems[2]!],
+  center: dashboardNavItems[0]!,
+  right: [dashboardNavItems[3]!, dashboardNavItems[4]!],
 } as const;
 
 function MobileNavItemButton({
@@ -3786,9 +4178,6 @@ function MobileNavItemButton({
         <span className="absolute top-0 h-0.5 w-4 rounded-full bg-white" aria-hidden="true" />
       ) : null}
       <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-      <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-[0.06em]">
-        {item.label}
-      </span>
     </button>
   );
 }
@@ -3800,9 +4189,11 @@ function MobileBottomNav({
   activeSection: DashboardSection;
   onNavigate: (section: DashboardSection) => void;
 }) {
+  const logoActive = mobileNavSideItems.center.section === activeSection;
+
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A2A] bg-black/95 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A2A] bg-black/75 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div className="flex h-full w-full items-center justify-between px-1">
@@ -3816,11 +4207,21 @@ function MobileBottomNav({
             />
           ))}
         </div>
-        <MobileNavItemButton
-          item={mobileNavSideItems.center}
-          active={mobileNavSideItems.center.section === activeSection}
-          onNavigate={onNavigate}
-        />
+        <button
+          type="button"
+          onClick={() => onNavigate(mobileNavSideItems.center.section)}
+          aria-current={logoActive ? "page" : undefined}
+          aria-label={mobileNavSideItems.center.label}
+          className={cx(
+            "relative flex h-full min-w-[56px] items-center justify-center px-2 transition-opacity",
+            logoActive ? "opacity-100" : "opacity-70 active:opacity-100",
+          )}
+        >
+          {logoActive ? (
+            <span className="absolute top-0 h-0.5 w-5 rounded-full bg-white" aria-hidden="true" />
+          ) : null}
+          <BrandMark variant="rail" />
+        </button>
         <div className="flex flex-1 items-center justify-evenly">
           {mobileNavSideItems.right.map((item) => (
             <MobileNavItemButton
@@ -3853,14 +4254,18 @@ function MobileDashboard({
   onTimeRangeChange: (range: TimeRange) => void;
   sectionTransitionEnabled: boolean;
 }) {
+  const showTopBar = activeSection !== "activity";
+
   return (
     <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-black text-white lg:hidden">
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <div className="shrink-0">
-          <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
-        </div>
+        {showTopBar ? (
+          <div className="shrink-0">
+            <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
+          </div>
+        ) : null}
         <SectionTransition
           section={activeSection}
           enabled={sectionTransitionEnabled}
@@ -3895,6 +4300,7 @@ function MobileDashboard({
                 view={view}
                 timeRange={timeRange}
                 onTimeRangeChange={onTimeRangeChange}
+                latestDecision={data?.latestDecision ?? null}
               />
             )
           }
