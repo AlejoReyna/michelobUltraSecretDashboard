@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
 import {
@@ -86,6 +87,13 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
 ];
 
 const DESKTOP_NAV_WIDTH = 56;
+const defaultDeviceTopSectionColor = "#000000";
+const focusedDeviceTopSectionColor = "#111111";
+const focusedDeviceTopSections = new Set<DashboardSection>(["positions", "wallet", "market-chat"]);
+
+function deviceTopSectionColorFor(section: DashboardSection) {
+  return focusedDeviceTopSections.has(section) ? focusedDeviceTopSectionColor : defaultDeviceTopSectionColor;
+}
 
 function panelUsesFlatChrome(compact: boolean, desktop: boolean) {
   return compact || desktop;
@@ -4255,9 +4263,11 @@ function MobileDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   const showTopBar = activeSection !== "activity";
+  const deviceTopSectionColor = deviceTopSectionColorFor(activeSection);
 
   return (
     <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-black text-white lg:hidden">
+      <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
       <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">

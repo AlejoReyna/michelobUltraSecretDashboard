@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
@@ -10,6 +10,11 @@ export const metadata: Metadata = {
     shortcut: "/raccoon.png",
     apple: "/raccoon.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
