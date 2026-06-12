@@ -49,6 +49,8 @@ import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio
 import { TokenIcon } from "@/components/token-icon";
 import {
   agentModeLabel,
+  boughtTokensFromTelemetry,
+  competitionTokenKey,
   isQuoteAsset,
   liveWalletBalancesFromTelemetry,
   realActiveTradeCount,
@@ -184,6 +186,7 @@ const ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE = 5;
 type PositionRow = {
   id: string;
   symbol: string;
+  source: "tracked" | "wallet";
   amount: number | null;
   entryPrice: number | null;
   entryValueUsd: number | null;
@@ -1264,7 +1267,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
 }
 
 function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRow[] {
-  return (data?.positions.positions ?? [])
+  const trackedRows = (data?.positions.positions ?? [])
     .filter((position) => {
       const amount = position.amount_tokens;
       return typeof amount === "number" && Number.isFinite(amount) && amount > 0;
@@ -1272,6 +1275,7 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
     .map((position, index) => ({
       id: `position-${position.symbol}-${position.opened_at ?? index}`,
       symbol: position.symbol,
+      source: "tracked" as const,
       amount: position.amount_tokens ?? null,
       entryPrice: position.entry_price ?? null,
       entryValueUsd: position.entry_value_usdc ?? null,
@@ -1280,6 +1284,24 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
       takeProfitPrice: position.take_profit_price ?? null,
       openedAt: position.opened_at ?? null,
     }));
+
+  const trackedSymbols = new Set(trackedRows.map((row) => competitionTokenKey(row.symbol)));
+  const walletRows = boughtTokensFromTelemetry(data)
+    .filter((holding) => holding.status === "HELD" && !trackedSymbols.has(competitionTokenKey(holding.symbol)))
+    .map((holding) => ({
+      id: `wallet-position-${holding.chain}-${holding.symbol}`,
+      symbol: holding.symbol,
+      source: "wallet" as const,
+      amount: holding.amount,
+      entryPrice: null,
+      entryValueUsd: holding.valueUsd ?? holding.entryValueUsd,
+      highestPrice: null,
+      trailingStopPrice: null,
+      takeProfitPrice: null,
+      openedAt: null,
+    }));
+
+  return [...trackedRows, ...walletRows];
 }
 
 function buildViewModel(
@@ -2507,6 +2529,11 @@ function PositionTableRow({
         <>
           <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
           <span className="truncate font-mono text-[13px] font-bold text-[#F2F2F2]">{row.symbol}</span>
+          {row.source === "wallet" ? (
+            <span className="shrink-0 border border-[#3A3A3A] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[#8A8A8A]">
+              wallet
+            </span>
+          ) : null}
         </>,
         cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-5 py-4"),
       )}
@@ -2611,6 +2638,14 @@ const DESKTOP_POSITION_GRID =
   "grid grid-cols-[minmax(150px,1.25fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(116px,0.9fr)] items-center gap-x-5";
 
 function PositionCorridor({ row }: { row: PositionRow }) {
+  if (row.source === "wallet") {
+    return (
+      <div className="col-span-full mt-4 border border-[#262626] bg-[#070707] px-4 py-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
+        Wallet-held token not found in `positions.json`; entry, stop, and target are unavailable until the agent state syncs.
+      </div>
+    );
+  }
+
   const entry = row.entryPrice;
   const high = row.highestPrice;
   const stop = row.trailingStopPrice;
@@ -2706,6 +2741,11 @@ function DesktopPositionRow({
             <span className="truncate font-mono text-[21px] font-bold leading-none text-[#F2F2F2]">
               {row.symbol}
             </span>
+            {row.source === "wallet" ? (
+              <span className="shrink-0 border border-[#3A3A3A] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8A8A8A]">
+                wallet-held
+              </span>
+            ) : null}
             {explorerUrl ? (
               <span
                 className="font-mono text-[14px] text-[#5A5A5A] opacity-0 transition-opacity group-hover:opacity-100"
@@ -2771,7 +2811,7 @@ function DesktopPositionsBoard({
 
   const summaryBlocks: Array<{ label: string; value: string; valueClass?: string }> = [
     { label: "Positions", value: String(rows.length) },
-    { label: "Total entry value", value: totalPositionValue },
+    { label: "Total position value", value: totalPositionValue },
     {
       label: "Nearest stop",
       value: nearestStop
@@ -2966,7 +3006,7 @@ function ActivePositionsPanel({
           </ViewportReveal>
           <ViewportReveal variant="scale" delay={160} duration="slow">
             <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total entry value</div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total position value</div>
               <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
             </div>
           </ViewportReveal>
