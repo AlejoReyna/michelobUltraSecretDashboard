@@ -228,6 +228,65 @@ function explorerUrlFromExecution(execution: StatusPayload["executions"][number]
   return explorerUrlFor(chain, txHash);
 }
 
+const POSITION_EXECUTION_MATCH_WINDOW_MS = 15 * 60 * 1000;
+
+function positionExplorerUrl(
+  row: PositionRow,
+  executions: StatusPayload["executions"],
+  walletAddress: string | null | undefined,
+): string | null {
+  const openedAtMs = row.openedAt ? Date.parse(row.openedAt) : Number.NaN;
+  let best: { url: string; distance: number } | null = null;
+
+  for (const execution of executions) {
+    if ((execution.to_symbol ?? "").trim().toUpperCase() !== row.symbol.trim().toUpperCase()) {
+      continue;
+    }
+
+    const url = explorerUrlFromExecution(execution);
+    if (!url) {
+      continue;
+    }
+
+    const executionMs = execution.timestamp ? Date.parse(execution.timestamp) : Number.NaN;
+    const distance =
+      Number.isFinite(openedAtMs) && Number.isFinite(executionMs)
+        ? Math.abs(executionMs - openedAtMs)
+        : Number.POSITIVE_INFINITY;
+
+    if (!best || distance < best.distance) {
+      best = { url, distance };
+    }
+  }
+
+  if (best && (best.distance <= POSITION_EXECUTION_MATCH_WINDOW_MS || !Number.isFinite(openedAtMs))) {
+    return best.url;
+  }
+
+  if (walletAddress) {
+    return `https://bscscan.com/address/${walletAddress}#tokentxns`;
+  }
+
+  return best?.url ?? null;
+}
+
+function positivePrice(value: number | null): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function positionRiskStats(row: PositionRow) {
+  const entry = row.entryPrice;
+  const stop = row.trailingStopPrice;
+  const target = row.takeProfitPrice;
+
+  return {
+    stopDistancePct:
+      positivePrice(entry) && positivePrice(stop) ? ((entry - stop) / entry) * 100 : null,
+    targetUpsidePct:
+      positivePrice(entry) && positivePrice(target) ? ((target - entry) / entry) * 100 : null,
+  };
+}
+
 type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
@@ -2500,16 +2559,290 @@ function ActivePositionsTable({
   );
 }
 
+const DESKTOP_POSITION_GRID =
+  "grid grid-cols-[minmax(150px,1.25fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(116px,0.9fr)] items-center gap-x-5";
+
+function PositionCorridor({ row }: { row: PositionRow }) {
+  const entry = row.entryPrice;
+  const high = row.highestPrice;
+  const stop = row.trailingStopPrice;
+  const target = row.takeProfitPrice;
+  const { stopDistancePct, targetUpsidePct } = positionRiskStats(row);
+
+  const valid =
+    positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
+
+  const place = (value: number) =>
+    Math.min(100, Math.max(0, ((value - (stop as number)) / ((target as number) - (stop as number))) * 100));
+
+  return (
+    <div className="col-span-full mt-4 flex items-center gap-5">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-[#FFD21A]" aria-hidden="true" />
+      <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
+        {valid ? (
+          <>
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-[#1F1F1F]"
+              style={{ width: `${place(entry as number)}%` }}
+              aria-hidden="true"
+            />
+            <span
+              className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-white"
+              style={{ left: `${place(entry as number)}%` }}
+              title={`Entry ${formatPrice(entry)}`}
+              aria-hidden="true"
+            />
+            {positivePrice(high) ? (
+              <span
+                className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#00FF66]"
+                style={{ left: `${place(high)}%` }}
+                title={`High ${formatPrice(high)}`}
+                aria-hidden="true"
+              />
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      <span className="h-2 w-2 shrink-0 rounded-full bg-[#8FD9FF]" aria-hidden="true" />
+      <div className="shrink-0 font-mono text-[12px] tabular-nums text-[#8A8A8A]">
+        {stopDistancePct !== null ? (
+          <span className="text-[#FFD21A]">-{stopDistancePct.toFixed(1)}% to stop</span>
+        ) : (
+          <span>stop N/A</span>
+        )}
+        <span className="mx-2 text-[#3A3A3A]">·</span>
+        {targetUpsidePct !== null ? (
+          <span className="text-[#8FD9FF]">+{targetUpsidePct.toFixed(1)}% to target</span>
+        ) : (
+          <span>target N/A</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DesktopPositionRow({
+  row,
+  index,
+  explorerUrl,
+  scrollRoot,
+}: {
+  row: PositionRow;
+  index: number;
+  explorerUrl: string | null;
+  scrollRoot: Element | null;
+}) {
+  const cell = (column: PositionColumn, content: ReactNode, className?: string) => (
+    <ViewportReveal
+      as="span"
+      variant={column === "token" && index === 0 ? positionLeadVariant(index) : positionColumnVariant(column)}
+      delay={positionCellDelay(index, column)}
+      duration={index === 0 && column === "token" ? "slow" : "normal"}
+      root={scrollRoot}
+      className={cx(
+        column === "token" ? "inline-flex min-w-0 items-center gap-2.5" : "block truncate",
+        className,
+      )}
+    >
+      {content}
+    </ViewportReveal>
+  );
+
+  const body = (
+    <>
+      <div className={DESKTOP_POSITION_GRID}>
+        {cell(
+          "token",
+          <>
+            <TokenIcon symbol={row.symbol} size={22} />
+            <span className="truncate font-mono text-[21px] font-bold leading-none text-[#F2F2F2]">
+              {row.symbol}
+            </span>
+            {explorerUrl ? (
+              <span
+                className="font-mono text-[14px] text-[#5A5A5A] opacity-0 transition-opacity group-hover:opacity-100"
+                aria-hidden="true"
+              >
+                ↗
+              </span>
+            ) : null}
+          </>,
+        )}
+        {cell("amount", formatTokenAmount(row.amount), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
+        {cell("entry", formatPrice(row.entryPrice), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
+        {cell("value", formatUsd(row.entryValueUsd), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
+        {cell("high", formatPrice(row.highestPrice), "font-mono text-[16px] tabular-nums text-[#00FF66]")}
+        {cell("stop", formatPrice(row.trailingStopPrice), "font-mono text-[16px] tabular-nums text-[#FFD21A]")}
+        {cell("target", formatPrice(row.takeProfitPrice), "font-mono text-[16px] tabular-nums text-[#8FD9FF]")}
+        {cell("opened", formatOpenedAt(row.openedAt), "text-right font-mono text-[14px] text-[#A8A8A8]")}
+      </div>
+      <PositionCorridor row={row} />
+    </>
+  );
+
+  const rowClass = "group block border-b border-[#1A1A1A] px-6 py-6 transition-colors";
+
+  if (explorerUrl) {
+    return (
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`View ${row.symbol} entry on BscScan`}
+        title={`View ${row.symbol} entry on BscScan`}
+        className={cx(rowClass, "cursor-pointer hover:bg-[#070707]")}
+      >
+        {body}
+      </a>
+    );
+  }
+
+  return <div className={rowClass}>{body}</div>;
+}
+
+function DesktopPositionsBoard({
+  rows,
+  executions,
+  walletAddress,
+  totalPositionValue,
+  scrollRoot,
+}: {
+  rows: PositionRow[];
+  executions: StatusPayload["executions"];
+  walletAddress: string | null;
+  totalPositionValue: string;
+  scrollRoot: Element | null;
+}) {
+  const stats = rows.map((row) => ({ row, ...positionRiskStats(row) }));
+  const nearestStop = stats
+    .filter((item) => item.stopDistancePct !== null)
+    .sort((a, b) => (a.stopDistancePct as number) - (b.stopDistancePct as number))[0];
+  const nearestTarget = stats
+    .filter((item) => item.targetUpsidePct !== null)
+    .sort((a, b) => (a.targetUpsidePct as number) - (b.targetUpsidePct as number))[0];
+
+  const summaryBlocks: Array<{ label: string; value: string; valueClass?: string }> = [
+    { label: "Positions", value: String(rows.length) },
+    { label: "Total entry value", value: totalPositionValue },
+    {
+      label: "Nearest stop",
+      value: nearestStop
+        ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%`
+        : "N/A",
+      valueClass: nearestStop ? "text-[#FFD21A]" : undefined,
+    },
+    {
+      label: "Nearest target",
+      value: nearestTarget
+        ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
+        : "N/A",
+      valueClass: nearestTarget ? "text-[#8FD9FF]" : undefined,
+    },
+  ];
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+          <div className="font-mono text-[22px] font-semibold uppercase tracking-[0.18em] text-[#3A3A3A]">
+            No open positions
+          </div>
+          <div className="mt-3 font-mono text-[13px] text-[#5A5A5A]">
+            positions.json is empty — the agent scans every 5 minutes
+          </div>
+        </ViewportReveal>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div className="grid shrink-0 grid-cols-2 gap-px border-b border-[#1A1A1A] bg-[#1A1A1A] xl:grid-cols-4">
+        {summaryBlocks.map((block, index) => (
+          <ViewportReveal key={block.label} variant="fade" delay={80 + index * 60} root={scrollRoot}>
+            <div className="bg-[#050505] px-6 py-5">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">{block.label}</div>
+              <div
+                className={cx(
+                  "mt-2 truncate font-mono text-[26px] font-semibold tabular-nums text-white xl:text-[30px]",
+                  block.valueClass,
+                )}
+              >
+                {block.value}
+              </div>
+            </div>
+          </ViewportReveal>
+        ))}
+      </div>
+      <div
+        className={cx(
+          DESKTOP_POSITION_GRID,
+          "sticky top-0 z-10 border-b border-[#1A1A1A] bg-[#050505] px-6 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
+        )}
+      >
+        <PositionHeaderCellLabel column="token" label="Token" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="amount" label="Amount" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="entry" label="Entry" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="value" label="Value" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="high" label="High" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="stop" label="Stop" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="target" label="Target" scrollRoot={scrollRoot} />
+        <PositionHeaderCellLabel column="opened" label="Opened" align="right" scrollRoot={scrollRoot} />
+      </div>
+      <div>
+        {rows.map((row, index) => (
+          <DesktopPositionRow
+            key={row.id}
+            row={row}
+            index={index}
+            explorerUrl={positionExplorerUrl(row, executions, walletAddress)}
+            scrollRoot={scrollRoot}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PositionHeaderCellLabel({
+  column,
+  label,
+  align = "left",
+  scrollRoot,
+}: {
+  column: PositionColumn;
+  label: string;
+  align?: "left" | "right";
+  scrollRoot: Element | null;
+}) {
+  return (
+    <ViewportReveal
+      as="span"
+      variant={positionColumnVariant(column)}
+      delay={positionCellDelay(0, column)}
+      duration="fast"
+      root={scrollRoot}
+      className={cx("block", align === "right" && "text-right")}
+    >
+      {label}
+    </ViewportReveal>
+  );
+}
+
 function ActivePositionsPanel({
   rows,
   totalPositionValue,
   agentMode,
+  executions = [],
+  walletAddress = null,
   compact = false,
   desktop = false,
 }: {
   rows: PositionRow[];
   totalPositionValue: string;
   agentMode: string;
+  executions?: StatusPayload["executions"];
+  walletAddress?: string | null;
   compact?: boolean;
   desktop?: boolean;
 }) {
@@ -2544,7 +2877,7 @@ function ActivePositionsPanel({
             >
               Active Positions
             </h1>
-            {flat ? (
+            {flat && !(desktop && !compact) ? (
               <div className="shrink-0 text-right font-mono">
                 <ViewportReveal variant="fade" delay={70} duration="fast">
                   <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
@@ -2555,11 +2888,11 @@ function ActivePositionsPanel({
                   <div className="mt-1 text-sm tabular-nums text-white">{totalPositionValue}</div>
                 </ViewportReveal>
               </div>
-            ) : (
+            ) : !flat ? (
               <ViewportReveal variant="scale" delay={90} duration="fast">
                 <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
               </ViewportReveal>
-            )}
+            ) : null}
           </div>
           {!flat ? (
             <ViewportReveal variant="left" delay={140}>
@@ -2605,6 +2938,16 @@ function ActivePositionsPanel({
             </div>
           </div>
         </ViewportReveal>
+      ) : desktop && !compact ? (
+        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto">
+          <DesktopPositionsBoard
+            rows={rows}
+            executions={executions}
+            walletAddress={walletAddress}
+            totalPositionValue={totalPositionValue}
+            scrollRoot={scrollRoot}
+          />
+        </div>
       ) : (
         <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
           <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
@@ -3310,6 +3653,8 @@ function DesktopDashboard({
                 rows={view.positionRows}
                 totalPositionValue={view.totalPositionValue}
                 agentMode={view.agentMode}
+                executions={data?.executions ?? []}
+                walletAddress={data?.wallet.address ?? null}
                 desktop
               />
             ) : section === "algorithm" ? (
