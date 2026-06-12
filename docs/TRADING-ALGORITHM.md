@@ -158,7 +158,7 @@ cycle complete action=WAIT symbol=AAVE
 
 ## 5. Decision state machine
 
-Formal view of how actions relate to factor scores and guardrails:
+Formal view of how actions relate to entry scores, slippage, and guardrails:
 
 ```mermaid
 stateDiagram-v2
@@ -319,7 +319,7 @@ export function decisionActionTone(action: Decision["action"]): "green" | "yello
 }
 ```
 
-### 7.2 Example: WAIT (5/6)
+### 7.2 Example: WAIT (scored near-miss)
 
 From `agent-exporter/fixtures/decision_log.jsonl`, cycle 121:
 
@@ -334,6 +334,9 @@ From `agent-exporter/fixtures/decision_log.jsonl`, cycle 121:
   "action": "WAIT",
   "symbol": "BNB",
   "position_size_usdc": 0,
+  "strategy_mode": "breakout",
+  "entry_score": 42,
+  "entries_blocked_reason": null,
   "factor_scores": {
     "volume_breakout": true,
     "six_hour_high_break": false,
@@ -343,13 +346,13 @@ From `agent-exporter/fixtures/decision_log.jsonl`, cycle 121:
     "derivatives_risk_clear": true
   },
   "true_factor_count": 5,
-  "estimated_slippage_pct": 0.11,
-  "reason": "Waiting for six hour high confirmation.",
+  "estimated_slippage_pct": 0.0011,
+  "reason": "entry score 42.0 below threshold 45.0; waiting for stronger reference-high break.",
   "priced_target_count": 8
 }
 ```
 
-`six_hour_high_break: false` → 5/6 → `WAIT`.
+`entry_score: 42` is below the 45-point entry threshold, so the bot logs `WAIT`.
 
 ### 7.3 Example: ENTER (scored breakout)
 
@@ -362,6 +365,9 @@ From `apps/web/src/lib/mock-data.ts`, cycle 122:
   "symbol": "CAKE",
   "entries_allowed": true,
   "position_size_usdc": 75,
+  "strategy_mode": "breakout",
+  "entry_score": 80,
+  "entries_blocked_reason": null,
   "factor_scores": {
     "volume_breakout": true,
     "six_hour_high_break": true,
@@ -371,8 +377,7 @@ From `apps/web/src/lib/mock-data.ts`, cycle 122:
     "derivatives_risk_clear": true
   },
   "true_factor_count": 6,
-  "entry_score": 80,
-  "estimated_slippage_pct": 0.18,
+  "estimated_slippage_pct": 0.0018,
   "reason": "entry score 80.0 >= 45.0; slippage under cap (6/6 factors true)"
 }
 ```
@@ -387,6 +392,9 @@ Cycle 123:
   "action": "BLOCKED",
   "symbol": "TWT",
   "entries_allowed": false,
+  "strategy_mode": "breakout",
+  "entry_score": 68,
+  "entries_blocked_reason": "daily_trade_limit",
   "factor_scores": {
     "volume_breakout": true,
     "six_hour_high_break": true,
@@ -396,18 +404,19 @@ Cycle 123:
     "derivatives_risk_clear": false
   },
   "true_factor_count": 4,
-  "reason": "Entry blocked by risk-off regime guardrail."
+  "estimated_slippage_pct": 0.0024,
+  "reason": "entry score 68.0 >= 45.0; guardrails blocked new entries"
 }
 ```
 
-Note: `regime_not_risk_off: false` both fails a factor **and** triggers the risk-off guardrail narrative.
+Note: `entries_blocked_reason` carries the guardrail reason separately from the scored market signal.
 
 ### 7.5 Simulated examples in UI
 
 `decision-algorithm-panel.tsx` ships two static snapshots:
 
-- **`SIMULATED_PASSING_SIGNAL`** — CAKE, legacy passing example, `ENTER`
-- **`SIMULATED_NON_PASSING_SIGNAL`** — LINK, legacy non-passing example, `WAIT`
+- **`SIMULATED_PASSING_SIGNAL`** — CAKE, 80/100 scored breakout example, `ENTER`
+- **`SIMULATED_NON_PASSING_SIGNAL`** — LINK, 42/100 scored near-miss example, `WAIT`
 
 Plus a live snapshot bound to `latestDecision` from telemetry.
 

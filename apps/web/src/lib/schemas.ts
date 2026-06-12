@@ -32,6 +32,7 @@ export const decisionSchema = z
     priced_target_count: nullableNumber,
     strategy_mode: z.enum(["breakout", "scalping"]).nullable().optional(),
     entry_score: nullableNumber,
+    entries_blocked_reason: z.string().nullable().optional(),
     exit_reason: z.string().nullable().optional(),
     hold_time_seconds: nullableNumber,
   })

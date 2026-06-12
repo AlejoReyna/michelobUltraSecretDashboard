@@ -8,8 +8,11 @@ import {
   outcomeRevealVariant,
 } from "@/components/viewport-reveal";
 import {
-  ENTRY_FACTOR_COUNT,
+  BREAKOUT_ENTRY_SCORE_MAX,
+  BREAKOUT_ENTRY_SCORE_MIN,
+  BREAKOUT_QUOTE_SCORE_FLOOR,
   ENTRY_FACTOR_KEYS,
+  breakoutEntryScoreStats,
   entryFactorStats,
   resolveStrategyMode,
   type EntryFactorKey,
@@ -33,50 +36,50 @@ type FactorMeta = {
 const ENTRY_FACTORS: FactorMeta[] = [
   {
     key: "volume_breakout",
-    title: "Volume breakout",
+    title: "Volume breakout · 25 pts",
     plain: "More people are trading this token than usual.",
     detail:
-      "Recent trading volume is significantly above its recent average. That suggests real interest—not just a tiny price wiggle on low liquidity.",
+      "Recent trading volume is significantly above its recent average. The stronger the surge, the more of this 25-point component the candidate earns.",
     dataSource: "CoinMarketCap price & volume history",
   },
   {
     key: "six_hour_high_break",
-    title: "6-hour high break",
-    plain: "Price just pushed above its recent ceiling.",
+    title: "Reference high break · 35 pts",
+    plain: "Price pushed above a recent ceiling.",
     detail:
-      "The token trades above the highest price seen in the last 6 hours. The bot treats that as short-term upward momentum before committing capital.",
-    dataSource: "6-hour OHLC candles",
+      "The bot compares price against 3h, 6h, and 24h highs. Clearing larger windows adds more breakout strength, while a move more than 4% beyond the broken high is treated as too chased.",
+    dataSource: "3h / 6h / 24h reference highs",
   },
   {
     key: "regime_not_risk_off",
-    title: "Market not in risk-off (size modifier)",
-    plain: "Panic mode shrinks the bet instead of blocking it.",
+    title: "Macro context · 5 pts + size",
+    plain: "Macro conditions tune the score and position size.",
     detail:
-      "When Bitcoin and overall sentiment turn defensive, the bot no longer refuses to trade—it halves the position size instead. The regime value is still logged with every decision.",
-    dataSource: "BTC trend & market regime signal",
+      "Macro breadth contributes a small score component and also scales position size. Defensive conditions shrink the trade instead of acting as a simple buy/no-buy switch.",
+    dataSource: "BTC trend, market breadth & stablecoin flows",
   },
   {
     key: "slippage_under_cap",
-    title: "Slippage under cap",
-    plain: "The swap would not cost too much in price impact.",
+    title: "Slippage hard gate",
+    plain: "The quoted route must not cost too much in price impact.",
     detail:
-      "Before buying, the bot estimates how much the price would move against you (slippage). If expected slippage exceeds the configured cap, the trade is too expensive to enter.",
+      "TWAK quoting is reserved for candidates near the entry threshold. Once quoted, slippage is still binary: missing, negative, or above-cap slippage blocks entry even if the score is high.",
     dataSource: "TWAK / LiquidMesh route quote",
   },
   {
     key: "rsi_in_range",
-    title: "RSI in range (informational)",
+    title: "RSI in range · 10 pts",
     plain: "Momentum is healthy—not exhausted or crashing.",
     detail:
-      "RSI (Relative Strength Index) measures how stretched a move is on a 0–100 scale. Logged for context and shown in factor counts, but it does not gate entry. Missing data counts as a fail, never a silent pass.",
+      "RSI (Relative Strength Index) measures how stretched a move is on a 0–100 scale. In-range RSI contributes points; missing data contributes zero rather than silently passing.",
     dataSource: "14-period RSI on recent candles",
   },
   {
     key: "derivatives_risk_clear",
-    title: "Derivatives risk clear (informational)",
+    title: "Derivatives risk clear · 10 pts",
     plain: "Futures markets are not flashing danger signals.",
     detail:
-      "Extreme funding rates or crowded leveraged positions can foreshadow sharp reversals. Logged for context and shown in factor counts, but it does not gate entry. Missing data counts as a fail, never a silent pass.",
+      "Extreme funding rates or crowded leveraged positions can foreshadow sharp reversals. Clean derivatives risk adds points; missing or elevated risk contributes zero.",
     dataSource: "Funding rates & derivatives metrics",
   },
 ];
@@ -94,18 +97,18 @@ const CYCLE_STEPS = [
   },
   {
     step: "03",
-    title: "Score factors",
-    body: "Stablecoins and gold tokens are excluded up front, then each candidate is scored on three core gates—volume breakout, 6-hour high break, and slippage under cap. RSI and derivatives are logged for context; a risk-off regime halves position size instead of vetoing.",
+    title: "Score entries",
+    body: "Stablecoins and gold tokens are excluded up front, then each candidate gets a weighted 0–100 entry score: breakout strength 35, volume 25, momentum 15, RSI 10, derivatives 10, macro 5.",
   },
   {
     step: "04",
     title: "Apply guardrails",
-    body: "Even a perfect score can be blocked by daily loss limits, trade caps, or the 18% drawdown kill switch.",
+    body: "Candidates below the quote floor are logged immediately. Near-threshold candidates get a TWAK quote, then slippage, daily limits, drawdown, disk health, and kill-switch guardrails decide whether money can move.",
   },
   {
     step: "05",
     title: "Decide & act",
-    body: "Only when all three core gates pass and guardrails allow it does the bot swap USDC for the token through TWAK. If no trade has fired by 22:00 UTC, a tiny compliance swap keeps the competition's one-trade-per-day minimum.",
+    body: "Entry requires score ≥ 45 plus slippage under cap. If no trade has fired by 22:00 UTC, a tiny compliance swap keeps the competition's one-trade-per-day minimum.",
   },
 ];
 
@@ -121,6 +124,9 @@ const SIMULATED_PASSING_SIGNAL: ExampleDecision = {
   action: "ENTER",
   symbol: "CAKE",
   position_size_usdc: 75,
+  strategy_mode: "breakout",
+  entry_score: 80,
+  entries_blocked_reason: null,
   factor_scores: {
     volume_breakout: true,
     six_hour_high_break: true,
@@ -130,8 +136,8 @@ const SIMULATED_PASSING_SIGNAL: ExampleDecision = {
     derivatives_risk_clear: true,
   },
   true_factor_count: 6,
-  estimated_slippage_pct: 0.18,
-  reason: "3/3 core factors passed (6/6 total)",
+  estimated_slippage_pct: 0.0018,
+  reason: "entry score 80.0 >= 45.0; slippage under cap (6/6 factors true)",
   priced_target_count: 149,
 };
 
@@ -145,6 +151,9 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   action: "WAIT",
   symbol: "LINK",
   position_size_usdc: 0,
+  strategy_mode: "breakout",
+  entry_score: 42,
+  entries_blocked_reason: null,
   factor_scores: {
     volume_breakout: true,
     six_hour_high_break: false,
@@ -154,8 +163,8 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
     derivatives_risk_clear: true,
   },
   true_factor_count: 5,
-  estimated_slippage_pct: 0.11,
-  reason: "insufficient signal: 2/3 core factors passed (need 3)",
+  estimated_slippage_pct: 0.0011,
+  reason: "entry score 42.0 below threshold 45.0",
   priced_target_count: 149,
 };
 
@@ -338,9 +347,9 @@ const SIMULATED_SCALPING_WAIT: ExampleDecision = {
 
 const CYCLE_INPUTS = [
   "Market data (CMC / x402)",
-  "3 core gates + context factors",
+  "Weighted entry score 0–100",
+  "TWAK slippage hard gate",
   "Guardrails & limits",
-  "TWAK swap execution",
   "Position tracking",
   "Decision log",
 ];
@@ -349,17 +358,17 @@ const OUTCOMES = [
   {
     action: "ENTER",
     summary: "Buy approved",
-    body: "All 3 core gates passed and guardrails allow new entries. The agent sizes the position (halved if the regime is risk-off), quotes slippage, and executes a USDC → token swap.",
+    body: "Entry score is at least 45, TWAK slippage is under cap, and guardrails allow new entries. The agent applies the macro size multiplier and executes a USDC → token swap.",
   },
   {
     action: "WAIT",
     summary: "Keep watching",
-    body: "One or more core gates failed, or the bot wants stronger confirmation. No money moves— it logs the reason and tries again next cycle.",
+    body: "The score is below threshold, below the quote floor, slippage is not acceptable, or the move is too chased. No money moves; the reason is logged for the next cycle.",
   },
   {
     action: "BLOCKED",
     summary: "Guardrail stop",
-    body: "Technical signals may look good, but a safety rule vetoed the trade—e.g. daily loss budget, trade caps, the 18% drawdown kill switch, or entries disabled.",
+    body: "Score and slippage may look good, but a safety rule vetoed the trade: daily loss budget, trade caps, free disk floor, kill switch, or entries disabled.",
   },
   {
     action: "HALT",
@@ -549,13 +558,16 @@ function DecisionSnapshot({
 }) {
   const strategyMode = resolveStrategyMode(decision);
   const breakoutStats = entryFactorStats(decision);
+  const breakoutScore = breakoutEntryScoreStats(decision);
   const scalpingStats = scalpingFactorStats(decision);
   const action = String(decision.action ?? "WAIT").toUpperCase();
   const resolvedBadge =
     badge ??
     (strategyMode === "scalping"
       ? `${scalpingStats.score}/${scalpingStats.max} · ${action}`
-      : `${breakoutStats.passed}/${breakoutStats.total} · ${action}`);
+      : breakoutScore.score != null
+        ? `${breakoutScore.score}/${breakoutScore.max} · ${action}`
+        : `${breakoutStats.passed}/${breakoutStats.total} · ${action}`);
 
   return (
     <div className="border border-[#2A2A2A] bg-black/88">
@@ -581,15 +593,19 @@ function DecisionSnapshot({
       <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center justify-between font-mono text-[11px] text-[#A8A8A8]">
-            <span>{strategyMode === "scalping" ? "Entry score" : "Factor score"}</span>
+            <span>{strategyMode === "breakout" && breakoutScore.score == null ? "Factor audit" : "Entry score"}</span>
             <span className="text-white">
               {strategyMode === "scalping"
                 ? `${scalpingStats.score}/${scalpingStats.max} required ${SCALPING_ENTRY_SCORE_MIN}+`
+                : breakoutScore.score != null
+                  ? `${breakoutScore.score}/${breakoutScore.max} required ${BREAKOUT_ENTRY_SCORE_MIN}+`
                 : `${breakoutStats.passed}/${breakoutStats.total} required`}
             </span>
           </div>
           {strategyMode === "scalping" ? (
             <ScalpingScoreBar score={scalpingStats.score} max={SCALPING_ENTRY_SCORE_MAX} />
+          ) : breakoutScore.score != null ? (
+            <ScalpingScoreBar score={breakoutScore.score} max={BREAKOUT_ENTRY_SCORE_MAX} />
           ) : (
             <FactorScoreBar passed={breakoutStats.passed} total={breakoutStats.total} />
           )}
@@ -597,6 +613,20 @@ function DecisionSnapshot({
         <div className="font-mono text-[11px] leading-5 text-[#A8A8A8]">
           <span className="text-[#757575]">Reason: </span>
           <span className="text-[#DADADA]">{decision.reason?.trim() || "—"}</span>
+          {strategyMode === "breakout" ? (
+            <div className="mt-2">
+              <span className="text-[#757575]">Slippage gate: </span>
+              <span className={breakoutScore.slippageMet ? "text-[#DADADA]" : "text-[#FF7373]"}>
+                {breakoutScore.slippageMet ? "under cap" : "missing or above cap"}
+              </span>
+            </div>
+          ) : null}
+          {decision.entries_blocked_reason ? (
+            <div className="mt-2">
+              <span className="text-[#757575]">Blocked: </span>
+              <span className="text-[#FF7373]">{decision.entries_blocked_reason}</span>
+            </div>
+          ) : null}
           {decision.exit_reason ? (
             <div className="mt-2">
               <span className="text-[#757575]">Exit: </span>
@@ -728,8 +758,8 @@ export function DecisionAlgorithmPanel({
   const flowSteps = isScalping ? SCALPING_FLOW_STEPS : [
     { label: "New cycle", sub: "Read wallet & positions" },
     { label: "Scan allowlist", sub: "~149 BEP-20 tokens" },
-    { label: "Score 6 factors", sub: "Per candidate token" },
-    { label: "Guardrails OK?", sub: "Loss / regime / caps" },
+    { label: "Score 0–100", sub: "Cheap candidate ranking" },
+    { label: "Quote slippage", sub: `Score ${BREAKOUT_QUOTE_SCORE_FLOOR}+` },
     { label: "ENTER or WAIT", sub: "Swap or log & retry" },
   ];
   const outcomes = isScalping ? SCALPING_OUTCOMES : OUTCOMES;
@@ -753,8 +783,8 @@ export function DecisionAlgorithmPanel({
   ];
   const breakoutGuardrails = [
     {
-      title: "Risk-off regime",
-      body: "Macro conditions turn defensive. New buys pause until the regime clears—even if a single token looks strong.",
+      title: "Macro size multiplier",
+      body: "Defensive macro conditions reduce breakout position size instead of acting as a simple veto. The size multiplier is logged with the decision.",
     },
     {
       title: "Daily loss budget",
@@ -767,6 +797,10 @@ export function DecisionAlgorithmPanel({
     {
       title: "Portfolio ATH tracking",
       body: "Monitors all-time-high portfolio value (`portfolio_ath`) for drawdown-aware position sizing.",
+    },
+    {
+      title: "Disk health floor",
+      body: "If free disk space drops below the configured floor, new entries are blocked so the bot can keep writing logs and state safely.",
     },
   ];
   const afterEnterSteps = isScalping
@@ -791,7 +825,7 @@ export function DecisionAlgorithmPanel({
         {
           step: "01",
           title: "Size the trade",
-          body: "Position size in USDC is computed from portfolio value and risk rules (`position_size_usdc`).",
+          body: "Position size in USDC is computed from portfolio value, risk rules, and the macro `position_size_multiplier`.",
         },
         {
           step: "02",
@@ -801,7 +835,7 @@ export function DecisionAlgorithmPanel({
         {
           step: "03",
           title: "Track the position",
-          body: "Entry price, trailing stop, and take-profit levels are written to `positions.json` and shown on the Active Positions tab.",
+          body: "Entry price, stepped trailing stop, and take-profit levels are written to `positions.json` and shown on the Active Positions tab. Breakout trailing starts wider, then tightens after +8% and +12%.",
         },
       ];
 
@@ -834,7 +868,7 @@ export function DecisionAlgorithmPanel({
             <p className="mt-3 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
               {isScalping
                 ? "Every 5 minutes the agent refreshes trial market data, scores ~149 tokens on five weighted factors (0–100), and enters when the best score reaches 60+. Exits are fixed—not trailing."
-                : "The agent never guesses. On every cycle it gathers market data, runs six objective checks, applies safety guardrails, and only then swaps USDC for a token. Think of it as a disciplined checklist—not a hunch."}
+                : "The agent never guesses. On every cycle it gathers market data, computes a weighted breakout entry score, quotes slippage only for near-threshold candidates, applies safety guardrails, and only then swaps USDC for a token."}
             </p>
           ) : null}
           <GuideStrategyToggle mode={guideMode} onChange={setGuideMode} />
@@ -850,7 +884,7 @@ export function DecisionAlgorithmPanel({
             subtitle={
               isScalping
                 ? "Dual data feed plus a weighted score. Entry at 60+, not all-or-nothing."
-                : "Six inputs feed one decision. All must agree before money moves."
+                : "Weighted score first, quote second. Entry needs 45+ and clean slippage."
             }
             chapterIndex={0}
           />
@@ -881,13 +915,12 @@ export function DecisionAlgorithmPanel({
                 ) : (
                   <>
                     <p className="font-mono text-[18px] font-semibold leading-snug text-white">
-                      All 3/3 core gates must pass
+                      Entry score ≥ {BREAKOUT_ENTRY_SCORE_MIN}/{BREAKOUT_ENTRY_SCORE_MAX} + slippage under cap
                     </p>
                     <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-                      Core gates: volume breakout, 6-hour high break, slippage under cap. A partial core score always
-                      results in WAIT—never a partial buy. The other {ENTRY_FACTOR_COUNT - 3} factors are logged for
-                      context: risk-off regime halves position size, RSI and derivatives are informational. Safety
-                      guardrails can still block a perfect score.
+                      Breakout v3 is additive. Candidates below {BREAKOUT_QUOTE_SCORE_FLOOR}/100 are not quoted;
+                      candidates near the threshold get a TWAK route quote. A high score still waits if slippage is
+                      missing or above cap, and safety guardrails can still block a valid signal.
                     </p>
                   </>
                 )}
@@ -918,17 +951,17 @@ export function DecisionAlgorithmPanel({
                     <>
                       <div>
                         <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                          <span>2/3 core — WAIT</span>
-                          <span>Missing one core gate</span>
+                          <span>42/100 — WAIT</span>
+                          <span>Below 45 threshold</span>
                         </div>
-                        <FactorScoreBar passed={2} total={3} />
+                        <ScalpingScoreBar score={42} max={BREAKOUT_ENTRY_SCORE_MAX} />
                       </div>
                       <div>
                         <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                          <span>3/3 core — eligible for ENTER</span>
-                          <span>All core gates</span>
+                          <span>80/100 — eligible for ENTER</span>
+                          <span>Still needs clean slippage</span>
                         </div>
-                        <FactorScoreBar passed={3} total={3} />
+                        <ScalpingScoreBar score={80} max={BREAKOUT_ENTRY_SCORE_MAX} />
                       </div>
                     </>
                   )}
@@ -982,11 +1015,11 @@ export function DecisionAlgorithmPanel({
         <ViewportReveal variant={chapterRevealVariant(2)} delay={40} duration="slow">
           <ChapterDivider
             number="03"
-            title={isScalping ? "The five weighted factors" : "The six factors"}
+            title={isScalping ? "The five weighted factors" : "The scored factors"}
             subtitle={
               isScalping
                 ? "Points add up to 100. Entry when score ≥ 60. Fixed TP +1.5%, SL −0.8%, max hold 30 min."
-                : "Each factor is a yes/no gate. Expand decision rows in Activity to see these same flags."
+                : "Score components add up to 100. The yes/no flags remain as a compatibility audit in Activity."
             }
             chapterIndex={2}
           />
@@ -1024,7 +1057,7 @@ export function DecisionAlgorithmPanel({
             subtitle={
               isScalping
                 ? "Guardrails can veto a 60+ score. Exits are automatic and fixed."
-                : "Guardrails can veto a perfect score. A buy starts position management."
+                : "Guardrails can veto a 45+ score. A buy starts stepped trailing management."
             }
             chapterIndex={3}
           />
@@ -1122,7 +1155,7 @@ export function DecisionAlgorithmPanel({
               subtitle={
                 isScalping
                   ? "Simulated passing and near-miss scores, plus your latest live cycle."
-                  : "Simulated and live cycle snapshots before guardrails apply."
+                  : "Simulated scored breakout decisions, plus your latest live cycle."
               }
               chapterIndex={5}
             />
@@ -1135,7 +1168,7 @@ export function DecisionAlgorithmPanel({
                 <DecisionSnapshot
                   decision={SIMULATED_PASSING_SIGNAL}
                   heading="Passing signal"
-                  badge="3/3 core · ENTER"
+                  badge="80/100 · ENTER"
                 />
               )}
             </ViewportReveal>
@@ -1146,7 +1179,7 @@ export function DecisionAlgorithmPanel({
                 <DecisionSnapshot
                   decision={SIMULATED_NON_PASSING_SIGNAL}
                   heading="Non-passing signal"
-                  badge="2/3 core · WAIT"
+                  badge="42/100 · WAIT"
                 />
               )}
             </ViewportReveal>

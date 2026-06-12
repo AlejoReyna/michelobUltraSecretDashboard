@@ -7,6 +7,9 @@ test("trimStatusPayload passes gptTelemetryContextSchema on mock StatusPayload",
   const payload = createMockStatus();
   const context = trimStatusPayload(payload);
   gptTelemetryContextSchema.parse(context);
+  assert.equal(context.latestDecision?.entryScore, 68);
+  assert.equal(context.latestDecision?.entriesBlockedReason, "daily_trade_limit");
+  assert.equal(context.latestDecision?.confidence, 0.68);
 });
 
 test("trimStatusPayload redacts wallet address from GPT context", () => {

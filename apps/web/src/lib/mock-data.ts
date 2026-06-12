@@ -30,6 +30,9 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       action: "WAIT" as const,
       symbol: "BNB",
       position_size_usdc: 0,
+      strategy_mode: "breakout" as const,
+      entry_score: 42,
+      entries_blocked_reason: null,
       factor_scores: {
         volume_breakout: true,
         six_hour_high_break: false,
@@ -39,8 +42,8 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
         derivatives_risk_clear: true,
       },
       true_factor_count: 5,
-      estimated_slippage_pct: 0.11,
-      reason: "Waiting for six hour high confirmation.",
+      estimated_slippage_pct: 0.0011,
+      reason: "entry score 42.0 below threshold 45.0; waiting for stronger reference-high break.",
       priced_target_count: 8,
     },
     {
@@ -53,6 +56,9 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       action: "ENTER" as const,
       symbol: "CAKE",
       position_size_usdc: 75,
+      strategy_mode: "breakout" as const,
+      entry_score: 80,
+      entries_blocked_reason: null,
       factor_scores: {
         volume_breakout: true,
         six_hour_high_break: true,
@@ -62,8 +68,8 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
         derivatives_risk_clear: true,
       },
       true_factor_count: 6,
-      estimated_slippage_pct: 0.18,
-      reason: "3/3 core factors passed (6/6 total)",
+      estimated_slippage_pct: 0.0018,
+      reason: "entry score 80.0 >= 45.0; slippage under cap (6/6 factors true)",
       priced_target_count: 8,
     },
     {
@@ -76,6 +82,9 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       action: "BLOCKED" as const,
       symbol: "TWT",
       position_size_usdc: 0,
+      strategy_mode: "breakout" as const,
+      entry_score: 68,
+      entries_blocked_reason: "daily_trade_limit",
       factor_scores: {
         volume_breakout: true,
         six_hour_high_break: true,
@@ -85,8 +94,8 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
         derivatives_risk_clear: false,
       },
       true_factor_count: 4,
-      estimated_slippage_pct: 0.24,
-      reason: "Entry blocked by risk-off regime guardrail.",
+      estimated_slippage_pct: 0.0024,
+      reason: "entry score 68.0 >= 45.0; guardrails blocked new entries",
       priced_target_count: 8,
     },
   ];

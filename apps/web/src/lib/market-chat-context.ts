@@ -22,6 +22,8 @@ export const gptTelemetryContextSchema = z.object({
       reason: z.string().nullable().optional(),
       cycleNumber: z.number().nullable().optional(),
       entriesAllowed: z.boolean().nullable().optional(),
+      entryScore: z.number().nullable().optional(),
+      entriesBlockedReason: z.string().nullable().optional(),
       pricedTargetCount: z.number().nullable().optional(),
     })
     .nullable(),
@@ -109,6 +111,9 @@ function factorsFromScores(scores: StatusPayload["decisions"][number]["factor_sc
 }
 
 function confidenceFromDecision(decision: StatusPayload["decisions"][number]): number {
+  if (typeof decision.entry_score === "number" && Number.isFinite(decision.entry_score)) {
+    return Math.max(0, Math.min(1, decision.entry_score / 100));
+  }
   if (typeof decision.true_factor_count === "number" && Number.isFinite(decision.true_factor_count)) {
     return decision.true_factor_count / 6;
   }
@@ -239,6 +244,8 @@ export function trimStatusPayload(payload: StatusPayload, options?: { decisionsT
         reason: latest.reason ?? null,
         cycleNumber: latest.cycle_number ?? null,
         entriesAllowed: latest.entries_allowed ?? null,
+        entryScore: latest.entry_score ?? null,
+        entriesBlockedReason: latest.entries_blocked_reason ?? null,
         pricedTargetCount: latest.priced_target_count ?? null,
       }
     : null;

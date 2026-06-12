@@ -8,7 +8,9 @@ test("resolveMarketChatResponse returns scan summary for latest market scan quer
   const response = resolveMarketChatResponse("What's the latest market scan?", data);
 
   assert.match(response, /Cycle #/);
-  assert.match(response, /Factor checklist/);
+  assert.match(response, /Entry score: 68\/100/);
+  assert.match(response, /Factor audit/);
+  assert.match(response, /Blocked reason: daily_trade_limit/);
 });
 
 test("resolveMarketChatResponse handles disconnected telemetry", () => {

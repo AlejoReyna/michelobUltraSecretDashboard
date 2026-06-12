@@ -13,10 +13,8 @@ export const ENTRY_FACTOR_KEYS = [
 export const ENTRY_FACTOR_COUNT = ENTRY_FACTOR_KEYS.length;
 
 /**
- * Core gates (algorithm v2): all three must pass for ENTER.
- * `regime_not_risk_off` no longer vetoes — it halves position size instead.
- * `rsi_in_range` and `derivatives_risk_clear` are informational (fail closed on
- * missing data) and do not gate entry.
+ * Legacy audit grouping. Breakout v3 enters on weighted entry_score plus the
+ * slippage hard gate; these booleans remain useful for compatibility displays.
  */
 export const CORE_ENTRY_FACTOR_KEYS = [
   "volume_breakout",
@@ -25,6 +23,9 @@ export const CORE_ENTRY_FACTOR_KEYS = [
 ] as const;
 
 export const CORE_ENTRY_FACTOR_COUNT = CORE_ENTRY_FACTOR_KEYS.length;
+export const BREAKOUT_ENTRY_SCORE_MIN = 45;
+export const BREAKOUT_ENTRY_SCORE_MAX = 100;
+export const BREAKOUT_QUOTE_SCORE_FLOOR = 40;
 
 export type EntryFactorKey = (typeof ENTRY_FACTOR_KEYS)[number];
 
@@ -68,8 +69,29 @@ export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
 }
 
 export function decisionFactorSummary(decision: StatusPayload["decisions"][number]) {
+  if (resolveStrategyMode(decision) === "breakout" && typeof decision.entry_score === "number") {
+    return `score ${Math.round(decision.entry_score)}/${BREAKOUT_ENTRY_SCORE_MAX}`;
+  }
   const stats = entryFactorStats(decision);
   return `${stats.passed}/${stats.total} factors`;
+}
+
+export function breakoutEntryScoreStats(decision: StatusPayload["decisions"][number]) {
+  const score = typeof decision.entry_score === "number" && Number.isFinite(decision.entry_score)
+    ? decision.entry_score
+    : null;
+  const slippageMet = Boolean(decision.factor_scores?.slippage_under_cap);
+  const scoreMet = score != null ? score >= BREAKOUT_ENTRY_SCORE_MIN : false;
+
+  return {
+    score,
+    max: BREAKOUT_ENTRY_SCORE_MAX,
+    required: BREAKOUT_ENTRY_SCORE_MIN,
+    quoteFloor: BREAKOUT_QUOTE_SCORE_FLOOR,
+    scoreMet,
+    slippageMet,
+    met: scoreMet && slippageMet,
+  };
 }
 
 export function parseRequiredFactorCount(reason: string | null | undefined): number | null {

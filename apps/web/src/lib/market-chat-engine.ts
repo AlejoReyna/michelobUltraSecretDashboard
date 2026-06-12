@@ -1,4 +1,9 @@
 import { detailsFromDecision } from "@/lib/log-event-details";
+import {
+  BREAKOUT_ENTRY_SCORE_MAX,
+  breakoutEntryScoreStats,
+  resolveStrategyMode,
+} from "@/lib/factor-scoring";
 import type { StatusPayload } from "@/lib/schemas";
 
 export type ChatMessage = {
@@ -154,9 +159,21 @@ function latestScanSummary(data: StatusPayload): string {
   }
 
   const analysis = detailsFromDecision(decision);
+  const strategyMode = resolveStrategyMode(decision);
+  const breakoutScore = breakoutEntryScoreStats(decision);
   const factors =
     analysis.factors?.map((factor) => `${factor.passed ? "✓" : "✗"} ${factor.label}`).join("\n") ??
-    "Factor scores not available for this cycle.";
+    "Factor audit not available for this cycle.";
+  const scoreLine =
+    strategyMode === "breakout" && breakoutScore.score != null
+      ? `Entry score: ${breakoutScore.score}/${BREAKOUT_ENTRY_SCORE_MAX} (need ${breakoutScore.required}+; slippage ${
+          breakoutScore.slippageMet ? "under cap" : "not cleared"
+        })`
+      : decision.entry_score != null
+        ? `Entry score: ${decision.entry_score}/100`
+        : decision.true_factor_count != null
+          ? `Factor audit: ${decision.true_factor_count}/6 flags true`
+          : null;
 
   return [
     `Cycle #${decision.cycle_number ?? "N/A"} · action ${decision.action}`,
@@ -164,13 +181,14 @@ function latestScanSummary(data: StatusPayload): string {
     decision.priced_target_count != null
       ? `${decision.priced_target_count} competition tokens priced this cycle`
       : null,
-    decision.true_factor_count != null ? `Score: ${decision.true_factor_count}/6 factors` : null,
+    scoreLine,
     decision.estimated_slippage_pct != null
       ? `Est. slippage: ${(decision.estimated_slippage_pct * 100).toFixed(2)}%`
       : null,
+    decision.entries_blocked_reason ? `Blocked reason: ${decision.entries_blocked_reason}` : null,
     decision.reason ? `Reason: ${decision.reason}` : null,
     "",
-    "Factor checklist:",
+    "Factor audit:",
     factors,
   ]
     .filter(Boolean)
@@ -246,9 +264,9 @@ function regimeSummary(data: StatusPayload): string {
     `Latest regime read (${decision.symbol ?? "no symbol"}):`,
     "",
     regimePassed === true
-      ? "✓ Macro regime is not risk-off — new entries are allowed from a sentiment standpoint."
+      ? "✓ Macro regime is not risk-off — full breakout size is available from a sentiment standpoint."
       : regimePassed === false
-        ? "✗ Risk-off regime detected — this is a common reason entries get blocked."
+        ? "✗ Risk-off regime detected — breakout size is reduced instead of being treated as a binary entry veto."
         : "• Regime factor not scored this cycle.",
     derivativesPassed === true
       ? "✓ Derivatives markets show no elevated systemic risk."
@@ -257,8 +275,8 @@ function regimeSummary(data: StatusPayload): string {
         : "• Derivatives factor not scored this cycle.",
     "",
     decision.entries_allowed === false
-      ? "Guardrails currently block new entries regardless of factor scores."
-      : "Entry guardrails are open — factor scores still gate individual trades.",
+      ? "Guardrails currently block new entries regardless of entry score."
+      : "Entry guardrails are open — the weighted entry score and slippage gate still decide individual trades.",
   ].join("\n");
 }
 
@@ -273,7 +291,7 @@ export function resolveMarketChatResponse(query: string, data: StatusPayload | n
 
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
-    return "Ask me about the latest scan, x402 payments, factor scores, or cache freshness.";
+    return "Ask me about the latest scan, x402 payments, entry scores, or cache freshness.";
   }
 
   if (matches(normalized, [/x402|micropay|cmc pay|twak/])) {
@@ -307,7 +325,7 @@ export function resolveMarketChatResponse(query: string, data: StatusPayload | n
     "I interpret market telemetry from the bot's x402-backed CMC pipeline. Try asking about:",
     "",
     "• Latest scan — cycle, target symbol, priced token count",
-    "• Factor scores — six-entry checklist for the current target",
+    "• Entry score — weighted breakout score plus the factor audit",
     "• x402 — how micropayments fund CMC data on Base",
     "• Cache freshness — when price/volume caches were last written",
     "• Regime — risk-off and derivatives risk flags",

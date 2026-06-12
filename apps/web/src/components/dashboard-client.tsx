@@ -64,7 +64,7 @@ import {
   inferCycleIntervalMs,
   nextCycleAt,
 } from "@/lib/cycle-timing";
-import { entryFactorStats, resolveStrategyMode } from "@/lib/factor-scoring";
+import { breakoutEntryScoreStats, entryFactorStats, resolveStrategyMode } from "@/lib/factor-scoring";
 import { scalpingFactorStats } from "@/lib/scalping-scoring";
 import {
   detailsFromDecision,
@@ -1017,6 +1017,18 @@ function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number])
     return `Analyzed ${symbol}${priced}: checked micro-momentum, slippage, regime, whale flow, and gas, then scored ${stats.score}/${stats.max}; ${result} before ${action}.`;
   }
 
+  const breakoutScore = breakoutEntryScoreStats(decision);
+  if (breakoutScore.score != null) {
+    const result =
+      breakoutScore.met
+        ? "cleared score and slippage"
+        : breakoutScore.scoreMet
+          ? "met score but not the slippage gate"
+          : "stayed below the entry bar";
+
+    return `Analyzed ${symbol}${priced}: refreshed market data, scored ${breakoutScore.score}/${breakoutScore.max}, and checked TWAK slippage; ${result} before ${action}.`;
+  }
+
   const stats = entryFactorStats(decision);
   const result = stats.met ? "all gates aligned" : "not enough gates aligned";
 
@@ -1462,10 +1474,12 @@ function ActivityStatusIndicator({
   status,
   tone,
   compact = false,
+  readable = false,
 }: {
   status: string;
   tone: "green" | "yellow" | "red";
   compact?: boolean;
+  readable?: boolean;
 }) {
   const glyph = activityStatusGlyph(status);
 
@@ -1474,7 +1488,7 @@ function ActivityStatusIndicator({
       <span
         className={cx(
           "inline-flex shrink-0 items-center justify-center font-mono font-bold leading-none",
-          compact ? "text-[13px]" : "text-[15px]",
+          compact ? (readable ? "text-[15px]" : "text-[13px]") : "text-[15px]",
           statusToneTextClass(tone),
         )}
         title={status}
@@ -1491,7 +1505,7 @@ function ActivityStatusIndicator({
       <span
         className={cx(
           "truncate font-mono font-bold uppercase tracking-[0.06em]",
-          compact ? "text-[8px]" : "text-[10px]",
+          compact ? (readable ? "text-[10px]" : "text-[8px]") : "text-[10px]",
           statusToneTextClass(tone),
         )}
       >
@@ -1754,14 +1768,30 @@ function detailValueToneClass(tone: LogEventDetails["items"][number]["tone"]) {
   return "text-[#DADADA]";
 }
 
-function ActivityDetailPanel({ details, compact = false }: { details: LogEventDetails; compact?: boolean }) {
+function ActivityDetailPanel({
+  details,
+  compact = false,
+  readable = false,
+}: {
+  details: LogEventDetails;
+  compact?: boolean;
+  readable?: boolean;
+}) {
   return (
     <div className={cx("space-y-4", compact ? "" : "px-4 py-4")}>
       <dl className="grid gap-3 sm:grid-cols-2">
         {details.items.map((item) => (
           <div key={item.label} className="min-w-0">
-            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">{item.label}</dt>
-            <dd className={cx("mt-1 break-words font-mono text-[12px] leading-5", detailValueToneClass(item.tone))}>
+            <dt className={cx("font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+              {item.label}
+            </dt>
+            <dd
+              className={cx(
+                "mt-1 break-words font-mono leading-5",
+                readable ? "text-[13px]" : "text-[12px]",
+                detailValueToneClass(item.tone),
+              )}
+            >
               {item.value}
             </dd>
           </div>
@@ -1770,15 +1800,16 @@ function ActivityDetailPanel({ details, compact = false }: { details: LogEventDe
 
       {details.factors && details.factors.length > 0 ? (
         <div>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]">
-            Factor scores · all 6 required to enter
+          <div className={cx("mb-2 font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+            Factor audit · boolean flags from the decision log
           </div>
           <div className="flex flex-wrap gap-2">
             {details.factors.map((factor) => (
               <span
                 key={factor.key}
                 className={cx(
-                  "inline-flex border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em]",
+                  "inline-flex border px-2 py-1 font-mono uppercase tracking-[0.08em]",
+                  readable ? "text-[11px]" : "text-[10px]",
                   factor.passed
                     ? "border-[#00FF66]/40 bg-[#001A0A] text-[#00FF66]"
                     : "border-[#FF3737]/40 bg-[#1B0505] text-[#FF7373]",
@@ -1836,6 +1867,7 @@ function ActivityTableRow({
   index,
   compact,
   dense = false,
+  readable = false,
   expandable,
   expanded,
   mode,
@@ -1846,6 +1878,7 @@ function ActivityTableRow({
   index: number;
   compact: boolean;
   dense?: boolean;
+  readable?: boolean;
   expandable: boolean;
   expanded: boolean;
   mode: ActivityFeedMode;
@@ -1868,7 +1901,11 @@ function ActivityTableRow({
         <td
           className={cx(
             "font-mono font-bold text-[#F2F2F2]",
-            dense ? "px-1 py-1.5 text-[9px] leading-4" : compact ? "px-3 py-2 text-[13px]" : "px-4 py-5 text-[13px]",
+            dense
+              ? "px-1 py-1.5 text-[9px] leading-4"
+              : compact
+                ? cx("px-3 py-2", readable ? "text-[14px] leading-5" : "text-[13px]")
+                : "px-4 py-5 text-[13px]",
           )}
         >
           <ViewportReveal
@@ -1898,7 +1935,11 @@ function ActivityTableRow({
         <td
           className={cx(
             "truncate font-mono text-[#D0D0D0]",
-            dense ? "px-1 py-1.5 text-[8px] leading-4" : compact ? "px-2 py-2 text-[12px]" : "px-2 py-5 text-[12px]",
+            dense
+              ? "px-1 py-1.5 text-[8px] leading-4"
+              : compact
+                ? cx("px-2 py-2", readable ? "text-[13px] leading-5" : "text-[12px]")
+                : "px-2 py-5 text-[12px]",
           )}
         >
           <ViewportReveal
@@ -1910,7 +1951,7 @@ function ActivityTableRow({
           >
             {row.token ? (
               <>
-                <TokenIcon symbol={row.token} size={dense ? 12 : 14} />
+                <TokenIcon symbol={row.token} size={dense ? 12 : readable ? 16 : 14} />
                 <span className="truncate">{row.token}</span>
               </>
             ) : (
@@ -1921,7 +1962,11 @@ function ActivityTableRow({
         <td
           className={cx(
             "truncate font-mono text-[#D0D0D0]",
-            dense ? "px-1 py-1.5 text-[8px] leading-4" : compact ? "px-2 py-2 text-[12px]" : "px-1 py-5 text-[12px]",
+            dense
+              ? "px-1 py-1.5 text-[8px] leading-4"
+              : compact
+                ? cx("px-2 py-2", readable ? "text-[13px] leading-5" : "text-[12px]")
+                : "px-1 py-5 text-[12px]",
           )}
         >
           <ViewportReveal
@@ -1955,7 +2000,7 @@ function ActivityTableRow({
             root={scrollRoot}
             className="flex min-w-0 items-center justify-center gap-1"
           >
-            <ActivityStatusIndicator status={row.status} tone={row.tone} compact={dense} />
+            <ActivityStatusIndicator status={row.status} tone={row.tone} compact={dense || readable} readable={readable} />
           </ViewportReveal>
         </td>
       </tr>
@@ -1963,7 +2008,7 @@ function ActivityTableRow({
         <tr className="border-b border-[#1A1A1A] bg-[#050505]">
           <td colSpan={4}>
             <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
-              <ActivityDetailPanel details={row.details} compact={dense} />
+              <ActivityDetailPanel details={row.details} compact={dense} readable={readable} />
             </ViewportReveal>
           </td>
         </tr>
@@ -2046,6 +2091,7 @@ function RecentActivity({
   scrollRoot = null,
   scrollContainerRef,
   className,
+  readable = false,
   rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
@@ -2056,6 +2102,7 @@ function RecentActivity({
   scrollRoot?: Element | null;
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
   className?: string;
+  readable?: boolean;
   rowsPerPage?: number;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
@@ -2115,7 +2162,7 @@ function RecentActivity({
           <thead
             className={cx(
               "font-mono font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
-              dense ? "text-[8px]" : "text-[10px]",
+              dense ? "text-[8px]" : readable ? "text-[11px]" : "text-[10px]",
               compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
             )}
           >
@@ -2155,6 +2202,7 @@ function RecentActivity({
                 index={index}
                 compact={compact}
                 dense={dense}
+                readable={readable}
                 expandable={expandable}
                 expanded={expandable && expandedIds.has(row.id)}
                 mode={mode}
@@ -2975,6 +3023,7 @@ function LiveScanPanel({
   compact = false,
   mobileFit = false,
   mobileTabs = null,
+  readable = false,
 }: {
   latestDecision: StatusPayload["latestDecision"];
   decisions: StatusPayload["decisions"];
@@ -2982,6 +3031,7 @@ function LiveScanPanel({
   compact?: boolean;
   mobileFit?: boolean;
   mobileTabs?: ReactNode;
+  readable?: boolean;
 }) {
   const now = useNow();
   const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
@@ -3005,7 +3055,7 @@ function LiveScanPanel({
   const sectionGap = mobileFit ? "mt-2 border-t border-[#1A1A1A] pt-2" : cx("mt-4 border-t border-[#1A1A1A] pt-4", compact && "mt-3 pt-3");
   const labelClass = mobileFit
     ? "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]"
-    : "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]";
+    : cx("font-mono uppercase tracking-[0.14em] text-[#8A8A8A]", readable ? "text-[11px]" : "text-[10px]");
 
   return (
     <div
@@ -3083,8 +3133,8 @@ function LiveScanPanel({
               <div className="mt-3 flex items-center gap-3.5">
                 <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
                 <div className="min-w-0">
-                  <div className="font-mono text-[18px] font-semibold leading-none text-white">{symbol}</div>
-                  <div className="mt-1 font-mono text-[11px] text-[#8A8A8A]">
+                  <div className={cx("font-mono font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
+                  <div className={cx("mt-1 font-mono text-[#8A8A8A]", readable ? "text-[12px]" : "text-[11px]")}>
                     Cycle #{latestDecision?.cycle_number ?? "N/A"}
                     {latestDecision?.priced_target_count != null
                       ? ` · ${latestDecision.priced_target_count} targets priced`
@@ -3102,7 +3152,7 @@ function LiveScanPanel({
       <div className={mobileFit ? "flex shrink-0 flex-col gap-1 pt-1.5" : sectionGap}>
         {!mobileFit ? (
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className={labelClass}>Variables to analyze</div>
+            <div className={labelClass}>Signal inputs</div>
             {strategyMode ? (
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#666666]">{strategyMode}</span>
             ) : null}
@@ -3120,7 +3170,9 @@ function LiveScanPanel({
                 key={factor.key}
                 className={cx(
                   "flex min-w-0 items-start font-mono text-[#8A8A8A]",
-                  mobileFit ? "justify-center gap-1.5 text-[11px] leading-5" : "gap-2 text-[11px] leading-5",
+                  mobileFit
+                    ? "justify-center gap-1.5 text-[11px] leading-5"
+                    : cx("gap-2 leading-5", readable ? "text-[13px]" : "text-[11px]"),
                 )}
               >
                 <span className="mt-px shrink-0" aria-hidden="true">
@@ -3131,10 +3183,15 @@ function LiveScanPanel({
             ))}
           </ul>
         ) : (
-          <p className={cx("font-mono leading-5 text-[#8A8A8A]", mobileFit ? "text-center text-[12px]" : "text-[12px]")}>
+          <p
+            className={cx(
+              "font-mono leading-5 text-[#8A8A8A]",
+              mobileFit ? "text-center text-[12px]" : readable ? "text-[13px]" : "text-[12px]",
+            )}
+          >
             {latestDecision?.reason?.trim()
               ? latestDecision.reason
-              : "Factor scores will appear after the agent completes a scan cycle."}
+              : "Signal audit will appear after the agent completes a scan cycle."}
           </p>
         )}
 
@@ -3142,7 +3199,9 @@ function LiveScanPanel({
           <p
             className={cx(
               "break-words font-mono text-[#A8A8A8]",
-              mobileFit ? "shrink-0 text-center text-[11px] font-semibold leading-5" : "mt-3 text-[11px] leading-5",
+              mobileFit
+                ? "shrink-0 text-center text-[11px] font-semibold leading-5"
+                : cx("mt-3 leading-5", readable ? "text-[13px]" : "text-[11px]"),
             )}
           >
             {latestDecision.reason}
@@ -3283,6 +3342,7 @@ function SysLogsPanel({
   mobileSplit = false,
   mobileNarrative = false,
   fillHeight = false,
+  readable = false,
   rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
@@ -3294,6 +3354,7 @@ function SysLogsPanel({
   mobileSplit?: boolean;
   mobileNarrative?: boolean;
   fillHeight?: boolean;
+  readable?: boolean;
   rowsPerPage?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3318,7 +3379,9 @@ function SysLogsPanel({
               </div>
             </ViewportReveal>
             <ViewportReveal variant="left" delay={120}>
-              <p className="break-words font-mono text-[12px] leading-5 text-[#DADADA]">{agentLog.line}</p>
+              <p className={cx("break-words font-mono leading-5 text-[#DADADA]", readable ? "text-[13px]" : "text-[12px]")}>
+                {agentLog.line}
+              </p>
             </ViewportReveal>
             <ViewportReveal variant="scale" delay={180} duration="fast" className="mt-3">
               <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
@@ -3345,6 +3408,7 @@ function SysLogsPanel({
             scrollRoot={scrollRoot}
             scrollContainerRef={scrollRef}
             className={cx("min-h-0 flex-1", fillHeight && "h-full")}
+            readable={readable}
             rowsPerPage={rowsPerPage}
           />
         )
@@ -3375,12 +3439,14 @@ function TxActivityPanel({
   compact = false,
   mobileSplit = false,
   fillHeight = false,
+  readable = false,
   rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
 }: {
   rows: ActivityRow[];
   compact?: boolean;
   mobileSplit?: boolean;
   fillHeight?: boolean;
+  readable?: boolean;
   rowsPerPage?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -3410,6 +3476,7 @@ function TxActivityPanel({
           scrollRoot={scrollRoot}
           scrollContainerRef={scrollRef}
           className={cx("min-h-0 flex-1", fillHeight && "h-full")}
+          readable={readable}
           rowsPerPage={rowsPerPage}
         />
       ) : (
@@ -3469,12 +3536,12 @@ function ActivityPanel({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[3fr_2fr] gap-x-8 pt-5">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-6 pt-5">
           <div className="flex min-h-0 flex-col">
             <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
               {(activeView) =>
                 activeView === "txs" ? (
-                  <TxActivityPanel rows={activityRows} compact />
+                  <TxActivityPanel rows={activityRows} compact readable />
                 ) : (
                   <SysLogsPanel
                     rows={logRows}
@@ -3482,6 +3549,7 @@ function ActivityPanel({
                     latestDecision={latestDecision}
                     agentRunning={agentRunning}
                     compact
+                    readable
                   />
                 )
               }
@@ -3494,6 +3562,7 @@ function ActivityPanel({
               decisions={decisions}
               agentRunning={agentRunning}
               compact
+              readable
             />
           </div>
         </div>

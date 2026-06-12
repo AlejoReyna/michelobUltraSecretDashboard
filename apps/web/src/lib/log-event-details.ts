@@ -1,8 +1,8 @@
 import type { StatusPayload } from "@/lib/schemas";
 import {
   ENTRY_FACTOR_KEYS,
+  breakoutEntryScoreStats,
   entryFactorStats,
-  parseRequiredFactorCount,
   resolveStrategyMode,
 } from "@/lib/factor-scoring";
 import { SCALPING_FACTOR_KEYS, scalpingFactorStats } from "@/lib/scalping-scoring";
@@ -104,6 +104,13 @@ function stringFromUnknown(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
+function formatReasonCode(value: string | null | undefined) {
+  if (!value) {
+    return "—";
+  }
+  return value.replaceAll("_", " ").replaceAll(":", ": ");
+}
+
 function factorDetails(
   scores: StatusPayload["decisions"][number]["factor_scores"],
   strategyMode: "breakout" | "scalping",
@@ -121,8 +128,8 @@ function factorDetails(
 export function detailsFromDecision(decision: StatusPayload["decisions"][number]): LogEventDetails {
   const strategyMode = resolveStrategyMode(decision);
   const breakoutFactors = entryFactorStats(decision);
+  const breakoutScore = breakoutEntryScoreStats(decision);
   const scalpingFactors = scalpingFactorStats(decision);
-  const required = parseRequiredFactorCount(decision.reason) ?? breakoutFactors.required;
 
   const scoreItem =
     strategyMode === "scalping"
@@ -134,12 +141,22 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
             | "yellow"
             | "red",
         }
+      : breakoutScore.score != null
+        ? {
+            label: "Entry score",
+            value: `${breakoutScore.score}/${breakoutScore.max} (need ${breakoutScore.required}+; quote floor ${breakoutScore.quoteFloor})`,
+            tone: (breakoutScore.met
+              ? "green"
+              : breakoutScore.score >= breakoutScore.quoteFloor
+                ? "yellow"
+                : "red") as "green" | "yellow" | "red",
+          }
       : {
           label: "Factors passed",
-          value: `${breakoutFactors.passed}/${breakoutFactors.total} total · ${breakoutFactors.corePassed}/${breakoutFactors.coreTotal} core (need ${required} core to enter)`,
-          tone: (breakoutFactors.corePassed >= required
+          value: `${breakoutFactors.passed}/${breakoutFactors.total} total · ${breakoutFactors.corePassed}/${breakoutFactors.coreTotal} legacy core`,
+          tone: (breakoutFactors.corePassed >= breakoutFactors.required
             ? "green"
-            : breakoutFactors.corePassed >= required - 1
+            : breakoutFactors.corePassed >= breakoutFactors.required - 1
               ? "yellow"
               : "red") as "green" | "yellow" | "red",
         };
@@ -161,6 +178,20 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       { label: "Position size", value: formatUsd(decision.position_size_usdc) },
       { label: "Slippage est.", value: formatSlippagePct(decision.estimated_slippage_pct) },
       scoreItem,
+      strategyMode === "breakout"
+        ? {
+            label: "Slippage gate",
+            value: breakoutScore.slippageMet ? "Under cap" : "Missing or above cap",
+            tone: (breakoutScore.slippageMet ? "green" : "red") as "green" | "red",
+          }
+        : null,
+      decision.entries_allowed === false || decision.entries_blocked_reason
+        ? {
+            label: "Blocked reason",
+            value: formatReasonCode(decision.entries_blocked_reason),
+            tone: "red" as const,
+          }
+        : null,
       { label: "Exit reason", value: decision.exit_reason?.trim() || "—" },
       {
         label: "Hold time",
@@ -174,7 +205,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
         value: decision.priced_target_count != null ? String(decision.priced_target_count) : "N/A",
       },
       { label: "Reason", value: decision.reason?.trim() || "—" },
-    ],
+    ].filter((item): item is ActivityDetail => item != null),
     factors: factorDetails(decision.factor_scores, strategyMode),
   };
 }

@@ -135,7 +135,7 @@ function DisclaimerGate({ onAccept }: { onAccept: () => void }) {
         </p>
         {showText ? (
           <div className="section-fade-in mt-5 w-full rounded-sm border border-[#3A3A3A] bg-[#111111] px-4 py-4 font-mono text-[11.5px] leading-[1.6] text-[#D0D0D0]">
-            This chat reads the dashboard&apos;s current telemetry snapshot: scans, x402 payment records, factor scores, executions, positions, and wallet state. It is read-only and can only explain the data already available to the dashboard.
+            This chat reads the dashboard&apos;s current telemetry snapshot: scans, x402 payment records, entry scores, factor audits, executions, positions, and wallet state. It is read-only and can only explain the data already available to the dashboard.
             {showButton ? (
               <button
                 type="button"
@@ -249,7 +249,7 @@ function ChatComposer({
           }
         }}
         rows={1}
-        placeholder="Ask about scans, x402 payments, or factor scores…"
+        placeholder="Ask about scans, x402 payments, or entry scores…"
         disabled={disabled}
         className={cx(
           "max-h-28 min-h-0 flex-1 resize-none bg-transparent py-0 font-mono text-white outline-none placeholder:text-[#5A5A5A]",
