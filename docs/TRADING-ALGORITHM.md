@@ -42,12 +42,12 @@ Cascade AI is an autonomous trading agent for BNB Chain. Each cycle it:
 
 1. Reads wallet state and open positions from disk.
 2. Fetches market data for every token on a **~149-token BEP-20 competition allowlist**.
-3. Scores each candidate against **six binary factors** (pass/fail gates).
+3. Scores each candidate with a **weighted entry score** while preserving six binary factor booleans for auditability.
 4. Applies **safety guardrails** (daily loss budget, trade caps, macro regime).
 5. Emits one of four actions: `ENTER`, `WAIT`, `BLOCKED`, or `HALT`.
 6. On `ENTER`, sizes a USDC position and swaps into the target token via **TWAK / LiquidMesh**.
 
-**Core rule (algorithm v2, deployed 2026-06-12):** the six factors split into roles. Three **core gates** must all pass to be *eligible* for `ENTER`: `volume_breakout`, `six_hour_high_break`, and `slippage_under_cap`. `regime_not_risk_off` no longer vetoes — when false it **halves position size**. `rsi_in_range` and `derivatives_risk_clear` are **informational** (logged, fail closed on missing data, do not gate entry). A partial core score yields `WAIT`. Guardrails can still veto a perfect score.
+**Core rule (algorithm v3, deployed 2026-06-12):** breakout entries use a weighted `entry_score` instead of the old all-or-nothing `volume_breakout && six_hour_high_break && slippage_under_cap` chain. `slippage_under_cap` remains the only hard entry gate and is quoted through TWAK when a candidate is near threshold. The frozen `factor_scores` keys keep their original boolean meanings for dashboard compatibility; the bot adds `entry_score` as an additive field. Guardrails can still block an otherwise valid score.
 
 **Candidate filter (v2):** stablecoins and gold-backed tokens (USDT, USDC, USDe, XAUt, XAUM, etc. — 18 symbols) are excluded from momentum candidate selection. They remain valid to hold.
 
@@ -65,13 +65,13 @@ The strategy is intentionally **checklist-driven, not discretionary**:
 
 | Principle | How it shows up in telemetry |
 |-----------|------------------------------|
-| **No partial buys** | 2/3 core gates → `WAIT`, never a partial entry (regime only scales size) |
-| **Objective gates** | Each factor is boolean in `factor_scores` |
+| **No partial buys** | Score below threshold or slippage above cap → `WAIT`, never a partial entry |
+| **Objective audit trail** | Each legacy factor remains boolean in `factor_scores`; weighted verdict is exported as `entry_score` |
 | **Safety first** | `entries_allowed: false` + `BLOCKED` even when signals look good |
 | **Auditability** | Every cycle appends one JSONL row to `decision_log.jsonl` |
 | **Separation of concerns** | Dashboard reads logs; it never triggers trades |
 
-The in-dashboard explainer lives in `apps/web/src/components/decision-algorithm-panel.tsx` under the **Strategy explainer** tab.
+The in-dashboard explainer lives in `apps/web/src/components/decision-algorithm-panel.tsx` under the **Strategy explainer** tab. **Dashboard copy still needs a v3 UI pass** so the cards explain scored entries rather than the old core-gate model.
 
 ---
 
@@ -131,9 +131,9 @@ Defined in `decision-algorithm-panel.tsx` as `CYCLE_STEPS`:
 |------|-------|-------------|
 | **01** | Wake up | Agent reads wallet balances and loads open positions from disk. |
 | **02** | Scan targets | Pulls fresh market data (CoinMarketCap / x402) for every allowlist token—often ~149 symbols per cycle. |
-| **03** | Score factors | Stables/gold excluded, then 3 core gates (volume, 6h-high, slippage). One core miss → wait. |
-| **04** | Apply guardrails | Daily loss limits, trade caps, or 18% drawdown kill switch can veto entry. Risk-off regime halves size. |
-| **05** | Decide & act | Only when all 3 core gates pass and guardrails allow → USDC → token swap via TWAK (size ×0.5 if regime risk-off). |
+| **03** | Score entries | Stables/gold excluded, then weighted score from breakout strength, volume surge, momentum, RSI, derivatives, and macro context. |
+| **04** | Apply guardrails | Daily loss limits, trade caps, disk guard, or 18% drawdown kill switch can veto entry. Risk-off/macro context scales size only. |
+| **05** | Decide & act | If score ≥ threshold and TWAK slippage is under cap → USDC → token swap via TWAK. |
 
 ### Per-cycle telemetry fields
 
@@ -164,8 +164,10 @@ Formal view of how actions relate to factor scores and guardrails:
 stateDiagram-v2
     [*] --> Scanning: New cycle
     Scanning --> Evaluating: Market data loaded (stables/gold excluded)
-    Evaluating --> Wait: core gates < 3/3
-    Evaluating --> GuardCheck: core gates == 3/3
+    Evaluating --> Wait: entry_score < threshold
+    Evaluating --> Quote: entry_score near threshold
+    Quote --> Wait: slippage missing/above cap
+    Quote --> GuardCheck: slippage_under_cap == true
     GuardCheck --> Blocked: entries_allowed == false
     GuardCheck --> Sizing: entries_allowed == true
     Sizing --> Enter: size ×0.5 if regime risk-off
@@ -185,8 +187,9 @@ When reading a decision row, interpret fields in this order:
 
 1. **`action`** — primary outcome label.
 2. **`entries_allowed`** — whether guardrails permit new entries this cycle.
-3. **`factor_scores` / `true_factor_count`** — technical checklist result.
-4. **`reason`** — bot-authored narrative; may encode extra nuance (dynamic thresholds, confirmation waits).
+3. **`entry_score`** — weighted breakout score when present.
+4. **`factor_scores` / `true_factor_count`** — technical checklist/audit result.
+5. **`reason`** — bot-authored narrative; may encode extra nuance (dynamic thresholds, confirmation waits).
 
 ---
 
@@ -209,16 +212,16 @@ export const ENTRY_FACTOR_COUNT = ENTRY_FACTOR_KEYS.length; // 6
 
 ### 6.1 Factor reference table
 
-| # | Key | Role (v2) | Plain-language meaning | Data source |
+| # | Key | Role (v3) | Plain-language meaning | Data source |
 |---|-----|-----------|------------------------|-------------|
-| 1 | `volume_breakout` | **Core gate** | Recent volume is significantly above its recent average—real interest, not a low-liquidity wiggle | CoinMarketCap price & volume history |
-| 2 | `six_hour_high_break` | **Core gate** | Price trades above the rolling local high (price cache preferred, then 3h/6h snapshot highs)—short-term upward momentum | Rolling price cache + OHLC snapshot |
-| 3 | `regime_not_risk_off` | **Size modifier** | Broader market (BTC trend, sentiment) defensive → position size ×0.5. Does not veto. | BTC trend & market regime signal |
-| 4 | `slippage_under_cap` | **Core gate** | Estimated swap price impact is below the configured slippage cap. Quoted only after both momentum gates pass. | TWAK / LiquidMesh route quote |
-| 5 | `rsi_in_range` | Informational | 14-period RSI is strong enough to buy but not overheated. Fails closed on missing data. | RSI on recent candles |
-| 6 | `derivatives_risk_clear` | Informational | Funding rates and leveraged positioning do not flash systemic danger. Fails closed on missing data. | Funding rates & derivatives metrics |
+| 1 | `volume_breakout` | Score component | Recent volume is significantly above its recent average—real interest, not a low-liquidity wiggle | CoinMarketCap price & volume history |
+| 2 | `six_hour_high_break` | Score component | Price trades above the rolling 6h reference high. Multi-window 3h/6h/24h reference strength also feeds `entry_score`. | Rolling price cache + OHLC snapshot |
+| 3 | `regime_not_risk_off` | Size modifier | Broader market defensive → position size reduced. Does not veto. | BTC trend & market regime signal |
+| 4 | `slippage_under_cap` | **Hard gate** | Estimated swap price impact is below the configured slippage cap. Quoted only when score is close enough to entry threshold. | TWAK / LiquidMesh route quote |
+| 5 | `rsi_in_range` | Score component | 14-period RSI is strong enough to buy but not overheated. Missing data contributes 0 to score. | RSI on recent candles |
+| 6 | `derivatives_risk_clear` | Score component | Funding rates and leveraged positioning do not flash systemic danger. Missing data contributes 0 to score. | Funding rates & derivatives metrics |
 
-Each factor is **binary** in telemetry: `true` = pass; `false` or absent = fail. Entry requires the three core gates; the other three never gate entry on their own.
+Each factor remains **binary** in telemetry: `true` = pass; `false` or absent = fail. In v3, those booleans are audit fields. The entry verdict comes from `entry_score >= threshold` plus the hard `slippage_under_cap` gate and global guardrails.
 
 ### 6.2 Factor metadata in UI
 
@@ -252,7 +255,7 @@ export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
   return {
     passed,                                  // X/6 display count
     total: ENTRY_FACTOR_COUNT,
-    corePassed,                              // X/3 entry-gating count
+    corePassed,                              // legacy UI display count, not v3 enter logic
     coreTotal: CORE_ENTRY_FACTOR_COUNT,
     required: CORE_ENTRY_FACTOR_COUNT,
     met: corePassed >= CORE_ENTRY_FACTOR_COUNT,
@@ -265,11 +268,13 @@ export function decisionFactorSummary(decision: StatusPayload["decisions"][numbe
 }
 ```
 
+For v3, dashboard verdicts should prefer `action`, `entries_allowed`, `entry_score`, and `slippage_under_cap`. The legacy `corePassed` display is retained in current UI code until the separate dashboard explainer/copy update lands.
+
 **Priority rule:** if the bot sends `true_factor_count`, the dashboard treats it as authoritative for the numeric score. Otherwise it recomputes from `factor_scores`.
 
 ### 6.4 Dynamic threshold parsing from `reason`
 
-Some bot versions may encode a non-default required count in the reason string:
+Older bot versions encoded a non-default required factor count in the reason string:
 
 ```typescript
 export function parseRequiredFactorCount(reason: string | null | undefined): number | null {
@@ -283,7 +288,7 @@ Used in `log-event-details.ts`:
 
 ```typescript
 const required = parseRequiredFactorCount(decision.reason) ?? factors.required;
-// Display: "5/6 total · 2/3 core (need 3 core to enter)"; "need N" parsed from reason when present
+// Legacy display only; v3 should prefer entry_score when present.
 ```
 
 ---
@@ -298,8 +303,8 @@ action: z.enum(["ENTER", "WAIT", "BLOCKED", "HALT"])
 
 | Action | UI color | Meaning |
 |--------|----------|---------|
-| **ENTER** | Green | Buy approved. Factors met + `entries_allowed: true`. Computes `position_size_usdc` and executes swap. |
-| **WAIT** | Yellow | One or more factors failed, or bot wants stronger confirmation. No capital moves. Logs `reason`. |
+| **ENTER** | Green | Buy approved. `entry_score` threshold met, TWAK slippage under cap, and `entries_allowed: true`. Computes `position_size_usdc` and executes swap. |
+| **WAIT** | Yellow | Score below threshold, slippage failed/missing, or bot wants stronger confirmation. No capital moves. Logs `reason`. |
 | **BLOCKED** | Orange | Technical signals may look good, but a **guardrail** vetoed entry (`entries_allowed: false`). |
 | **HALT** | Red | Critical failure or manual halt. Agent stops opening new positions until cleared. |
 
@@ -346,7 +351,7 @@ From `agent-exporter/fixtures/decision_log.jsonl`, cycle 121:
 
 `six_hour_high_break: false` → 5/6 → `WAIT`.
 
-### 7.3 Example: ENTER (3/3 core)
+### 7.3 Example: ENTER (scored breakout)
 
 From `apps/web/src/lib/mock-data.ts`, cycle 122:
 
@@ -366,8 +371,9 @@ From `apps/web/src/lib/mock-data.ts`, cycle 122:
     "derivatives_risk_clear": true
   },
   "true_factor_count": 6,
+  "entry_score": 80,
   "estimated_slippage_pct": 0.18,
-  "reason": "3/3 core factors passed (6/6 total)"
+  "reason": "entry score 80.0 >= 45.0; slippage under cap (6/6 factors true)"
 }
 ```
 
@@ -400,8 +406,8 @@ Note: `regime_not_risk_off: false` both fails a factor **and** triggers the risk
 
 `decision-algorithm-panel.tsx` ships two static snapshots:
 
-- **`SIMULATED_PASSING_SIGNAL`** — CAKE, 3/3 core, `ENTER`
-- **`SIMULATED_NON_PASSING_SIGNAL`** — LINK, 2/3 core (`six_hour_high_break: false`), `WAIT`
+- **`SIMULATED_PASSING_SIGNAL`** — CAKE, legacy passing example, `ENTER`
+- **`SIMULATED_NON_PASSING_SIGNAL`** — LINK, legacy non-passing example, `WAIT`
 
 Plus a live snapshot bound to `latestDecision` from telemetry.
 
@@ -741,6 +747,8 @@ export const decisionSchema = z.object({
   factor_scores: factorScoresSchema.default({}),
   true_factor_count: nullableNumber,
   estimated_slippage_pct: nullableNumber,
+  entry_score: nullableNumber.optional(),
+  entries_blocked_reason: z.string().nullable().optional(),
   reason: z.string().nullable().optional(),
   priced_target_count: nullableNumber,
 }).passthrough();
@@ -877,7 +885,7 @@ export function formatDecisionLogLine(decision: Decision): string {
   const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
   return `${decision.action} ${symbol}${factors}${reason}`;
 }
-// → "ENTER CAKE (6/6 factors) — 3/3 core factors passed (6/6 total)"
+// → "ENTER CAKE (6/6 factors) — entry score 80.0 >= 45.0; slippage under cap"
 ```
 
 ### 16.2 Expandable decision details
@@ -1165,7 +1173,7 @@ cd apps/web
 USE_MOCK_AGENT_DATA=true npm run dev
 ```
 
-Mock sequence: WAIT (BNB, 5/6) → ENTER (CAKE, 3/3 core) → BLOCKED (TWT, guardrail).
+Mock sequence: WAIT (BNB, 5/6) → ENTER (CAKE, scored breakout) → BLOCKED (TWT, guardrail).
 
 ### 21.2 Exporter with fixtures
 
@@ -1225,8 +1233,8 @@ npm run build
 flowchart TD
     A[New cycle] --> B[Read wallet & positions]
     B --> C[Scan allowlist — stables/gold excluded from candidates]
-    C --> D[Score volume + 6h-high gates]
-    D --> E{Both momentum gates pass?}
+    C --> D[Compute weighted entry_score]
+    D --> E{Score near threshold?}
     E -->|No| F[WAIT — log reason]
     E -->|Yes| K[Quote TWAK / LiquidMesh slippage]
     K --> L{Slippage under cap?}
@@ -1361,7 +1369,7 @@ The bot supports a second strategy selectable via `STRATEGY_MODE=scalping` in th
 | Field | Type | Description |
 |-------|------|-------------|
 | `strategy_mode` | `"breakout"` \| `"scalping"` | Active strategy |
-| `entry_score` | number | Weighted score 0–100 (scalping) |
+| `entry_score` | number | Weighted score 0–100 (breakout v3 and scalping) |
 | `exit_reason` | string | `tp`, `sl`, `time_stop`, `max_hold` |
 | `hold_time_seconds` | number | Position duration at exit |
 
@@ -1369,4 +1377,4 @@ Dashboard detection: [`apps/web/src/lib/scalping-scoring.ts`](../apps/web/src/li
 
 ---
 
-*Last updated: June 12, 2026 — reflects algorithm v2 (3-core-gate entry, regime sizing, compliance trade) and cascade-ai-dashboard repository state.*
+*Last updated: June 12, 2026 — reflects algorithm v3 (scored breakout entry, slippage hard gate, regime/macro sizing, compliance trade) and cascade-ai-dashboard repository state.*
