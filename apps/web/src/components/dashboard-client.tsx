@@ -1279,7 +1279,7 @@ function DesktopNavRail({
 }) {
   return (
     <nav
-      className="relative z-[1] flex h-full shrink-0 flex-col items-center border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      className="relative z-[1] flex h-dvh shrink-0 flex-col items-center border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
@@ -3285,7 +3285,7 @@ function DesktopDashboard({
     <div className="relative isolate hidden min-h-dvh flex-1 bg-black text-white lg:flex">
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] technical-grid technical-grid--fine flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <SectionTransition
           section={activeSection}
@@ -3794,7 +3794,7 @@ function DesktopOverviewSection({
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <DesktopHeroMetrics view={view} />
-      <div className="flex min-h-0 flex-1 flex-col px-8 pb-6 pt-3">
+      <div className="flex min-h-0 flex-1 flex-col pb-6 pr-8 pt-3">
         <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-5">
           <ViewportReveal
             variant="fade"
@@ -3825,7 +3825,7 @@ function DesktopOverviewSection({
 
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="shrink-0 px-8 pt-6">
+    <section className="shrink-0 pr-8 pt-6">
       <div className="grid grid-cols-4 divide-x divide-[#1A1A1A]">
         {view.metrics.map((metric, index) => (
           <ViewportReveal
