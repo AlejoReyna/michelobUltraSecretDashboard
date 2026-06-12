@@ -63,7 +63,7 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       },
       true_factor_count: 6,
       estimated_slippage_pct: 0.18,
-      reason: "6/6 factors passed",
+      reason: "3/3 core factors passed (6/6 total)",
       priced_target_count: 8,
     },
     {

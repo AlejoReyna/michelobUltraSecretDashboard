@@ -136,10 +136,10 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
         }
       : {
           label: "Factors passed",
-          value: `${breakoutFactors.passed}/${breakoutFactors.total} (need ${required} to enter)`,
-          tone: (breakoutFactors.passed >= required
+          value: `${breakoutFactors.passed}/${breakoutFactors.total} total · ${breakoutFactors.corePassed}/${breakoutFactors.coreTotal} core (need ${required} core to enter)`,
+          tone: (breakoutFactors.corePassed >= required
             ? "green"
-            : breakoutFactors.passed >= required - 1
+            : breakoutFactors.corePassed >= required - 1
               ? "yellow"
               : "red") as "green" | "yellow" | "red",
         };

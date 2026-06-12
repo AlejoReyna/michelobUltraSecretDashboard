@@ -47,9 +47,15 @@ Cascade AI is an autonomous trading agent for BNB Chain. Each cycle it:
 5. Emits one of four actions: `ENTER`, `WAIT`, `BLOCKED`, or `HALT`.
 6. On `ENTER`, sizes a USDC position and swaps into the target token via **TWAK / LiquidMesh**.
 
-**Core rule (documented in UI):** all **6/6** factors must pass to be *eligible* for `ENTER`. A partial score (e.g. 5/6) yields `WAIT`. Guardrails can still veto a perfect 6/6.
+**Core rule (algorithm v2, deployed 2026-06-12):** the six factors split into roles. Three **core gates** must all pass to be *eligible* for `ENTER`: `volume_breakout`, `six_hour_high_break`, and `slippage_under_cap`. `regime_not_risk_off` no longer vetoes — when false it **halves position size**. `rsi_in_range` and `derivatives_risk_clear` are **informational** (logged, fail closed on missing data, do not gate entry). A partial core score yields `WAIT`. Guardrails can still veto a perfect score.
+
+**Candidate filter (v2):** stablecoins and gold-backed tokens (USDT, USDC, USDe, XAUt, XAUM, etc. — 18 symbols) are excluded from momentum candidate selection. They remain valid to hold.
+
+**Competition floor (v2):** if no trade has executed by 22:00 UTC, the bot performs a ~$0.50 allowlist swap (never BNB) to satisfy the BNB Hack one-trade-per-day minimum. The internal drawdown kill switch is set to 18% (competition DQ is ~30%).
 
 **Quote asset:** entries are funded from **USDC**. The bot does not enter with BNB or other base assets unless configured otherwise in the bot repo.
+
+> **v1 history.** Before 2026-06-12 the bot required 3 of 4 "core" factors including regime as a hard veto, RSI/derivatives silently passed on missing data, and stablecoins could win candidate ranking. An 8-hour live run (102 cycles, 0 entries) exposed all three issues; see git history of this file for the v1 description.
 
 ---
 
@@ -59,7 +65,7 @@ The strategy is intentionally **checklist-driven, not discretionary**:
 
 | Principle | How it shows up in telemetry |
 |-----------|------------------------------|
-| **No partial buys** | 5/6 factors → `WAIT`, never a scaled-down entry |
+| **No partial buys** | 2/3 core gates → `WAIT`, never a partial entry (regime only scales size) |
 | **Objective gates** | Each factor is boolean in `factor_scores` |
 | **Safety first** | `entries_allowed: false` + `BLOCKED` even when signals look good |
 | **Auditability** | Every cycle appends one JSONL row to `decision_log.jsonl` |
@@ -125,9 +131,9 @@ Defined in `decision-algorithm-panel.tsx` as `CYCLE_STEPS`:
 |------|-------|-------------|
 | **01** | Wake up | Agent reads wallet balances and loads open positions from disk. |
 | **02** | Scan targets | Pulls fresh market data (CoinMarketCap / x402) for every allowlist token—often ~149 symbols per cycle. |
-| **03** | Score factors | Each candidate gets six yes/no checks. One weak link → wait. |
-| **04** | Apply guardrails | Daily loss limits, trade caps, or risk-off regime can veto entry. |
-| **05** | Decide & act | Only when all six factors pass and guardrails allow → USDC → token swap via TWAK. |
+| **03** | Score factors | Stables/gold excluded, then 3 core gates (volume, 6h-high, slippage). One core miss → wait. |
+| **04** | Apply guardrails | Daily loss limits, trade caps, or 18% drawdown kill switch can veto entry. Risk-off regime halves size. |
+| **05** | Decide & act | Only when all 3 core gates pass and guardrails allow → USDC → token swap via TWAK (size ×0.5 if regime risk-off). |
 
 ### Per-cycle telemetry fields
 
@@ -157,16 +163,19 @@ Formal view of how actions relate to factor scores and guardrails:
 ```mermaid
 stateDiagram-v2
     [*] --> Scanning: New cycle
-    Scanning --> Evaluating: Market data loaded
-    Evaluating --> Wait: factors < 6/6
-    Evaluating --> GuardCheck: factors == 6/6
+    Scanning --> Evaluating: Market data loaded (stables/gold excluded)
+    Evaluating --> Wait: core gates < 3/3
+    Evaluating --> GuardCheck: core gates == 3/3
     GuardCheck --> Blocked: entries_allowed == false
-    GuardCheck --> Enter: entries_allowed == true
+    GuardCheck --> Sizing: entries_allowed == true
+    Sizing --> Enter: size ×0.5 if regime risk-off
     Enter --> Executing: TWAK swap
     Executing --> [*]: Log execution + update positions
+    Wait --> Compliance: 22:00 UTC, 0 trades today
+    Compliance --> [*]: ~$0.50 allowlist swap
     Wait --> [*]: Append decision_log row
     Blocked --> [*]: Append decision_log row
-    Evaluating --> Halt: Critical failure
+    Evaluating --> Halt: Critical failure / 18% drawdown
     Halt --> [*]: Stop new entries
 ```
 
@@ -200,16 +209,16 @@ export const ENTRY_FACTOR_COUNT = ENTRY_FACTOR_KEYS.length; // 6
 
 ### 6.1 Factor reference table
 
-| # | Key | UI title | Plain-language meaning | Data source |
-|---|-----|----------|------------------------|-------------|
-| 1 | `volume_breakout` | Volume breakout | Recent volume is significantly above its recent average—real interest, not a low-liquidity wiggle | CoinMarketCap price & volume history |
-| 2 | `six_hour_high_break` | 6-hour high break | Price trades above the highest price seen in the last 6 hours—short-term upward momentum | 6-hour OHLC candles |
-| 3 | `regime_not_risk_off` | Market not in risk-off | Broader market (BTC trend, sentiment) is neutral or risk-on—not a broad selloff | BTC trend & market regime signal |
-| 4 | `slippage_under_cap` | Slippage under cap | Estimated swap price impact is below the configured slippage cap | TWAK / LiquidMesh route quote |
-| 5 | `rsi_in_range` | RSI in range | 14-period RSI is strong enough to buy but not so overheated that a pullback is likely | RSI on recent candles |
-| 6 | `derivatives_risk_clear` | Derivatives risk clear | Funding rates and leveraged positioning do not flash systemic danger | Funding rates & derivatives metrics |
+| # | Key | Role (v2) | Plain-language meaning | Data source |
+|---|-----|-----------|------------------------|-------------|
+| 1 | `volume_breakout` | **Core gate** | Recent volume is significantly above its recent average—real interest, not a low-liquidity wiggle | CoinMarketCap price & volume history |
+| 2 | `six_hour_high_break` | **Core gate** | Price trades above the rolling local high (price cache preferred, then 3h/6h snapshot highs)—short-term upward momentum | Rolling price cache + OHLC snapshot |
+| 3 | `regime_not_risk_off` | **Size modifier** | Broader market (BTC trend, sentiment) defensive → position size ×0.5. Does not veto. | BTC trend & market regime signal |
+| 4 | `slippage_under_cap` | **Core gate** | Estimated swap price impact is below the configured slippage cap. Quoted only after both momentum gates pass. | TWAK / LiquidMesh route quote |
+| 5 | `rsi_in_range` | Informational | 14-period RSI is strong enough to buy but not overheated. Fails closed on missing data. | RSI on recent candles |
+| 6 | `derivatives_risk_clear` | Informational | Funding rates and leveraged positioning do not flash systemic danger. Fails closed on missing data. | Funding rates & derivatives metrics |
 
-Each factor is a **binary gate**: `true` = pass; `false` or absent = fail.
+Each factor is **binary** in telemetry: `true` = pass; `false` or absent = fail. Entry requires the three core gates; the other three never gate entry on their own.
 
 ### 6.2 Factor metadata in UI
 
@@ -227,17 +236,26 @@ export function countPassedFactors(
   return keys.filter((key) => Boolean(scores?.[key])).length;
 }
 
+export const CORE_ENTRY_FACTOR_KEYS = [
+  "volume_breakout",
+  "six_hour_high_break",
+  "slippage_under_cap",
+] as const;
+
 export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
   const passed =
     typeof decision.true_factor_count === "number"
       ? decision.true_factor_count
       : countPassedFactors(decision.factor_scores);
+  const corePassed = countPassedFactors(decision.factor_scores, CORE_ENTRY_FACTOR_KEYS);
 
   return {
-    passed,
+    passed,                                  // X/6 display count
     total: ENTRY_FACTOR_COUNT,
-    required: ENTRY_FACTOR_COUNT,
-    met: passed >= ENTRY_FACTOR_COUNT,
+    corePassed,                              // X/3 entry-gating count
+    coreTotal: CORE_ENTRY_FACTOR_COUNT,
+    required: CORE_ENTRY_FACTOR_COUNT,
+    met: corePassed >= CORE_ENTRY_FACTOR_COUNT,
   };
 }
 
@@ -265,7 +283,7 @@ Used in `log-event-details.ts`:
 
 ```typescript
 const required = parseRequiredFactorCount(decision.reason) ?? factors.required;
-// Display: "5/6 (need 5 to enter)" vs default "5/6 (need 6 to enter)"
+// Display: "5/6 total · 2/3 core (need 3 core to enter)"; "need N" parsed from reason when present
 ```
 
 ---
@@ -328,7 +346,7 @@ From `agent-exporter/fixtures/decision_log.jsonl`, cycle 121:
 
 `six_hour_high_break: false` → 5/6 → `WAIT`.
 
-### 7.3 Example: ENTER (6/6)
+### 7.3 Example: ENTER (3/3 core)
 
 From `apps/web/src/lib/mock-data.ts`, cycle 122:
 
@@ -349,7 +367,7 @@ From `apps/web/src/lib/mock-data.ts`, cycle 122:
   },
   "true_factor_count": 6,
   "estimated_slippage_pct": 0.18,
-  "reason": "6/6 factors passed"
+  "reason": "3/3 core factors passed (6/6 total)"
 }
 ```
 
@@ -382,8 +400,8 @@ Note: `regime_not_risk_off: false` both fails a factor **and** triggers the risk
 
 `decision-algorithm-panel.tsx` ships two static snapshots:
 
-- **`SIMULATED_PASSING_SIGNAL`** — CAKE, 6/6, `ENTER`
-- **`SIMULATED_NON_PASSING_SIGNAL`** — BNB, 5/6 (`six_hour_high_break: false`), `WAIT`
+- **`SIMULATED_PASSING_SIGNAL`** — CAKE, 3/3 core, `ENTER`
+- **`SIMULATED_NON_PASSING_SIGNAL`** — LINK, 2/3 core (`six_hour_high_break: false`), `WAIT`
 
 Plus a live snapshot bound to `latestDecision` from telemetry.
 
@@ -417,10 +435,12 @@ export const guardrailsSchema = z.object({
 
 | Guardrail | Telemetry field | Effect |
 |-----------|-----------------|--------|
-| **Risk-off regime** | (bot-internal + `regime_not_risk_off` factor) | Pauses new buys when macro turns defensive |
+| **Risk-off regime (v2: sizing only)** | `regime_not_risk_off` factor | Halves position size when macro turns defensive; no longer pauses buys |
 | **Daily loss budget** | `daily_realized_loss` | Caps realized losses for the calendar day |
 | **Daily trade cap** | `daily_trade_count` | Limits entry count per day |
-| **Portfolio ATH tracking** | `portfolio_ath` | Drawdown-aware reference for position sizing |
+| **Portfolio ATH tracking** | `portfolio_ath` | Drawdown-aware reference; kill switch halts entries at **18% drawdown** from ATH (`DRAWDOWN_KILL_SWITCH_PCT=0.18`) |
+| **Daily minimum trade (v2)** | `daily_trade_count` + compliance marker | At 22:00 UTC with zero trades, executes a ~$0.50 allowlist swap (never BNB) to satisfy the competition's 1-trade/day rule |
+| **Portfolio floor (v2)** | spend capping | Never spends the portfolio below ~$2 — competition scores any hour starting ≤$1 as 0% |
 
 When guardrails block entries, the bot sets `entries_allowed: false` and typically emits `BLOCKED`.
 
@@ -857,7 +877,7 @@ export function formatDecisionLogLine(decision: Decision): string {
   const factors = decision.factor_scores ? ` (${decisionFactorSummary(decision)})` : "";
   return `${decision.action} ${symbol}${factors}${reason}`;
 }
-// → "ENTER CAKE (6/6 factors) — 6/6 factors passed"
+// → "ENTER CAKE (6/6 factors) — 3/3 core factors passed (6/6 total)"
 ```
 
 ### 16.2 Expandable decision details
@@ -1145,7 +1165,7 @@ cd apps/web
 USE_MOCK_AGENT_DATA=true npm run dev
 ```
 
-Mock sequence: WAIT (BNB, 5/6) → ENTER (CAKE, 6/6) → BLOCKED (TWT, guardrail).
+Mock sequence: WAIT (BNB, 5/6) → ENTER (CAKE, 3/3 core) → BLOCKED (TWT, guardrail).
 
 ### 21.2 Exporter with fixtures
 
@@ -1204,20 +1224,23 @@ npm run build
 ```mermaid
 flowchart TD
     A[New cycle] --> B[Read wallet & positions]
-    B --> C[Scan allowlist ~149 tokens]
-    C --> D[Score 6 binary factors per candidate]
-    D --> E{6/6 factors?}
+    B --> C[Scan allowlist — stables/gold excluded from candidates]
+    C --> D[Score volume + 6h-high gates]
+    D --> E{Both momentum gates pass?}
     E -->|No| F[WAIT — log reason]
-    E -->|Yes| G{Guardrails OK?}
+    E -->|Yes| K[Quote TWAK / LiquidMesh slippage]
+    K --> L{Slippage under cap?}
+    L -->|No| F
+    L -->|Yes| G{Guardrails OK?}
     G -->|No| H[BLOCKED — entries_allowed=false]
-    G -->|Yes| I[ENTER]
-    I --> J[Compute position_size_usdc]
-    J --> K[Quote TWAK / LiquidMesh]
-    K --> L[Swap USDC → token]
-    L --> M[Write positions.json + execution_log.jsonl]
-    F --> N[Next cycle]
+    G -->|Yes| I[ENTER — size ×0.5 if regime risk-off]
+    I --> M[Swap USDC → token, write positions.json + execution_log.jsonl]
+    F --> P{22:00 UTC & 0 trades today?}
+    P -->|Yes| Q[Compliance swap ~$0.50]
+    P -->|No| N[Next cycle]
     H --> N
     M --> N
+    Q --> N
 ```
 
 ### 23.2 Component mind map
@@ -1346,4 +1369,4 @@ Dashboard detection: [`apps/web/src/lib/scalping-scoring.ts`](../apps/web/src/li
 
 ---
 
-*Last updated: June 2026 — reflects cascade-ai-dashboard repository state.*
+*Last updated: June 12, 2026 — reflects algorithm v2 (3-core-gate entry, regime sizing, compliance trade) and cascade-ai-dashboard repository state.*

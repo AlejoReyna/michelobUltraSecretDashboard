@@ -12,6 +12,20 @@ export const ENTRY_FACTOR_KEYS = [
 
 export const ENTRY_FACTOR_COUNT = ENTRY_FACTOR_KEYS.length;
 
+/**
+ * Core gates (algorithm v2): all three must pass for ENTER.
+ * `regime_not_risk_off` no longer vetoes — it halves position size instead.
+ * `rsi_in_range` and `derivatives_risk_clear` are informational (fail closed on
+ * missing data) and do not gate entry.
+ */
+export const CORE_ENTRY_FACTOR_KEYS = [
+  "volume_breakout",
+  "six_hour_high_break",
+  "slippage_under_cap",
+] as const;
+
+export const CORE_ENTRY_FACTOR_COUNT = CORE_ENTRY_FACTOR_KEYS.length;
+
 export type EntryFactorKey = (typeof ENTRY_FACTOR_KEYS)[number];
 
 export type StrategyMode = "breakout" | "scalping";
@@ -41,12 +55,15 @@ export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
     typeof decision.true_factor_count === "number"
       ? decision.true_factor_count
       : countPassedFactors(decision.factor_scores);
+  const corePassed = countPassedFactors(decision.factor_scores, CORE_ENTRY_FACTOR_KEYS);
 
   return {
     passed,
     total: ENTRY_FACTOR_COUNT,
-    required: ENTRY_FACTOR_COUNT,
-    met: passed >= ENTRY_FACTOR_COUNT,
+    corePassed,
+    coreTotal: CORE_ENTRY_FACTOR_COUNT,
+    required: CORE_ENTRY_FACTOR_COUNT,
+    met: corePassed >= CORE_ENTRY_FACTOR_COUNT,
   };
 }
 

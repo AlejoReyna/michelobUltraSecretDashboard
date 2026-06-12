@@ -49,10 +49,10 @@ const ENTRY_FACTORS: FactorMeta[] = [
   },
   {
     key: "regime_not_risk_off",
-    title: "Market not in risk-off",
-    plain: "The broader market is not in panic mode.",
+    title: "Market not in risk-off (size modifier)",
+    plain: "Panic mode shrinks the bet instead of blocking it.",
     detail:
-      "When Bitcoin and overall sentiment turn defensive, new buys are riskier. This check confirms the macro backdrop is neutral or risk-on—not a broad selloff.",
+      "When Bitcoin and overall sentiment turn defensive, the bot no longer refuses to trade—it halves the position size instead. The regime value is still logged with every decision.",
     dataSource: "BTC trend & market regime signal",
   },
   {
@@ -65,18 +65,18 @@ const ENTRY_FACTORS: FactorMeta[] = [
   },
   {
     key: "rsi_in_range",
-    title: "RSI in range",
+    title: "RSI in range (informational)",
     plain: "Momentum is healthy—not exhausted or crashing.",
     detail:
-      "RSI (Relative Strength Index) measures how stretched a move is on a 0–100 scale. The bot wants a window that is strong enough to buy but not so overheated that a pullback is likely.",
+      "RSI (Relative Strength Index) measures how stretched a move is on a 0–100 scale. Logged for context and shown in factor counts, but it does not gate entry. Missing data counts as a fail, never a silent pass.",
     dataSource: "14-period RSI on recent candles",
   },
   {
     key: "derivatives_risk_clear",
-    title: "Derivatives risk clear",
+    title: "Derivatives risk clear (informational)",
     plain: "Futures markets are not flashing danger signals.",
     detail:
-      "Extreme funding rates or crowded leveraged positions can foreshadow sharp reversals. This factor checks that derivatives data does not show elevated systemic risk for the token.",
+      "Extreme funding rates or crowded leveraged positions can foreshadow sharp reversals. Logged for context and shown in factor counts, but it does not gate entry. Missing data counts as a fail, never a silent pass.",
     dataSource: "Funding rates & derivatives metrics",
   },
 ];
@@ -95,17 +95,17 @@ const CYCLE_STEPS = [
   {
     step: "03",
     title: "Score factors",
-    body: "Each candidate gets six yes/no checks. Think of it as a checklist: one weak link and the bot waits.",
+    body: "Stablecoins and gold tokens are excluded up front, then each candidate is scored on three core gates—volume breakout, 6-hour high break, and slippage under cap. RSI and derivatives are logged for context; a risk-off regime halves position size instead of vetoing.",
   },
   {
     step: "04",
     title: "Apply guardrails",
-    body: "Even a perfect score can be blocked by daily loss limits, trade caps, or a risk-off regime override.",
+    body: "Even a perfect score can be blocked by daily loss limits, trade caps, or the 18% drawdown kill switch.",
   },
   {
     step: "05",
     title: "Decide & act",
-    body: "Only when all six factors pass and guardrails allow it does the bot swap USDC for the token through TWAK.",
+    body: "Only when all three core gates pass and guardrails allow it does the bot swap USDC for the token through TWAK. If no trade has fired by 22:00 UTC, a tiny compliance swap keeps the competition's one-trade-per-day minimum.",
   },
 ];
 
@@ -131,7 +131,7 @@ const SIMULATED_PASSING_SIGNAL: ExampleDecision = {
   },
   true_factor_count: 6,
   estimated_slippage_pct: 0.18,
-  reason: "6/6 factors passed",
+  reason: "3/3 core factors passed (6/6 total)",
   priced_target_count: 149,
 };
 
@@ -143,7 +143,7 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   position_count: 1,
   entries_allowed: true,
   action: "WAIT",
-  symbol: "BNB",
+  symbol: "LINK",
   position_size_usdc: 0,
   factor_scores: {
     volume_breakout: true,
@@ -155,7 +155,7 @@ const SIMULATED_NON_PASSING_SIGNAL: ExampleDecision = {
   },
   true_factor_count: 5,
   estimated_slippage_pct: 0.11,
-  reason: "Waiting for six hour high confirmation.",
+  reason: "insufficient signal: 2/3 core factors passed (need 3)",
   priced_target_count: 149,
 };
 
@@ -338,7 +338,7 @@ const SIMULATED_SCALPING_WAIT: ExampleDecision = {
 
 const CYCLE_INPUTS = [
   "Market data (CMC / x402)",
-  "6-factor checklist",
+  "3 core gates + context factors",
   "Guardrails & limits",
   "TWAK swap execution",
   "Position tracking",
@@ -349,17 +349,17 @@ const OUTCOMES = [
   {
     action: "ENTER",
     summary: "Buy approved",
-    body: "All 6/6 factors passed and guardrails allow new entries. The agent sizes the position, quotes slippage, and executes a USDC → token swap.",
+    body: "All 3 core gates passed and guardrails allow new entries. The agent sizes the position (halved if the regime is risk-off), quotes slippage, and executes a USDC → token swap.",
   },
   {
     action: "WAIT",
     summary: "Keep watching",
-    body: "One or more factors failed, or the bot wants stronger confirmation. No money moves— it logs the reason and tries again next cycle.",
+    body: "One or more core gates failed, or the bot wants stronger confirmation. No money moves— it logs the reason and tries again next cycle.",
   },
   {
     action: "BLOCKED",
     summary: "Guardrail stop",
-    body: "Technical signals may look good, but a safety rule vetoed the trade—e.g. risk-off regime, daily loss budget, or entries disabled.",
+    body: "Technical signals may look good, but a safety rule vetoed the trade—e.g. daily loss budget, trade caps, the 18% drawdown kill switch, or entries disabled.",
   },
   {
     action: "HALT",
@@ -881,11 +881,13 @@ export function DecisionAlgorithmPanel({
                 ) : (
                   <>
                     <p className="font-mono text-[18px] font-semibold leading-snug text-white">
-                      All {ENTRY_FACTOR_COUNT}/{ENTRY_FACTOR_COUNT} factors must pass
+                      All 3/3 core gates must pass
                     </p>
                     <p className="mt-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">
-                      Partial scores (e.g. 5/6) always result in WAIT—never a partial buy. Safety guardrails can still block
-                      even a perfect score.
+                      Core gates: volume breakout, 6-hour high break, slippage under cap. A partial core score always
+                      results in WAIT—never a partial buy. The other {ENTRY_FACTOR_COUNT - 3} factors are logged for
+                      context: risk-off regime halves position size, RSI and derivatives are informational. Safety
+                      guardrails can still block a perfect score.
                     </p>
                   </>
                 )}
@@ -916,17 +918,17 @@ export function DecisionAlgorithmPanel({
                     <>
                       <div>
                         <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                          <span>5/6 — WAIT</span>
-                          <span>Missing one signal</span>
+                          <span>2/3 core — WAIT</span>
+                          <span>Missing one core gate</span>
                         </div>
-                        <FactorScoreBar passed={5} total={6} />
+                        <FactorScoreBar passed={2} total={3} />
                       </div>
                       <div>
                         <div className="mb-1 flex justify-between font-mono text-[10px] text-[#8A8A8A]">
-                          <span>6/6 — eligible for ENTER</span>
-                          <span>Full checklist</span>
+                          <span>3/3 core — eligible for ENTER</span>
+                          <span>All core gates</span>
                         </div>
-                        <FactorScoreBar passed={6} total={6} />
+                        <FactorScoreBar passed={3} total={3} />
                       </div>
                     </>
                   )}
@@ -1133,7 +1135,7 @@ export function DecisionAlgorithmPanel({
                 <DecisionSnapshot
                   decision={SIMULATED_PASSING_SIGNAL}
                   heading="Passing signal"
-                  badge="6/6 · ENTER"
+                  badge="3/3 core · ENTER"
                 />
               )}
             </ViewportReveal>
@@ -1144,7 +1146,7 @@ export function DecisionAlgorithmPanel({
                 <DecisionSnapshot
                   decision={SIMULATED_NON_PASSING_SIGNAL}
                   heading="Non-passing signal"
-                  badge="5/6 · WAIT"
+                  badge="2/3 core · WAIT"
                 />
               )}
             </ViewportReveal>
