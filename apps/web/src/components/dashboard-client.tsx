@@ -3334,10 +3334,12 @@ function HomePositionsSummary({
   positionRows,
   totalPositionValue,
   compact = false,
+  flush = false,
 }: {
   positionRows: PositionRow[];
   totalPositionValue: string;
   compact?: boolean;
+  flush?: boolean;
 }) {
   const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
   const rows = [...positionRows]
@@ -3345,7 +3347,12 @@ function HomePositionsSummary({
     .slice(0, rowLimit);
 
   return (
-    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
+    <div
+      className={cx(
+        "flex h-full min-h-0 flex-col overflow-hidden",
+        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+      )}
+    >
       <div
         className={cx(
           "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
@@ -3517,18 +3524,25 @@ function HomeActivitySummary({
   logRows = [],
   compact = false,
   maxRows,
+  flush = false,
 }: {
   activityRows: ActivityRow[];
   logRows?: ActivityRow[];
   compact?: boolean;
   maxRows?: number;
+  flush?: boolean;
 }) {
   const [view, setView] = useState<ActivityView>("sys");
   const rowLimit = maxRows ?? (compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT);
   const rows = (view === "sys" ? logRows : activityRows).slice(0, rowLimit);
 
   return (
-    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
+    <div
+      className={cx(
+        "flex h-full min-h-0 flex-col overflow-hidden",
+        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+      )}
+    >
       <div
         className={cx(
           "flex shrink-0 items-center justify-between border-b border-[#141416]",
@@ -3678,10 +3692,12 @@ function HomeWalletSummary({
   walletBalances,
   agentMode,
   compact = false,
+  flush = false,
 }: {
   walletBalances: WalletBalanceRow[];
   agentMode: string;
   compact?: boolean;
+  flush?: boolean;
 }) {
   const paperMode = agentMode === "PAPER";
   const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
@@ -3690,7 +3706,12 @@ function HomeWalletSummary({
     .slice(0, rowLimit);
 
   return (
-    <div className={cx("flex h-full min-h-0 flex-col overflow-hidden", compact ? "bg-black/30" : "border border-[#1E1E1E] bg-black/80")}>
+    <div
+      className={cx(
+        "flex h-full min-h-0 flex-col overflow-hidden",
+        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+      )}
+    >
       <div
         className={cx(
           "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
@@ -3795,12 +3816,12 @@ function DesktopOverviewSection({
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <DesktopHeroMetrics view={view} />
       <div className="flex min-h-0 flex-1 flex-col pb-6 pr-8 pt-3">
-        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-5">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E1E] bg-black/80">
           <ViewportReveal
             variant="fade"
             delay={200}
             duration="slow"
-            className="relative col-span-3 h-full min-h-0 overflow-hidden border border-[#1E1E1E] bg-black/80"
+            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E1E]"
           >
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
@@ -3808,14 +3829,24 @@ function DesktopOverviewSection({
             </div>
           </ViewportReveal>
 
-          <ViewportReveal variant="up" delay={400} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} />
+          <ViewportReveal
+            variant="up"
+            delay={400}
+            duration="normal"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
+          >
+            <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
           </ViewportReveal>
-          <ViewportReveal variant="up" delay={460} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} />
+          <ViewportReveal
+            variant="up"
+            delay={460}
+            duration="normal"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
+          >
+            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
           </ViewportReveal>
           <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} />
+            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} flush />
           </ViewportReveal>
         </div>
       </div>
