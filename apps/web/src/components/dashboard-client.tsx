@@ -2634,14 +2634,124 @@ function ActivePositionsTable({
   );
 }
 
-const DESKTOP_POSITION_GRID =
-  "grid grid-cols-[minmax(150px,1.25fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(96px,1fr)_minmax(116px,0.9fr)] items-center gap-x-5";
+type PositionTone = "green" | "yellow" | "blue" | "red" | "neutral";
 
-function PositionCorridor({ row }: { row: PositionRow }) {
+function positionStatus(row: PositionRow) {
+  if (row.source === "wallet") {
+    return {
+      label: "Wallet-held",
+      detail: "Detected in the wallet, not yet matched to positions.json.",
+      tone: "yellow" as const,
+    };
+  }
+
+  if (positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice)) {
+    return {
+      label: "Managed",
+      detail: "Entry, trailing stop, and target are synced from positions.json.",
+      tone: "green" as const,
+    };
+  }
+
+  return {
+    label: "Partial data",
+    detail: "Open position is synced, but one or more risk levels are missing.",
+    tone: "yellow" as const,
+  };
+}
+
+function positionToneClass(tone: PositionTone) {
+  return {
+    green: "text-[#00FF66]",
+    yellow: "text-[#FFD21A]",
+    blue: "text-[#8FD9FF]",
+    red: "text-[#FF7373]",
+    neutral: "text-[#D0D0D0]",
+  }[tone];
+}
+
+function positionBadgeClass(tone: PositionTone) {
+  return {
+    green: "border-[#00FF66]/40 bg-[#001A0A] text-[#00FF66]",
+    yellow: "border-[#FFD21A]/40 bg-[#1B1600] text-[#FFD21A]",
+    blue: "border-[#8FD9FF]/40 bg-[#03131C] text-[#8FD9FF]",
+    red: "border-[#FF3737]/40 bg-[#1B0505] text-[#FF7373]",
+    neutral: "border-[#3A3A3A] bg-[#080808] text-[#A8A8A8]",
+  }[tone];
+}
+
+function PositionSummaryBlock({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  index,
+  scrollRoot,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: PositionTone;
+  index: number;
+  scrollRoot: Element | null;
+}) {
+  return (
+    <ViewportReveal variant="fade" delay={80 + index * 60} root={scrollRoot}>
+      <div className="min-w-0 bg-[#050505] px-6 py-5">
+        <div className="font-mono text-[10px] uppercase text-[#757575]">{label}</div>
+        <div
+          className={cx(
+            "mt-2 truncate font-mono text-[24px] font-semibold tabular-nums text-white xl:text-[28px]",
+            positionToneClass(tone),
+          )}
+        >
+          {value}
+        </div>
+        {detail ? <div className="mt-1 truncate font-mono text-[11px] text-[#666666]">{detail}</div> : null}
+      </div>
+    </ViewportReveal>
+  );
+}
+
+function PositionMetricCell({
+  label,
+  value,
+  column,
+  index,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  column: PositionColumn;
+  index: number;
+  tone?: PositionTone;
+}) {
+  return (
+    <ViewportReveal
+      variant={positionColumnVariant(column)}
+      delay={positionCellDelay(index, column)}
+      duration="fast"
+      className="min-w-0 bg-[#030303] px-4 py-3"
+    >
+      <div className="font-mono text-[10px] uppercase text-[#757575]">{label}</div>
+      <div className={cx("mt-1 truncate font-mono text-[14px] tabular-nums", positionToneClass(tone))}>{value}</div>
+    </ViewportReveal>
+  );
+}
+
+function PositionRiskCorridor({ row }: { row: PositionRow }) {
   if (row.source === "wallet") {
     return (
-      <div className="col-span-full mt-4 border border-[#262626] bg-[#070707] px-4 py-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
-        Wallet-held token not found in `positions.json`; entry, stop, and target are unavailable until the agent state syncs.
+      <div className="border-t border-[#1A1A1A] px-5 py-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#FFD21A]" aria-hidden="true" />
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase text-[#757575]">Position state</div>
+            <p className="mt-1 break-words font-mono text-[12px] leading-5 text-[#A8A8A8]">
+              Entry, stop, and target are unavailable until the position state syncs.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -2652,59 +2762,86 @@ function PositionCorridor({ row }: { row: PositionRow }) {
   const target = row.takeProfitPrice;
   const { stopDistancePct, targetUpsidePct } = positionRiskStats(row);
 
-  const valid =
-    positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
+  const valid = positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
 
   const place = (value: number) =>
     Math.min(100, Math.max(0, ((value - (stop as number)) / ((target as number) - (stop as number))) * 100));
 
   return (
-    <div className="col-span-full mt-4 flex items-center gap-5">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-[#FFD21A]" aria-hidden="true" />
-      <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
-        {valid ? (
-          <>
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-[#1F1F1F]"
-              style={{ width: `${place(entry as number)}%` }}
-              aria-hidden="true"
-            />
-            <span
-              className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-white"
-              style={{ left: `${place(entry as number)}%` }}
-              title={`Entry ${formatPrice(entry)}`}
-              aria-hidden="true"
-            />
-            {positivePrice(high) ? (
-              <span
-                className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#00FF66]"
-                style={{ left: `${place(high)}%` }}
-                title={`High ${formatPrice(high)}`}
+    <div className="border-t border-[#1A1A1A] px-5 py-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="font-mono text-[10px] uppercase text-[#757575]">Risk corridor</div>
+        <div className="font-mono text-[12px] tabular-nums text-[#8A8A8A]">
+          {stopDistancePct !== null ? (
+            <span className="text-[#FFD21A]">-{stopDistancePct.toFixed(1)}% stop</span>
+          ) : (
+            <span>stop N/A</span>
+          )}
+          <span className="mx-2 text-[#3A3A3A]">/</span>
+          {targetUpsidePct !== null ? (
+            <span className="text-[#8FD9FF]">+{targetUpsidePct.toFixed(1)}% target</span>
+          ) : (
+            <span>target N/A</span>
+          )}
+        </div>
+      </div>
+
+      {valid ? (
+        <>
+          <div className="flex items-center gap-4">
+            <div className="font-mono text-[10px] uppercase text-[#FFD21A]">Stop</div>
+            <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-[#222222]"
+                style={{ width: `${place(entry as number)}%` }}
                 aria-hidden="true"
               />
-            ) : null}
-          </>
-        ) : null}
-      </div>
-      <span className="h-2 w-2 shrink-0 rounded-full bg-[#8FD9FF]" aria-hidden="true" />
-      <div className="shrink-0 font-mono text-[12px] tabular-nums text-[#8A8A8A]">
-        {stopDistancePct !== null ? (
-          <span className="text-[#FFD21A]">-{stopDistancePct.toFixed(1)}% to stop</span>
-        ) : (
-          <span>stop N/A</span>
-        )}
-        <span className="mx-2 text-[#3A3A3A]">·</span>
-        {targetUpsidePct !== null ? (
-          <span className="text-[#8FD9FF]">+{targetUpsidePct.toFixed(1)}% to target</span>
-        ) : (
-          <span>target N/A</span>
-        )}
-      </div>
+              {positivePrice(high) ? (
+                <span
+                  className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#00FF66]"
+                  style={{ left: `${place(high)}%` }}
+                  title={`High ${formatPrice(high)}`}
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span
+                className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-white"
+                style={{ left: `${place(entry as number)}%` }}
+                title={`Entry ${formatPrice(entry)}`}
+                aria-hidden="true"
+              />
+            </div>
+            <div className="font-mono text-[10px] uppercase text-[#8FD9FF]">Target</div>
+          </div>
+          <div className="mt-3 grid grid-cols-4 gap-3 font-mono text-[11px] tabular-nums">
+            <div className="min-w-0">
+              <div className="text-[#666666]">Stop</div>
+              <div className="truncate text-[#FFD21A]">{formatPrice(stop)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[#666666]">Entry</div>
+              <div className="truncate text-white">{formatPrice(entry)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[#666666]">High</div>
+              <div className="truncate text-[#00FF66]">{formatPrice(high)}</div>
+            </div>
+            <div className="min-w-0 text-right">
+              <div className="text-[#666666]">Target</div>
+              <div className="truncate text-[#8FD9FF]">{formatPrice(target)}</div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          Stop and target levels will appear here after the position state is fully synced.
+        </p>
+      )}
     </div>
   );
 }
 
-function DesktopPositionRow({
+function DesktopPositionCard({
   row,
   index,
   explorerUrl,
@@ -2715,60 +2852,110 @@ function DesktopPositionRow({
   explorerUrl: string | null;
   scrollRoot: Element | null;
 }) {
-  const cell = (column: PositionColumn, content: ReactNode, className?: string) => (
-    <ViewportReveal
-      as="span"
-      variant={column === "token" && index === 0 ? positionLeadVariant(index) : positionColumnVariant(column)}
-      delay={positionCellDelay(index, column)}
-      duration={index === 0 && column === "token" ? "slow" : "normal"}
-      root={scrollRoot}
-      className={cx(
-        column === "token" ? "inline-flex min-w-0 items-center gap-2.5" : "block truncate",
-        className,
-      )}
-    >
-      {content}
-    </ViewportReveal>
-  );
+  const status = positionStatus(row);
 
   const body = (
-    <>
-      <div className={DESKTOP_POSITION_GRID}>
-        {cell(
-          "token",
-          <>
-            <TokenIcon symbol={row.symbol} size={22} />
-            <span className="truncate font-mono text-[21px] font-bold leading-none text-[#F2F2F2]">
-              {row.symbol}
-            </span>
-            {row.source === "wallet" ? (
-              <span className="shrink-0 border border-[#3A3A3A] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8A8A8A]">
-                wallet-held
-              </span>
-            ) : null}
-            {explorerUrl ? (
+    <ViewportReveal
+      variant={index === 0 ? positionLeadVariant(index) : "fade"}
+      delay={index * 70}
+      duration={index === 0 ? "slow" : "normal"}
+      root={scrollRoot}
+      className="group overflow-hidden border border-[#1A1A1A] bg-black/80 transition-colors hover:border-[#2A2A2A] hover:bg-[#030303]"
+    >
+      <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.28fr)]">
+        <div className="flex min-w-0 flex-col justify-between border-b border-[#1A1A1A] px-5 py-5 xl:border-b-0 xl:border-r">
+          <div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <TokenIcon symbol={row.symbol} size={44} />
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-mono text-[26px] font-bold leading-none text-white">
+                      {row.symbol}
+                    </span>
+                    {explorerUrl ? (
+                      <span
+                        className="shrink-0 font-mono text-[13px] text-[#666666] opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-hidden="true"
+                      >
+                        -&gt;
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 font-mono text-[11px] text-[#757575]">
+                    {row.source === "wallet" ? "Wallet balance" : `Opened ${formatOpenedAt(row.openedAt)}`}
+                  </div>
+                </div>
+              </div>
               <span
-                className="font-mono text-[14px] text-[#5A5A5A] opacity-0 transition-opacity group-hover:opacity-100"
-                aria-hidden="true"
+                className={cx(
+                  "shrink-0 border px-2 py-1 font-mono text-[10px] uppercase",
+                  positionBadgeClass(status.tone),
+                )}
               >
-                ↗
+                {status.label}
               </span>
-            ) : null}
-          </>,
-        )}
-        {cell("amount", formatTokenAmount(row.amount), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
-        {cell("entry", formatPrice(row.entryPrice), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
-        {cell("value", formatUsd(row.entryValueUsd), "font-mono text-[16px] tabular-nums text-[#D0D0D0]")}
-        {cell("high", formatPrice(row.highestPrice), "font-mono text-[16px] tabular-nums text-[#00FF66]")}
-        {cell("stop", formatPrice(row.trailingStopPrice), "font-mono text-[16px] tabular-nums text-[#FFD21A]")}
-        {cell("target", formatPrice(row.takeProfitPrice), "font-mono text-[16px] tabular-nums text-[#8FD9FF]")}
-        {cell("opened", formatOpenedAt(row.openedAt), "text-right font-mono text-[14px] text-[#A8A8A8]")}
-      </div>
-      <PositionCorridor row={row} />
-    </>
-  );
+            </div>
 
-  const rowClass = "group block border-b border-[#1A1A1A] px-6 py-6 transition-colors";
+            <p className="mt-5 max-w-[32rem] break-words font-mono text-[12px] leading-5 text-[#8A8A8A]">
+              {status.detail}
+            </p>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-px bg-[#141416]">
+            <div className="min-w-0 bg-[#050505] px-3 py-3">
+              <div className="font-mono text-[10px] uppercase text-[#757575]">Amount</div>
+              <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-[#D0D0D0]">
+                {formatTokenAmount(row.amount)}
+              </div>
+            </div>
+            <div className="min-w-0 bg-[#050505] px-3 py-3">
+              <div className="font-mono text-[10px] uppercase text-[#757575]">Value</div>
+              <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-white">
+                {formatUsd(row.entryValueUsd)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="grid grid-cols-2 gap-px bg-[#141416] md:grid-cols-3">
+            <PositionMetricCell label="Entry" value={formatPrice(row.entryPrice)} column="entry" index={index} />
+            <PositionMetricCell
+              label="High"
+              value={formatPrice(row.highestPrice)}
+              column="high"
+              index={index}
+              tone={positivePrice(row.highestPrice) ? "green" : "neutral"}
+            />
+            <PositionMetricCell
+              label="Stop"
+              value={formatPrice(row.trailingStopPrice)}
+              column="stop"
+              index={index}
+              tone={positivePrice(row.trailingStopPrice) ? "yellow" : "neutral"}
+            />
+            <PositionMetricCell
+              label="Target"
+              value={formatPrice(row.takeProfitPrice)}
+              column="target"
+              index={index}
+              tone={positivePrice(row.takeProfitPrice) ? "blue" : "neutral"}
+            />
+            <PositionMetricCell label="Opened" value={formatOpenedAt(row.openedAt)} column="opened" index={index} />
+            <PositionMetricCell
+              label="Source"
+              value={row.source === "wallet" ? "Wallet" : "positions.json"}
+              column="value"
+              index={index}
+              tone={row.source === "wallet" ? "yellow" : "green"}
+            />
+          </div>
+          <PositionRiskCorridor row={row} />
+        </div>
+      </div>
+    </ViewportReveal>
+  );
 
   if (explorerUrl) {
     return (
@@ -2776,16 +2963,110 @@ function DesktopPositionRow({
         href={explorerUrl}
         target="_blank"
         rel="noreferrer"
-        aria-label={`View ${row.symbol} entry on BscScan`}
-        title={`View ${row.symbol} entry on BscScan`}
-        className={cx(rowClass, "cursor-pointer hover:bg-[#070707]")}
+        aria-label={`View ${row.symbol} on BscScan`}
+        title={`View ${row.symbol} on BscScan`}
+        className="block"
       >
         {body}
       </a>
     );
   }
 
-  return <div className={rowClass}>{body}</div>;
+  return <div>{body}</div>;
+}
+
+function PositionsInsightRail({
+  rows,
+  nearestStop,
+  nearestTarget,
+  totalPositionValue,
+  scrollRoot,
+}: {
+  rows: PositionRow[];
+  nearestStop: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
+  nearestTarget: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
+  totalPositionValue: string;
+  scrollRoot: Element | null;
+}) {
+  const trackedRows = rows.filter((row) => row.source === "tracked");
+  const walletRows = rows.filter((row) => row.source === "wallet");
+  const managedRows = rows.filter(
+    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
+  );
+
+  const railRows = [
+    { label: "Total exposure", value: totalPositionValue, tone: "neutral" as const },
+    {
+      label: "Risk coverage",
+      value: `${managedRows.length}/${rows.length}`,
+      tone: managedRows.length === rows.length ? ("green" as const) : ("yellow" as const),
+    },
+    {
+      label: "Synced positions",
+      value: String(trackedRows.length),
+      tone: trackedRows.length > 0 ? ("green" as const) : ("neutral" as const),
+    },
+    { label: "Wallet-only", value: String(walletRows.length), tone: walletRows.length > 0 ? ("yellow" as const) : ("neutral" as const) },
+  ];
+
+  return (
+    <aside className="min-w-0 border border-[#1A1A1A] bg-black/70">
+      <ViewportReveal variant="fade" delay={160} root={scrollRoot}>
+        <div className="border-b border-[#1A1A1A] px-5 py-4">
+          <div className="font-mono text-[10px] uppercase text-[#757575]">Position readout</div>
+          <div className="mt-1 font-mono text-[18px] font-semibold text-white">Exposure & state</div>
+        </div>
+      </ViewportReveal>
+
+      <div className="divide-y divide-[#141416]">
+        {railRows.map((item, index) => (
+          <ViewportReveal
+            key={item.label}
+            variant={index % 2 === 0 ? "left" : "right"}
+            delay={220 + index * 45}
+            duration="fast"
+            root={scrollRoot}
+            className="flex items-baseline justify-between gap-4 px-5 py-3"
+          >
+            <span className="font-mono text-[11px] uppercase text-[#757575]">{item.label}</span>
+            <span className={cx("truncate font-mono text-[14px] tabular-nums", positionToneClass(item.tone))}>
+              {item.value}
+            </span>
+          </ViewportReveal>
+        ))}
+      </div>
+
+      <ViewportReveal variant="fade" delay={440} root={scrollRoot} className="border-t border-[#1A1A1A] px-5 py-4">
+        <div className="font-mono text-[10px] uppercase text-[#757575]">Closest levels</div>
+        <div className="mt-4 space-y-4">
+          <div>
+            <div className="flex items-baseline justify-between gap-3 font-mono">
+              <span className="text-[11px] uppercase text-[#757575]">Stop</span>
+              <span className="text-[13px] tabular-nums text-[#FFD21A]">
+                {nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : "N/A"}
+              </span>
+            </div>
+            <div className="mt-2 h-px bg-[#242424]">
+              <div className="h-px w-1/3 bg-[#FFD21A]" aria-hidden="true" />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-baseline justify-between gap-3 font-mono">
+              <span className="text-[11px] uppercase text-[#757575]">Target</span>
+              <span className="text-[13px] tabular-nums text-[#8FD9FF]">
+                {nearestTarget
+                  ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
+                  : "N/A"}
+              </span>
+            </div>
+            <div className="mt-2 h-px bg-[#242424]">
+              <div className="h-px w-2/3 bg-[#8FD9FF]" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      </ViewportReveal>
+    </aside>
+  );
 }
 
 function DesktopPositionsBoard({
@@ -2809,22 +3090,34 @@ function DesktopPositionsBoard({
     .filter((item) => item.targetUpsidePct !== null)
     .sort((a, b) => (a.targetUpsidePct as number) - (b.targetUpsidePct as number))[0];
 
-  const summaryBlocks: Array<{ label: string; value: string; valueClass?: string }> = [
-    { label: "Positions", value: String(rows.length) },
-    { label: "Total position value", value: totalPositionValue },
+  const walletOnlyCount = rows.filter((row) => row.source === "wallet").length;
+  const managedCount = rows.filter(
+    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
+  ).length;
+
+  const summaryBlocks: Array<{
+    label: string;
+    value: string;
+    detail?: string;
+    tone?: PositionTone;
+  }> = [
+    { label: "Open positions", value: String(rows.length), detail: `${managedCount} with risk plan` },
+    { label: "Total exposure", value: totalPositionValue, detail: "Current token value" },
     {
-      label: "Nearest stop",
-      value: nearestStop
-        ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%`
-        : "N/A",
-      valueClass: nearestStop ? "text-[#FFD21A]" : undefined,
+      label: nearestStop ? "Nearest stop" : "Risk coverage",
+      value: nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : `${managedCount}/${rows.length}`,
+      detail: nearestStop ? formatPrice(nearestStop.row.trailingStopPrice) : "Stops and targets synced",
+      tone: nearestStop ? "yellow" : managedCount === rows.length ? "green" : "yellow",
     },
     {
-      label: "Nearest target",
+      label: nearestTarget ? "Nearest target" : "Sync status",
       value: nearestTarget
         ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
-        : "N/A",
-      valueClass: nearestTarget ? "text-[#8FD9FF]" : undefined,
+        : walletOnlyCount > 0
+          ? `${walletOnlyCount} wallet-only`
+          : "N/A",
+      detail: nearestTarget ? formatPrice(nearestTarget.row.takeProfitPrice) : "Waiting for positions.json levels",
+      tone: nearestTarget ? "blue" : walletOnlyCount > 0 ? "yellow" : "neutral",
     },
   ];
 
@@ -2847,73 +3140,38 @@ function DesktopPositionsBoard({
     <div className="flex min-h-0 flex-col">
       <div className="grid shrink-0 grid-cols-2 gap-px border-b border-[#1A1A1A] bg-[#1A1A1A] xl:grid-cols-4">
         {summaryBlocks.map((block, index) => (
-          <ViewportReveal key={block.label} variant="fade" delay={80 + index * 60} root={scrollRoot}>
-            <div className="bg-[#050505] px-6 py-5">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#757575]">{block.label}</div>
-              <div
-                className={cx(
-                  "mt-2 truncate font-mono text-[26px] font-semibold tabular-nums text-white xl:text-[30px]",
-                  block.valueClass,
-                )}
-              >
-                {block.value}
-              </div>
-            </div>
-          </ViewportReveal>
-        ))}
-      </div>
-      <div
-        className={cx(
-          DESKTOP_POSITION_GRID,
-          "sticky top-0 z-10 border-b border-[#1A1A1A] bg-[#050505] px-6 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
-        )}
-      >
-        <PositionHeaderCellLabel column="token" label="Token" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="amount" label="Amount" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="entry" label="Entry" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="value" label="Value" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="high" label="High" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="stop" label="Stop" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="target" label="Target" scrollRoot={scrollRoot} />
-        <PositionHeaderCellLabel column="opened" label="Opened" align="right" scrollRoot={scrollRoot} />
-      </div>
-      <div>
-        {rows.map((row, index) => (
-          <DesktopPositionRow
-            key={row.id}
-            row={row}
+          <PositionSummaryBlock
+            key={block.label}
+            label={block.label}
+            value={block.value}
+            detail={block.detail}
+            tone={block.tone}
             index={index}
-            explorerUrl={positionExplorerUrl(row, executions, walletAddress)}
             scrollRoot={scrollRoot}
           />
         ))}
       </div>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 px-6 py-5 xl:grid-cols-[minmax(0,1fr)_minmax(270px,320px)]">
+        <div className="min-w-0 space-y-4">
+          {rows.map((row, index) => (
+            <DesktopPositionCard
+              key={row.id}
+              row={row}
+              index={index}
+              explorerUrl={positionExplorerUrl(row, executions, walletAddress)}
+              scrollRoot={scrollRoot}
+            />
+          ))}
+        </div>
+        <PositionsInsightRail
+          rows={rows}
+          nearestStop={nearestStop}
+          nearestTarget={nearestTarget}
+          totalPositionValue={totalPositionValue}
+          scrollRoot={scrollRoot}
+        />
+      </div>
     </div>
-  );
-}
-
-function PositionHeaderCellLabel({
-  column,
-  label,
-  align = "left",
-  scrollRoot,
-}: {
-  column: PositionColumn;
-  label: string;
-  align?: "left" | "right";
-  scrollRoot: Element | null;
-}) {
-  return (
-    <ViewportReveal
-      as="span"
-      variant={positionColumnVariant(column)}
-      delay={positionCellDelay(0, column)}
-      duration="fast"
-      root={scrollRoot}
-      className={cx("block", align === "right" && "text-right")}
-    >
-      {label}
-    </ViewportReveal>
   );
 }
 
