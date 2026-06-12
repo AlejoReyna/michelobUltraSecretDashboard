@@ -1,0 +1,242 @@
+name: AWS Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: AWS deployment target
+        required: true
+        default: both
+        type: choice
+        options:
+          - amplify-web
+          - exporter
+          - both
+      environment:
+        description: Deployment environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-deploy-dashboard-${{ inputs.environment }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-web:
+    if: inputs.target == 'amplify-web' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: ${{ inputs.environment }}
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+      AMPLIFY_BRANCH_NAME: ${{ vars.AMPLIFY_BRANCH_NAME || 'main' }}
+
+    steps:
+      - name: Validate Amplify configuration
+        run: |
+          set -euo pipefail
+          test -n "$AMPLIFY_APP_ID" || {
+            echo "Missing GitHub variable AMPLIFY_APP_ID"
+            exit 1
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build:web
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Trigger Amplify deployment
+        id: amplify
+        run: |
+          set -euo pipefail
+
+          job_id="$(
+            aws amplify start-job \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH_NAME" \
+              --job-type RELEASE \
+              --query 'jobSummary.jobId' \
+              --output text
+          )"
+
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+          echo "Started Amplify job $job_id"
+
+      - name: Wait for Amplify deployment
+        run: |
+          set -euo pipefail
+
+          job_id="${{ steps.amplify.outputs.job_id }}"
+
+          for i in $(seq 1 90); do
+            status="$(
+              aws amplify get-job \
+                --app-id "$AMPLIFY_APP_ID" \
+                --branch-name "$AMPLIFY_BRANCH_NAME" \
+                --job-id "$job_id" \
+                --query 'job.summary.status' \
+                --output text
+            )"
+
+            echo "Amplify status: $status"
+
+            case "$status" in
+              SUCCEED)
+                exit 0
+                ;;
+              FAILED|CANCELLED)
+                exit 1
+                ;;
+            esac
+
+            sleep 20
+          done
+
+          echo "Timed out waiting for Amplify job $job_id"
+          exit 1
+
+  deploy-exporter:
+    if: inputs.target == 'exporter' || inputs.target == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: ${{ inputs.environment }}
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      SSM_INSTANCE_ID: ${{ vars.EXPORTER_SSM_INSTANCE_ID }}
+      DEPLOY_USER: ${{ vars.EXPORTER_DEPLOY_USER || 'ec2-user' }}
+      DEPLOY_PATH: ${{ vars.EXPORTER_DEPLOY_PATH || '/home/ec2-user/cascade-ai-dashboard' }}
+      SERVICE_NAME: ${{ vars.EXPORTER_SERVICE_NAME || 'cascade-ai-exporter' }}
+      HEALTH_URL: ${{ vars.EXPORTER_HEALTH_URL || 'http://localhost:8787/health' }}
+
+    steps:
+      - name: Validate exporter configuration
+        run: |
+          set -euo pipefail
+          test -n "$SSM_INSTANCE_ID" || {
+            echo "Missing GitHub variable EXPORTER_SSM_INSTANCE_ID"
+            exit 1
+          }
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Send SSM exporter deploy command
+        id: ssm
+        run: |
+          set -euo pipefail
+
+          {
+            echo "set -euo pipefail"
+            printf 'DEPLOY_USER=%q\n' "$DEPLOY_USER"
+            printf 'DEPLOY_PATH=%q\n' "$DEPLOY_PATH"
+            printf 'SERVICE_NAME=%q\n' "$SERVICE_NAME"
+            printf 'HEALTH_URL=%q\n' "$HEALTH_URL"
+            cat <<'REMOTE_SCRIPT'
+
+          cat >/tmp/cascade-exporter-deploy-user.sh <<'USER_SCRIPT'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+          git fetch origin
+          git checkout main
+          git pull --ff-only
+          npm ci
+          npm run build:exporter
+          USER_SCRIPT
+
+          chmod 755 /tmp/cascade-exporter-deploy-user.sh
+          sudo -iu "$DEPLOY_USER" env \
+            DEPLOY_PATH="$DEPLOY_PATH" \
+            bash /tmp/cascade-exporter-deploy-user.sh
+
+          systemctl restart "$SERVICE_NAME"
+
+          for i in $(seq 1 12); do
+            if curl -sf "$HEALTH_URL" >/dev/null; then
+              echo "Exporter health check passed"
+              exit 0
+            fi
+            echo "Waiting for exporter health endpoint (attempt $i/12)..."
+            sleep 5
+          done
+
+          echo "Exporter health check failed after restart"
+          systemctl status "$SERVICE_NAME" --no-pager || true
+          journalctl -u "$SERVICE_NAME" -n 100 --no-pager || true
+          exit 1
+          REMOTE_SCRIPT
+          } > remote-exporter-deploy.sh
+
+          jq -n --rawfile script remote-exporter-deploy.sh '{commands: [$script]}' > ssm-parameters.json
+
+          command_id="$(
+            aws ssm send-command \
+              --document-name "AWS-RunShellScript" \
+              --instance-ids "$SSM_INSTANCE_ID" \
+              --comment "Deploy cascade dashboard exporter ${GITHUB_SHA}" \
+              --parameters file://ssm-parameters.json \
+              --query "Command.CommandId" \
+              --output text
+          )"
+
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "Started SSM command $command_id"
+
+      - name: Wait for SSM command
+        run: |
+          set -euo pipefail
+
+          command_id="${{ steps.ssm.outputs.command_id }}"
+          aws ssm wait command-executed \
+            --command-id "$command_id" \
+            --instance-id "$SSM_INSTANCE_ID" || true
+
+          aws ssm get-command-invocation \
+            --command-id "$command_id" \
+            --instance-id "$SSM_INSTANCE_ID" \
+            --query '{Status:Status,ResponseCode:ResponseCode,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+            --output json > ssm-result.json
+
+          echo "---- remote stdout ----"
+          jq -r '.Stdout // ""' ssm-result.json
+          echo "---- remote stderr ----"
+          jq -r '.Stderr // ""' ssm-result.json >&2
+
+          status="$(jq -r '.Status' ssm-result.json)"
+          response_code="$(jq -r '.ResponseCode' ssm-result.json)"
+
+          if [ "$status" != "Success" ] || [ "$response_code" != "0" ]; then
+            echo "SSM deploy failed with status=$status response_code=$response_code"
+            exit 1
+          fi
