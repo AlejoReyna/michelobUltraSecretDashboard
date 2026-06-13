@@ -22,27 +22,110 @@ const chartFrame = {
   left: 20,
 };
 
+// Left gutter reserved for the dollar (Y) axis labels, per variant.
+const yAxisGutter = {
+  desktop: 64,
+  mobile: 44,
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function buildChartPaths(data: PortfolioChartPoint[]) {
-  const values = data.map((point) => point.value);
+/**
+ * Round a span to a human-friendly magnitude (1, 2, 5 × 10^n) so the dollar
+ * axis lands on tidy values instead of arbitrary data extremes. This is the
+ * standard "nice number" algorithm charting libraries use.
+ */
+function niceNum(range: number, round: boolean): number {
+  const safeRange = range > 0 ? range : 1;
+  const exponent = Math.floor(Math.log10(safeRange));
+  const fraction = safeRange / 10 ** exponent;
+  let niceFraction: number;
+  if (round) {
+    niceFraction = fraction < 1.5 ? 1 : fraction < 3 ? 2 : fraction < 7 ? 5 : 10;
+  } else {
+    niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  }
+  return niceFraction * 10 ** exponent;
+}
+
+/**
+ * Build a money-based Y domain from the data: pad the real min/max so the line
+ * never hugs the frame edges, then snap to nice rounded dollar bounds and a
+ * round step. This is what makes the line read like a normal portfolio chart
+ * (proportionate movement against a real $ scale) instead of noise stretched
+ * edge-to-edge. A single low/high outlier just sets sensible bounds rather than
+ * crushing every other point flat.
+ */
+function buildDollarScale(values: number[], desiredTicks = 5) {
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = max - min || 1;
-  const innerWidth = chartFrame.width - chartFrame.left - chartFrame.right;
+  // Pad by a fraction of the span (or of the value itself when the line is flat)
+  // so there is headroom and footroom around the data.
+  const basis = max - min || Math.abs(max) || 1;
+  const pad = basis * 0.12;
+  const paddedMin = min - pad;
+  const paddedMax = max + pad;
+
+  const span = niceNum(paddedMax - paddedMin, false);
+  const step = niceNum(span / Math.max(desiredTicks - 1, 1), true);
+  let lo = Math.floor(paddedMin / step) * step;
+  let hi = Math.ceil(paddedMax / step) * step;
+  // Never dip below zero for an all-positive balance — money charts read from a
+  // floor, not from a negative phantom value.
+  if (min >= 0 && lo < 0) {
+    lo = 0;
+  }
+  if (hi <= lo) {
+    hi = lo + step;
+  }
+
+  const ticks: number[] = [];
+  for (let value = lo; value <= hi + step / 2; value += step) {
+    ticks.push(Number(value.toFixed(6)));
+  }
+
+  return { lo, hi, step, ticks };
+}
+
+function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number) {
+  const values = data.map((point) => point.value);
+  const scale = buildDollarScale(values);
+  const range = scale.hi - scale.lo || 1;
+  const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
   const innerHeight = chartFrame.height - chartFrame.top - chartFrame.bottom;
   const bottomY = chartFrame.top + innerHeight;
 
   const points = data.map((point, index) => {
-    const x = chartFrame.left + (index / Math.max(data.length - 1, 1)) * innerWidth;
-    const y = chartFrame.top + (1 - (point.value - min) / range) * innerHeight;
+    const x = leftMargin + (index / Math.max(data.length - 1, 1)) * innerWidth;
+    const y = chartFrame.top + (1 - (point.value - scale.lo) / range) * innerHeight;
     return { ...point, x, y };
   });
 
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
-  const areaPath = `${linePath} L ${points.at(-1)?.x.toFixed(2) ?? chartFrame.left} ${bottomY} L ${points[0]?.x.toFixed(2) ?? chartFrame.left} ${bottomY} Z`;
+  const areaPath = `${linePath} L ${points.at(-1)?.x.toFixed(2) ?? leftMargin} ${bottomY} L ${points[0]?.x.toFixed(2) ?? leftMargin} ${bottomY} Z`;
 
-  return { areaPath, linePath, points, bottomY };
+  // Y position for a dollar value, used to place axis ticks/gridlines.
+  const yForValue = (value: number) => chartFrame.top + (1 - (value - scale.lo) / range) * innerHeight;
+
+  return { areaPath, linePath, points, bottomY, scale, yForValue, leftMargin };
+}
+
+/** Format a dollar value for the Y axis, compact for large balances. */
+function formatAxisMoney(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (abs >= 1_000) {
+    return `$${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`;
+  }
+  if (abs >= 100) {
+    return `$${value.toFixed(0)}`;
+  }
+  if (abs >= 10) {
+    return `$${value.toFixed(1)}`;
+  }
+  return `$${value.toFixed(2)}`;
 }
 
 type AxisTick = {
@@ -143,12 +226,12 @@ export function PortfolioChart({
 }) {
   const contextTimeZone = useChartTimeZone().timeZone;
   const timeZone = timeZoneProp ?? contextTimeZone;
-  const chart = useMemo(() => buildChartPaths(data), [data]);
   const isMobile = variant === "mobile";
+  const leftMargin = isMobile ? yAxisGutter.mobile : yAxisGutter.desktop;
+  const chart = useMemo(() => buildChartPaths(data, leftMargin), [data, leftMargin]);
   const gridColumns = isMobile ? 6 : 12;
-  const gridRows = isMobile ? 8 : 7;
 
-  const innerWidth = chartFrame.width - chartFrame.left - chartFrame.right;
+  const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
   const desktopTicks = useMemo(
     () => (isMobile ? [] : buildAxisTicks(data, timeZone, 6, range)),
     [data, timeZone, isMobile, range],
@@ -159,10 +242,13 @@ export function PortfolioChart({
   );
 
   const tickX = (fraction: number) => {
-    const raw = chartFrame.left + fraction * innerWidth;
+    const raw = leftMargin + fraction * innerWidth;
     // Keep edge labels off the frame edges so they never clip.
-    return Math.min(Math.max(raw, chartFrame.left + 2), chartFrame.width - chartFrame.right - 2);
+    return Math.min(Math.max(raw, leftMargin + 2), chartFrame.width - chartFrame.right - 2);
   };
+
+  // Dollar (Y) axis ticks, derived from the money scale.
+  const yTicks = chart.scale.ticks;
 
   const chartSvg = (
     <svg
@@ -188,17 +274,30 @@ export function PortfolioChart({
       </defs>
 
       {Array.from({ length: gridColumns + 1 }).map((_, index) => {
-        const x = chartFrame.left + (index / gridColumns) * (chartFrame.width - chartFrame.left - chartFrame.right);
+        const x = leftMargin + (index / gridColumns) * (chartFrame.width - leftMargin - chartFrame.right);
         return <line key={`x-${index}`} x1={x} x2={x} y1={chartFrame.top} y2={chart.bottomY} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
       })}
-      {Array.from({ length: gridRows + 1 }).map((_, index) => {
-        const y = chartFrame.top + (index / gridRows) * (chart.bottomY - chartFrame.top);
-        return <line key={`y-${index}`} x1={chartFrame.left} x2={chartFrame.width - chartFrame.right} y1={y} y2={y} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
+      {/* Horizontal gridlines aligned to the dollar ticks. */}
+      {yTicks.map((value, index) => {
+        const y = chart.yForValue(value);
+        return <line key={`y-${index}`} x1={leftMargin} x2={chartFrame.width - chartFrame.right} y1={y} y2={y} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
       })}
+
+      {/* Dollar (Y) axis labels. */}
+      <g className="font-mono text-[11px] fill-[#8A8A8A]">
+        {yTicks.map((value, index) => {
+          const y = chart.yForValue(value);
+          return (
+            <text key={`ylabel-${index}`} x={leftMargin - 8} y={y + 3.5} textAnchor="end">
+              {formatAxisMoney(value)}
+            </text>
+          );
+        })}
+      </g>
 
       <path d={chart.areaPath} fill={`url(#portfolio-fill-${variant})`} />
       <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
-      <line x1={chartFrame.left} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      <line x1={leftMargin} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
       {!isMobile && desktopTicks.length > 0 ? (
         <g className="font-mono text-[11px] fill-[#8A8A8A]">
