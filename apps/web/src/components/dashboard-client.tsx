@@ -193,6 +193,7 @@ type PositionRow = {
   amount: number | null;
   entryPrice: number | null;
   entryValueUsd: number | null;
+  currentPrice: number | null;
   highestPrice: number | null;
   trailingStopPrice: number | null;
   takeProfitPrice: number | null;
@@ -1271,7 +1272,32 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   return fileRows;
 }
 
+function livePriceFor(amount: number | null, valueUsd: number | null): number | null {
+  if (
+    typeof amount === "number" &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    typeof valueUsd === "number" &&
+    Number.isFinite(valueUsd) &&
+    valueUsd > 0
+  ) {
+    return valueUsd / amount;
+  }
+  return null;
+}
+
 function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRow[] {
+  const holdings = boughtTokensFromTelemetry(data);
+
+  // Derive a live current price per token from wallet balances (USD value / token amount).
+  const livePriceByKey = new Map<string, number>();
+  for (const holding of holdings) {
+    const price = livePriceFor(holding.amount, holding.valueUsd);
+    if (price !== null) {
+      livePriceByKey.set(competitionTokenKey(holding.symbol), price);
+    }
+  }
+
   const trackedRows = (data?.positions.positions ?? [])
     .filter((position) => {
       const amount = position.amount_tokens;
@@ -1284,6 +1310,8 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
       amount: position.amount_tokens ?? null,
       entryPrice: position.entry_price ?? null,
       entryValueUsd: position.entry_value_usdc ?? null,
+      currentPrice:
+        position.current_price ?? livePriceByKey.get(competitionTokenKey(position.symbol)) ?? null,
       highestPrice: position.highest_price ?? null,
       trailingStopPrice: position.trailing_stop_price ?? null,
       takeProfitPrice: position.take_profit_price ?? null,
@@ -1291,7 +1319,7 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
     }));
 
   const trackedSymbols = new Set(trackedRows.map((row) => competitionTokenKey(row.symbol)));
-  const walletRows = boughtTokensFromTelemetry(data)
+  const walletRows = holdings
     .filter((holding) => holding.status === "HELD" && !trackedSymbols.has(competitionTokenKey(holding.symbol)))
     .map((holding) => ({
       id: `wallet-position-${holding.chain}-${holding.symbol}`,
@@ -1300,6 +1328,7 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
       amount: holding.amount,
       entryPrice: null,
       entryValueUsd: holding.valueUsd ?? holding.entryValueUsd,
+      currentPrice: livePriceFor(holding.amount, holding.valueUsd ?? holding.entryValueUsd),
       highestPrice: null,
       trailingStopPrice: null,
       takeProfitPrice: null,
@@ -2545,6 +2574,11 @@ function PositionTableRow({
       {renderCell("amount", formatTokenAmount(row.amount), cellClass("amount"))}
       {renderCell("entry", formatPrice(row.entryPrice), cellClass("entry"))}
       {renderCell("value", formatUsd(row.entryValueUsd), cellClass("value"))}
+      {renderCell(
+        "current",
+        formatPrice(row.currentPrice),
+        cellClass("current", positivePrice(row.currentPrice) ? "text-[#8FD9FF]" : "text-[#666666]"),
+      )}
       {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#00FF66]"))}
       {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#FFD21A]"))}
       {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#8FD9FF]"))}
@@ -2574,6 +2608,7 @@ function ActivePositionsTable({
     { column: "amount", label: "Amount", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
     { column: "entry", label: "Entry", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
     { column: "value", label: "Value", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
+    { column: "current", label: "Current", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
     { column: "high", label: "High", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
     { column: "stop", label: "Stop", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
     { column: "target", label: "Target", className: cx(compact ? "px-2 py-2" : "px-3 py-4") },
@@ -2586,16 +2621,17 @@ function ActivePositionsTable({
   ];
 
   return (
-    <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
+    <table className="w-full min-w-[820px] table-fixed border-collapse text-left">
       <colgroup>
         <col className="w-[14%]" />
-        <col className="w-[12%]" />
-        <col className="w-[12%]" />
-        <col className="w-[12%]" />
-        <col className="w-[12%]" />
-        <col className="w-[12%]" />
-        <col className="w-[12%]" />
-        <col className="w-[14%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[11%]" />
+        <col className="w-[9%]" />
       </colgroup>
       <thead
         className={cx(
@@ -2627,7 +2663,7 @@ function ActivePositionsTable({
         ))}
         {rows.length === 0 ? (
           <tr className="border-b border-[#1A1A1A]">
-            <td className={cx("py-6 font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3" : "px-5")} colSpan={8}>
+            <td className={cx("py-6 font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3" : "px-5")} colSpan={9}>
               <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                 No open positions in positions.json
               </ViewportReveal>
@@ -2765,6 +2801,7 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
   const high = row.highestPrice;
   const stop = row.trailingStopPrice;
   const target = row.takeProfitPrice;
+  const current = row.currentPrice;
   const { stopDistancePct, targetUpsidePct } = positionRiskStats(row);
 
   const valid = positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
@@ -2815,10 +2852,18 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
                 title={`Entry ${formatPrice(entry)}`}
                 aria-hidden="true"
               />
+              {positivePrice(current) ? (
+                <span
+                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#8FD9FF] shadow-[0_0_6px_#8FD9FF]"
+                  style={{ left: `${place(current)}%` }}
+                  title={`Current ${formatPrice(current)}`}
+                  aria-hidden="true"
+                />
+              ) : null}
             </div>
             <div className="font-mono text-[10px] uppercase text-[#8FD9FF]">Target</div>
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-3 font-mono text-[11px] tabular-nums">
+          <div className="mt-3 grid grid-cols-5 gap-3 font-mono text-[11px] tabular-nums">
             <div className="min-w-0">
               <div className="text-[#666666]">Stop</div>
               <div className="truncate text-[#FFD21A]">{formatPrice(stop)}</div>
@@ -2826,6 +2871,12 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
             <div className="min-w-0">
               <div className="text-[#666666]">Entry</div>
               <div className="truncate text-white">{formatPrice(entry)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[#666666]">Current</div>
+              <div className={cx("truncate", positivePrice(current) ? "text-[#8FD9FF]" : "text-[#666666]")}>
+                {formatPrice(current)}
+              </div>
             </div>
             <div className="min-w-0">
               <div className="text-[#666666]">High</div>
@@ -2907,7 +2958,7 @@ function DesktopPositionCard({
             </p>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-px bg-[#141416]">
+          <div className="mt-5 grid grid-cols-3 gap-px bg-[#141416]">
             <div className="min-w-0 bg-[#050505] px-3 py-3">
               <div className="font-mono text-[10px] uppercase text-[#757575]">Amount</div>
               <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-[#D0D0D0]">
@@ -2918,6 +2969,18 @@ function DesktopPositionCard({
               <div className="font-mono text-[10px] uppercase text-[#757575]">Value</div>
               <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-white">
                 {formatUsd(row.entryValueUsd)}
+              </div>
+            </div>
+            <div className="min-w-0 bg-[#050505] px-3 py-3">
+              <div className="font-mono text-[10px] uppercase text-[#757575]">Current</div>
+              <div
+                className={cx(
+                  "mt-1 truncate font-mono text-[15px] tabular-nums",
+                  positivePrice(row.currentPrice) ? "text-[#8FD9FF]" : "text-[#666666]",
+                )}
+                title={positivePrice(row.currentPrice) ? `Live price ${formatPrice(row.currentPrice)}` : undefined}
+              >
+                {formatPrice(row.currentPrice)}
               </div>
             </div>
           </div>

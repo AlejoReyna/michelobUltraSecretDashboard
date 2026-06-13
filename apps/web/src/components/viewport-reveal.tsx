@@ -186,6 +186,7 @@ export type PositionColumn =
   | "amount"
   | "entry"
   | "value"
+  | "current"
   | "high"
   | "stop"
   | "target"
@@ -200,6 +201,8 @@ export function positionColumnVariant(column: PositionColumn): RevealVariant {
     case "entry":
       return "left";
     case "value":
+      return "up";
+    case "current":
       return "up";
     case "high":
       return "up";
@@ -220,10 +223,11 @@ export function positionCellDelay(rowIndex: number, column: PositionColumn): num
     amount: 35,
     entry: 70,
     value: 105,
-    high: 140,
-    stop: 175,
-    target: 210,
-    opened: 245,
+    current: 140,
+    high: 175,
+    stop: 210,
+    target: 245,
+    opened: 280,
   }[column];
   return rowIndex * 60 + columnOffset;
 }

@@ -66,9 +66,11 @@ export const positionSchema = z
     amount_tokens: nullableNumber,
     entry_price: nullableNumber,
     entry_value_usdc: nullableNumber,
+    current_price: nullableNumber,
     highest_price: nullableNumber,
     trailing_stop_price: nullableNumber,
     take_profit_price: nullableNumber,
+    current_price_at: z.string().nullable().optional(),
     opened_at: z.string().nullable().optional(),
   })
   .passthrough();
