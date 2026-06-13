@@ -56,9 +56,14 @@ function niceNum(range: number, round: boolean): number {
  * edge-to-edge. A single low/high outlier just sets sensible bounds rather than
  * crushing every other point flat.
  */
-function buildDollarScale(values: number[], desiredTicks = 5) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+function buildDollarScale(values: number[], baseline: number, desiredTicks = 5) {
+  // Frame the scale from the starting capital ("initial balance") the same way a
+  // market-cap chart frames from the initial mcap: the baseline is always part
+  // of the domain so the chart reads as "started at $X, now at $Y". When the
+  // balance only grows, the baseline sits at the floor; if it drops below the
+  // baseline, the domain extends down so nothing clips.
+  const min = Math.min(...values, baseline);
+  const max = Math.max(...values, baseline);
   // Pad by a fraction of the span (or of the value itself when the line is flat)
   // so there is headroom and footroom around the data.
   const basis = max - min || Math.abs(max) || 1;
@@ -87,9 +92,15 @@ function buildDollarScale(values: number[], desiredTicks = 5) {
   return { lo, hi, step, ticks };
 }
 
-function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number) {
+/** Default starting balance used when no initial balance can be detected. */
+const DEFAULT_INITIAL_BALANCE = 10;
+
+function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number, initialBalance?: number) {
   const values = data.map((point) => point.value);
-  const scale = buildDollarScale(values);
+  // Detected initial balance = first finite point of the series; fall back to $10.
+  const detectedInitial = data.find((point) => Number.isFinite(point.value))?.value;
+  const baseline = initialBalance ?? detectedInitial ?? DEFAULT_INITIAL_BALANCE;
+  const scale = buildDollarScale(values, baseline);
   const range = scale.hi - scale.lo || 1;
   const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
   const innerHeight = chartFrame.height - chartFrame.top - chartFrame.bottom;
@@ -107,7 +118,7 @@ function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number) {
   // Y position for a dollar value, used to place axis ticks/gridlines.
   const yForValue = (value: number) => chartFrame.top + (1 - (value - scale.lo) / range) * innerHeight;
 
-  return { areaPath, linePath, points, bottomY, scale, yForValue, leftMargin };
+  return { areaPath, linePath, points, bottomY, scale, yForValue, leftMargin, baseline };
 }
 
 /** Format a dollar value for the Y axis, compact for large balances. */
@@ -218,17 +229,20 @@ export function PortfolioChart({
   variant = "desktop",
   timeZone: timeZoneProp,
   range,
+  initialBalance,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
   timeZone?: string;
   range?: ChartRange;
+  /** Starting capital to frame the chart from. Defaults to the first data point, then $10. */
+  initialBalance?: number;
 }) {
   const contextTimeZone = useChartTimeZone().timeZone;
   const timeZone = timeZoneProp ?? contextTimeZone;
   const isMobile = variant === "mobile";
   const leftMargin = isMobile ? yAxisGutter.mobile : yAxisGutter.desktop;
-  const chart = useMemo(() => buildChartPaths(data, leftMargin), [data, leftMargin]);
+  const chart = useMemo(() => buildChartPaths(data, leftMargin, initialBalance), [data, leftMargin, initialBalance]);
   const gridColumns = isMobile ? 6 : 12;
 
   const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
@@ -294,6 +308,18 @@ export function PortfolioChart({
           );
         })}
       </g>
+
+      {/* Initial-balance reference: the chart is framed from the starting capital. */}
+      <line
+        x1={leftMargin}
+        x2={chartFrame.width - chartFrame.right}
+        y1={chart.yForValue(chart.baseline)}
+        y2={chart.yForValue(chart.baseline)}
+        stroke="#3A3A3A"
+        strokeWidth="1"
+        strokeDasharray="4 4"
+        vectorEffect="non-scaling-stroke"
+      />
 
       <path d={chart.areaPath} fill={`url(#portfolio-fill-${variant})`} />
       <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
