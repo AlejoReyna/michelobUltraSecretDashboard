@@ -26,6 +26,7 @@ export const CHART_TIME_ZONES: ChartTimeZone[] = [
   { id: "Asia/Dubai", label: "Dubai", cities: "Abu Dhabi · Baku · Tbilisi" },
   { id: "Asia/Kolkata", label: "Mumbai", cities: "New Delhi · Bengaluru · Colombo" },
   { id: "Asia/Singapore", label: "Singapore", cities: "Hong Kong · Shanghai · Manila" },
+  { id: "America/Lima", label: "Lima", cities: "Bogotá · Quito · Guayaquil" },
   { id: "Asia/Tokyo", label: "Tokyo", cities: "Seoul · Osaka · Pyongyang" },
   { id: "Australia/Sydney", label: "Sydney", cities: "Melbourne · Brisbane · Canberra" },
 ];

@@ -10,6 +10,9 @@ export type PortfolioChartPoint = {
   timestamp?: string | null;
 };
 
+/** Selected dashboard time range. Mirrors the literals in dashboard-client. */
+export type ChartRange = "1H" | "1D" | "1W" | "1M";
+
 const chartFrame = {
   width: 1000,
   height: 420,
@@ -57,7 +60,7 @@ type AxisTick = {
  * selected time zone, switching between HH:mm and "d MMM" based on the span —
  * the same hour/minute distribution idea charting tools use.
  */
-function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: number): AxisTick[] {
+function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: number, range?: ChartRange): AxisTick[] {
   const n = data.length;
   if (n < 2) {
     return [];
@@ -74,18 +77,29 @@ function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: nu
   const firstTime = indexed[0].time;
   const lastTime = indexed.at(-1)!.time;
   const spanMs = Math.abs(lastTime - firstTime);
-  const showDate = spanMs > 2 * DAY_MS;
+
+  // Format granularity follows the SELECTED range, not just the data span.
+  // Week/Month always show the date; if the underlying data only covers part of
+  // a day we append the time so the ticks stay distinct instead of repeating the
+  // same date. Hour/Day (and the unknown fallback) show HH:mm.
+  const wantsDate = range === "1W" || range === "1M";
+  let options: Intl.DateTimeFormatOptions;
+  if (wantsDate) {
+    options =
+      spanMs >= 2 * DAY_MS
+        ? { day: "2-digit", month: "short" }
+        : { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false };
+  } else if (range === undefined && spanMs > 2 * DAY_MS) {
+    options = { day: "2-digit", month: "short" };
+  } else {
+    options = { hour: "2-digit", minute: "2-digit", hour12: false };
+  }
 
   let formatter: Intl.DateTimeFormat;
   try {
-    formatter = new Intl.DateTimeFormat(
-      "en-GB",
-      showDate
-        ? { timeZone, day: "2-digit", month: "short" }
-        : { timeZone, hour: "2-digit", minute: "2-digit", hour12: false },
-    );
+    formatter = new Intl.DateTimeFormat("en-GB", { timeZone, ...options });
   } catch {
-    formatter = new Intl.DateTimeFormat("en-GB", showDate ? { day: "2-digit", month: "short" } : { hour: "2-digit", minute: "2-digit", hour12: false });
+    formatter = new Intl.DateTimeFormat("en-GB", options);
   }
 
   const timeAtIndex = (targetIndex: number): number => {
@@ -120,10 +134,12 @@ export function PortfolioChart({
   data,
   variant = "desktop",
   timeZone: timeZoneProp,
+  range,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
   timeZone?: string;
+  range?: ChartRange;
 }) {
   const contextTimeZone = useChartTimeZone().timeZone;
   const timeZone = timeZoneProp ?? contextTimeZone;
@@ -134,12 +150,12 @@ export function PortfolioChart({
 
   const innerWidth = chartFrame.width - chartFrame.left - chartFrame.right;
   const desktopTicks = useMemo(
-    () => (isMobile ? [] : buildAxisTicks(data, timeZone, 6)),
-    [data, timeZone, isMobile],
+    () => (isMobile ? [] : buildAxisTicks(data, timeZone, 6, range)),
+    [data, timeZone, isMobile, range],
   );
   const mobileTicks = useMemo(
-    () => (isMobile ? buildAxisTicks(data, timeZone, 3) : []),
-    [data, timeZone, isMobile],
+    () => (isMobile ? buildAxisTicks(data, timeZone, 3, range) : []),
+    [data, timeZone, isMobile, range],
   );
 
   const tickX = (fraction: number) => {
