@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { useChartTimeZone } from "@/components/chart-timezone-context";
 
 export type PortfolioChartPoint = {
   label: string;
   value: number;
+  /** ISO timestamp of the underlying decision/snapshot, when known. */
+  timestamp?: string | null;
 };
 
 const chartFrame = {
@@ -15,6 +18,8 @@ const chartFrame = {
   bottom: 38,
   left: 20,
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function buildChartPaths(data: PortfolioChartPoint[]) {
   const values = data.map((point) => point.value);
@@ -37,17 +42,111 @@ function buildChartPaths(data: PortfolioChartPoint[]) {
   return { areaPath, linePath, points, bottomY };
 }
 
+type AxisTick = {
+  /** Horizontal fraction across the plotted line (0 = first point, 1 = last). */
+  fraction: number;
+  text: string;
+  anchor: "start" | "middle" | "end";
+};
+
+/**
+ * Build time-axis ticks from the real timestamps carried by the data points.
+ * The portfolio line is plotted by index, so a tick at fraction `f` maps to the
+ * fractional index `f * (n - 1)`; we linearly interpolate the timestamp at that
+ * index from whatever timestamps are present. Labels are formatted in the
+ * selected time zone, switching between HH:mm and "d MMM" based on the span —
+ * the same hour/minute distribution idea charting tools use.
+ */
+function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: number): AxisTick[] {
+  const n = data.length;
+  if (n < 2) {
+    return [];
+  }
+
+  const indexed = data
+    .map((point, index) => ({ index, time: point.timestamp ? Date.parse(point.timestamp) : Number.NaN }))
+    .filter((entry) => Number.isFinite(entry.time));
+
+  if (indexed.length < 2) {
+    return [];
+  }
+
+  const firstTime = indexed[0].time;
+  const lastTime = indexed.at(-1)!.time;
+  const spanMs = Math.abs(lastTime - firstTime);
+  const showDate = spanMs > 2 * DAY_MS;
+
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat(
+      "en-GB",
+      showDate
+        ? { timeZone, day: "2-digit", month: "short" }
+        : { timeZone, hour: "2-digit", minute: "2-digit", hour12: false },
+    );
+  } catch {
+    formatter = new Intl.DateTimeFormat("en-GB", showDate ? { day: "2-digit", month: "short" } : { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
+  const timeAtIndex = (targetIndex: number): number => {
+    if (targetIndex <= indexed[0].index) {
+      return indexed[0].time;
+    }
+    if (targetIndex >= indexed.at(-1)!.index) {
+      return indexed.at(-1)!.time;
+    }
+    for (let k = 1; k < indexed.length; k += 1) {
+      if (targetIndex <= indexed[k].index) {
+        const a = indexed[k - 1];
+        const b = indexed[k];
+        const frac = b.index === a.index ? 0 : (targetIndex - a.index) / (b.index - a.index);
+        return a.time + (b.time - a.time) * frac;
+      }
+    }
+    return indexed.at(-1)!.time;
+  };
+
+  const ticks: AxisTick[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const fraction = count === 1 ? 0.5 : i / (count - 1);
+    const time = timeAtIndex(fraction * (n - 1));
+    const anchor: AxisTick["anchor"] = i === 0 ? "start" : i === count - 1 ? "end" : "middle";
+    ticks.push({ fraction, text: formatter.format(new Date(time)), anchor });
+  }
+  return ticks;
+}
+
 export function PortfolioChart({
   data,
   variant = "desktop",
+  timeZone: timeZoneProp,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
+  timeZone?: string;
 }) {
+  const contextTimeZone = useChartTimeZone().timeZone;
+  const timeZone = timeZoneProp ?? contextTimeZone;
   const chart = useMemo(() => buildChartPaths(data), [data]);
   const isMobile = variant === "mobile";
   const gridColumns = isMobile ? 6 : 12;
   const gridRows = isMobile ? 8 : 7;
+
+  const innerWidth = chartFrame.width - chartFrame.left - chartFrame.right;
+  const desktopTicks = useMemo(
+    () => (isMobile ? [] : buildAxisTicks(data, timeZone, 6)),
+    [data, timeZone, isMobile],
+  );
+  const mobileTicks = useMemo(
+    () => (isMobile ? buildAxisTicks(data, timeZone, 3) : []),
+    [data, timeZone, isMobile],
+  );
+
+  const tickX = (fraction: number) => {
+    const raw = chartFrame.left + fraction * innerWidth;
+    // Keep edge labels off the frame edges so they never clip.
+    return Math.min(Math.max(raw, chartFrame.left + 2), chartFrame.width - chartFrame.right - 2);
+  };
 
   const chartSvg = (
     <svg
@@ -85,13 +184,13 @@ export function PortfolioChart({
       <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
       <line x1={chartFrame.left} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
-      {!isMobile ? (
+      {!isMobile && desktopTicks.length > 0 ? (
         <g className="font-mono text-[11px] fill-[#8A8A8A]">
-          <text x={chartFrame.left + 8} y={chartFrame.height - 12}>00:00</text>
-          <text x={chartFrame.width * 0.32} y={chartFrame.height - 12}>06:00</text>
-          <text x={chartFrame.width * 0.58} y={chartFrame.height - 12}>12:00</text>
-          <text x={chartFrame.width * 0.82} y={chartFrame.height - 12}>18:00</text>
-          <text x={chartFrame.width - chartFrame.right - 54} y={chartFrame.height - 12}>24:00</text>
+          {desktopTicks.map((tick, index) => (
+            <text key={`tick-${index}`} x={tickX(tick.fraction)} y={chartFrame.height - 12} textAnchor={tick.anchor}>
+              {tick.text}
+            </text>
+          ))}
         </g>
       ) : null}
     </svg>
@@ -101,14 +200,16 @@ export function PortfolioChart({
     return (
       <div className="flex h-full flex-col">
         {chartSvg}
-        <div
-          aria-hidden
-          className="flex shrink-0 items-center justify-between px-1 pt-2 font-mono text-[12px] font-medium tabular-nums tracking-wide text-[#D4D4D4]"
-        >
-          <span>00:00</span>
-          <span>12:00</span>
-          <span>24:00</span>
-        </div>
+        {mobileTicks.length > 0 ? (
+          <div
+            aria-hidden
+            className="flex shrink-0 items-center justify-between px-1 pt-2 font-mono text-[12px] font-medium tabular-nums tracking-wide text-[#D4D4D4]"
+          >
+            {mobileTicks.map((tick, index) => (
+              <span key={`mtick-${index}`}>{tick.text}</span>
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }

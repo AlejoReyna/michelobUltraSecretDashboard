@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Filter,
   Github,
+  Globe,
   Home,
   Layers,
   Terminal,
@@ -46,6 +47,8 @@ import {
   walletRowLeadVariant,
 } from "@/components/viewport-reveal";
 import { PortfolioChart, type PortfolioChartPoint } from "@/components/portfolio-chart";
+import { ChartTimeZoneProvider, useChartTimeZone } from "@/components/chart-timezone-context";
+import { CHART_TIME_ZONES, gmtOffsetLabel, localTimeLabel } from "@/lib/timezones";
 import { TokenIcon } from "@/components/token-icon";
 import {
   agentModeLabel,
@@ -661,11 +664,13 @@ function windowPnl(data: StatusPayload | null, range: TimeRange) {
 
 function chartPoints(data: StatusPayload | null, range: TimeRange): PortfolioChartPoint[] {
   const decisions = decisionsForPortfolioWindow(data, range);
-  const points = decisions
+  const nowIso = new Date().toISOString();
+  const points: PortfolioChartPoint[] = decisions
     .filter((decision) => typeof decision.portfolio_value_usdc === "number")
     .map((decision, index) => ({
       label: decision.cycle_number ? `#${decision.cycle_number}` : `${index + 1}`,
       value: decision.portfolio_value_usdc ?? 0,
+      timestamp: decision.timestamp ?? null,
     }));
 
   const liveTotal = hasLiveWalletTotal(data) ? data.wallet.portfolioTotalUsd : null;
@@ -673,14 +678,14 @@ function chartPoints(data: StatusPayload | null, range: TimeRange): PortfolioCha
   if (liveTotal !== null) {
     if (points.length === 0) {
       return [
-        { label: "1", value: liveTotal },
-        { label: "2", value: liveTotal },
+        { label: "1", value: liveTotal, timestamp: nowIso },
+        { label: "2", value: liveTotal, timestamp: nowIso },
       ];
     }
 
     const lastPoint = points.at(-1);
     if (lastPoint && Math.abs(lastPoint.value - liveTotal) > 0.005) {
-      points.push({ label: "Live", value: liveTotal });
+      points.push({ label: "Live", value: liveTotal, timestamp: nowIso });
     }
 
     return points;
@@ -692,8 +697,8 @@ function chartPoints(data: StatusPayload | null, range: TimeRange): PortfolioCha
 
   const fallback = latestPortfolioValue(data) ?? 0;
   return [
-    { label: "1", value: fallback },
-    { label: "2", value: fallback },
+    { label: "1", value: fallback, timestamp: nowIso },
+    { label: "2", value: fallback, timestamp: nowIso },
   ];
 }
 
@@ -4535,6 +4540,7 @@ function DesktopOverviewSection({
             duration="slow"
             className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E1E]"
           >
+            <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
               <PortfolioChart data={view.chartData} variant="desktop" />
@@ -4819,6 +4825,100 @@ function ChartFilterMenu({
   );
 }
 
+function TimezoneMenu() {
+  const { timeZone, setTimeZone } = useChartTimeZone();
+  const [open, setOpen] = useState(false);
+  // Snapshotted whenever the menu opens so offsets/clocks are current.
+  const [now, setNow] = useState(() => new Date());
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const toggle = () =>
+    setOpen((previous) => {
+      const next = !previous;
+      if (next) {
+        setNow(new Date());
+      }
+      return next;
+    });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="absolute right-[52px] top-3 z-10">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Select chart time zone"
+        className={cx(
+          "inline-flex h-8 items-center gap-1.5 border px-2 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors",
+          open
+            ? "border-[#666666] bg-[#222222] text-white"
+            : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm hover:text-white",
+        )}
+      >
+        <Globe className="h-4 w-4" strokeWidth={2} />
+        <span className="hidden sm:inline">{gmtOffsetLabel(timeZone, now)}</span>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Chart time zone"
+          className="absolute right-0 top-[calc(100%+6px)] flex max-h-[320px] w-[256px] flex-col overflow-y-auto border border-[#242424] bg-[#050505] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+        >
+          <div className="sticky top-0 border-b border-[#1A1A1A] bg-[#050505] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+            Time zone
+          </div>
+          {CHART_TIME_ZONES.map((zone) => {
+            const selected = zone.id === timeZone;
+            return (
+              <button
+                key={zone.id}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => {
+                  setTimeZone(zone.id);
+                  setOpen(false);
+                }}
+                className={cx(
+                  "flex items-center justify-between gap-3 border-b border-[#1A1A1A] px-3 py-2 text-left last:border-b-0",
+                  selected ? "bg-[#161616]" : "hover:bg-[#101010]",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className={cx("block truncate font-mono text-[12px]", selected ? "text-white" : "text-[#D4D4D4]")}>
+                    {zone.label}
+                  </span>
+                  <span className="block truncate font-mono text-[10px] text-[#6E6E6E]">{zone.cities}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block font-mono text-[12px] tabular-nums text-[#A8A8A8]">{localTimeLabel(zone.id, now)}</span>
+                  <span className="block font-mono text-[10px] text-[#6E6E6E]">{gmtOffsetLabel(zone.id, now)}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function MobileOverviewSection({
   view,
   timeRange,
@@ -4870,6 +4970,7 @@ function MobileOverviewSection({
             </ViewportReveal>
           </div>
           <div className="relative min-h-0 flex-1">
+            <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0 p-2">
               <PortfolioChart data={view.mobileChartData} variant="mobile" />
@@ -5111,25 +5212,27 @@ export function DashboardClient() {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col">
-      <MobileDashboard
-        view={view}
-        activeSection={activeSection}
-        onNavigate={setActiveSection}
-        data={data}
-        timeRange={timeRange}
-        onTimeRangeChange={setTimeRange}
-        sectionTransitionEnabled={!isDesktop}
-      />
-      <DesktopDashboard
-        view={view}
-        activeSection={activeSection}
-        onNavigate={setActiveSection}
-        data={data}
-        timeRange={timeRange}
-        onTimeRangeChange={setTimeRange}
-        sectionTransitionEnabled={isDesktop}
-      />
-    </div>
+    <ChartTimeZoneProvider>
+      <div className="flex min-h-dvh flex-1 flex-col">
+        <MobileDashboard
+          view={view}
+          activeSection={activeSection}
+          onNavigate={setActiveSection}
+          data={data}
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          sectionTransitionEnabled={!isDesktop}
+        />
+        <DesktopDashboard
+          view={view}
+          activeSection={activeSection}
+          onNavigate={setActiveSection}
+          data={data}
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          sectionTransitionEnabled={isDesktop}
+        />
+      </div>
+    </ChartTimeZoneProvider>
   );
 }

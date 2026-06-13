@@ -1,6 +1,6 @@
-# Cascade AI Dashboard
+# NoNamedYet Dashboard
 
-Read-only operator console for the Cascade AI BSC trading agent. This repository is separate from the trading bot repo and is designed to be deployed as:
+Read-only operator console for the NoNamedYet_Bot BSC trading agent. This repository is separate from the trading bot repo and is designed to be deployed as:
 
 - `apps/web`: Next.js App Router dashboard for Vercel.
 - `agent-exporter`: small read-only telemetry exporter for the EC2 instance that runs the agent.
