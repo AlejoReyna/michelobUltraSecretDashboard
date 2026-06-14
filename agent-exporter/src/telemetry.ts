@@ -7,10 +7,12 @@ import {
   executionSchema,
   guardrailsSchema,
   positionsSchema,
+  x402CallSchema,
   type Decision,
   type Execution,
   type Guardrails,
   type Positions,
+  type X402Call,
 } from "./schemas.js";
 import { getTwakTelemetrySnapshot, requestTwakRefresh } from "./twak.js";
 import { buildWalletTelemetry } from "./wallet.js";
@@ -35,6 +37,10 @@ export async function getDecisions(sourcePath: string, limit = DEFAULT_LIMIT) {
 
 export async function getExecutions(sourcePath: string, limit = DEFAULT_LIMIT) {
   return readJsonlFile<Execution>(sourceFile(sourcePath, FILES.executionLog), executionSchema, limit);
+}
+
+export async function getX402Calls(sourcePath: string, limit = DEFAULT_LIMIT) {
+  return readJsonlFile<X402Call>(sourceFile(sourcePath, FILES.x402CallLog), x402CallSchema, limit);
 }
 
 export async function getPositions(sourcePath: string) {
@@ -63,10 +69,11 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, positions, guardrails, files] = await Promise.all([
+  const [health, decisions, executions, x402Calls, positions, guardrails, files] = await Promise.all([
     getHealth(sourcePath),
     getDecisions(sourcePath, limit),
     getExecutions(sourcePath, limit),
+    getX402Calls(sourcePath, limit),
     getPositions(sourcePath),
     getGuardrails(sourcePath),
     fileStatuses(sourcePath),
@@ -87,11 +94,17 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
     balances: twak.telemetry,
     twakCache: twak.cache,
     wallet: buildWalletTelemetry(twak.telemetry, executions.items, twak.cache.refreshedAt ?? ""),
-    x402: {
-      instrumented: false,
-      paidCallCount: null,
-      records: [],
-    },
+    x402: x402Calls.fileMissing
+      ? {
+          instrumented: false,
+          paidCallCount: null,
+          records: [],
+        }
+      : {
+          instrumented: true,
+          paidCallCount: x402Calls.items.length,
+          records: x402Calls.items,
+        },
     files,
   });
 }

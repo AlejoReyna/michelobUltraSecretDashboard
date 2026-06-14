@@ -173,6 +173,19 @@ export const walletSchema = z
   })
   .passthrough();
 
+export const x402CallSchema = z
+  .object({
+    ts: z.string(),
+    outcome: z.enum(["success", "failure"]),
+    tool: z.string().nullable().optional(),
+    amount_usdc: nullableNumber,
+    http_status: z.number().nullable().optional(),
+    reason: z.string().nullable().optional(),
+    daily_spend_usdc: nullableNumber,
+    total_spend_usdc: nullableNumber,
+  })
+  .passthrough();
+
 const fileStatusSchema = z
   .object({
     path: z.string(),
@@ -206,7 +219,7 @@ export const statusSchema = z
       .object({
         instrumented: z.boolean().optional(),
         paidCallCount: z.number().nullable().optional(),
-        records: z.array(z.unknown()).optional(),
+        records: z.array(x402CallSchema).optional(),
       })
       .passthrough(),
     files: z.record(z.string(), fileStatusSchema).default({}),
@@ -228,3 +241,4 @@ export type CommandResult = z.infer<typeof commandResultSchema>;
 export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 export type WalletMovement = z.infer<typeof walletMovementSchema>;
 export type WalletTelemetry = z.infer<typeof walletSchema>;
+export type X402Call = z.infer<typeof x402CallSchema>;

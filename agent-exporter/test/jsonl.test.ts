@@ -1,10 +1,11 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decisionSchema } from "../src/schemas.js";
 import { parseJsonlLines, readJsonlFile } from "../src/jsonl.js";
+import { getX402Calls } from "../src/telemetry.js";
 
 test("parseJsonlLines validates JSONL and skips malformed records", () => {
   const result = parseJsonlLines(
@@ -37,4 +38,44 @@ test("readJsonlFile returns the latest requested validated entries", async () =>
 
   assert.deepEqual(result.items.map((item) => item.action), ["BLOCKED", "ENTER"]);
   assert.equal(result.errors.length, 0);
+});
+
+test("getX402Calls reads x402 call logs from the logs directory", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "cascade-x402-jsonl-"));
+  const logsDir = path.join(dir, "logs");
+  await mkdir(logsDir);
+  await writeFile(
+    path.join(logsDir, "x402_calls.jsonl"),
+    [
+      JSON.stringify({
+        ts: "2026-06-14T18:02:11.123456+00:00",
+        outcome: "success",
+        tool: "get_crypto_quotes_latest",
+        amount_usdc: 0.01,
+        http_status: 200,
+        reason: null,
+        daily_spend_usdc: 0.01,
+        total_spend_usdc: 0.01,
+      }),
+      JSON.stringify({
+        ts: "2026-06-14T18:04:11.123456+00:00",
+        outcome: "failure",
+        tool: "get_crypto_market_metrics",
+        amount_usdc: 0.01,
+        http_status: null,
+        reason: "payment rejected",
+        daily_spend_usdc: 0.02,
+        total_spend_usdc: 0.02,
+      }),
+    ].join("\n") + "\n",
+    "utf8",
+  );
+
+  const result = await getX402Calls(dir, 10);
+  const missing = await getX402Calls(path.join(dir, "missing"), 10);
+
+  assert.equal(result.items.length, 2);
+  assert.equal(result.items[1]?.outcome, "failure");
+  assert.equal(result.errors.length, 0);
+  assert.equal(missing.fileMissing, true);
 });
