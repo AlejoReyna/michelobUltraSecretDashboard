@@ -16,6 +16,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  CreditCard,
   Filter,
   Github,
   Globe,
@@ -77,9 +78,9 @@ import {
   detailsFromMovement,
   type LogEventDetails,
 } from "@/lib/log-event-details";
-import { statusSchema, type StatusPayload } from "@/lib/schemas";
+import { statusSchema, type StatusPayload, type X402Call } from "@/lib/schemas";
 
-type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat";
+type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402";
 type ActivityView = "txs" | "sys";
 
 const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
@@ -88,13 +89,14 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
   { label: "Activity", icon: Activity, section: "activity" },
   { label: "Intel", icon: Terminal, section: "market-chat" },
   { label: "Wallet", icon: Wallet, section: "wallet" },
+  { label: "Payments", icon: CreditCard, section: "x402" },
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
 
 const DESKTOP_NAV_WIDTH = 56;
 const defaultDeviceTopSectionColor = "#000000";
 const focusedDeviceTopSectionColor = "#111111";
-const focusedDeviceTopSections = new Set<DashboardSection>(["positions", "wallet", "market-chat"]);
+const focusedDeviceTopSections = new Set<DashboardSection>(["positions", "wallet", "market-chat", "x402"]);
 
 function deviceTopSectionColorFor(section: DashboardSection) {
   return focusedDeviceTopSections.has(section) ? focusedDeviceTopSectionColor : defaultDeviceTopSectionColor;
@@ -301,6 +303,9 @@ type DashboardViewModel = {
   positionRows: PositionRow[];
   totalPositionValue: string;
   walletBalances: WalletBalanceRow[];
+  x402Records: X402Call[];
+  x402Instrumented: boolean;
+  x402PaidCallCount: number | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -459,6 +464,10 @@ function SectionTransition({
 
 function formatUsd(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? usdFormatter.format(value) : "N/A";
+}
+
+function formatUsdc(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `${compactNumberFormatter.format(value)} USDC` : "N/A";
 }
 
 function formatSignedUsd(value: number | null | undefined) {
@@ -1386,6 +1395,9 @@ function buildViewModel(
     positionRows,
     totalPositionValue: formatUsd(totalPositionValue),
     walletBalances: liveWalletBalancesFromTelemetry(data),
+    x402Records: data?.x402?.records ?? [],
+    x402Instrumented: data?.x402?.instrumented ?? false,
+    x402PaidCallCount: data?.x402?.paidCallCount ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1797,6 +1809,213 @@ function WalletPanel({
                 <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     Waiting for TWAK wallet balances
+                  </ViewportReveal>
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function X402SummaryMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "red";
+}) {
+  return (
+    <div className="min-w-0 text-right font-mono">
+      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-[#757575]">{label}</div>
+      <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#FF7373]" : "text-white")}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function X402PaymentsPanel({
+  records,
+  instrumented,
+  paidCallCount,
+  compact = false,
+  desktop = false,
+}: {
+  records: X402Call[];
+  instrumented: boolean;
+  paidCallCount: number | null;
+  compact?: boolean;
+  desktop?: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
+  const flat = panelUsesFlatChrome(compact, desktop);
+  const sortedRecords = useMemo(
+    () =>
+      records.slice().sort((left, right) => {
+        const leftTime = Date.parse(left.ts);
+        const rightTime = Date.parse(right.ts);
+        const safeLeft = Number.isNaN(leftTime) ? 0 : leftTime;
+        const safeRight = Number.isNaN(rightTime) ? 0 : rightTime;
+        return safeRight - safeLeft;
+      }),
+    [records],
+  );
+  const latestRecord = sortedRecords[0] ?? null;
+  const failureCount = sortedRecords.filter((record) => record.outcome === "failure").length;
+  const emptyMessage = instrumented ? "No x402 payments recorded" : "x402 logging not instrumented yet";
+
+  useEffect(() => {
+    setScrollRoot(scrollRef.current);
+  }, []);
+
+  return (
+    <section
+      className={cx(
+        "flex min-h-0 flex-col",
+        compact && "flex-1 px-4 pt-4",
+        desktop && "flex-1 px-8 pt-6",
+        !flat && "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
+      )}
+    >
+      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "border-b border-[#1A1A1A] px-5 py-5")}>
+        <ViewportReveal variant="blur" duration="slow">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">x402 Payments</div>
+          <div className="mt-2 flex items-start justify-between gap-4">
+            <h1
+              className={cx(
+                "min-w-0 font-mono font-semibold leading-tight text-white",
+                flat ? "text-[28px]" : "text-[32px]",
+              )}
+            >
+              Payments
+            </h1>
+            <div className="grid shrink-0 grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
+              <X402SummaryMetric label="Paid calls" value={String(paidCallCount ?? sortedRecords.length)} />
+              <X402SummaryMetric label="Failures" value={String(failureCount)} tone={failureCount > 0 ? "red" : "default"} />
+              <X402SummaryMetric label="Today" value={formatUsdc(latestRecord?.daily_spend_usdc)} />
+              <X402SummaryMetric label="Total" value={formatUsdc(latestRecord?.total_spend_usdc)} />
+            </div>
+          </div>
+        </ViewportReveal>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className={cx(
+          "console-scroll overflow-x-auto overflow-y-auto",
+          flat ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
+        )}
+      >
+        <table className="min-w-[760px] w-full table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[18%]" />
+            <col className="w-[26%]" />
+            <col className="w-[18%]" />
+            <col className="w-[14%]" />
+            <col className="w-[24%]" />
+          </colgroup>
+          <thead className="border-b border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+            <tr>
+              {["Time", "Tool", "Amount (USDC)", "Status", "Reason"].map((label) => (
+                <th key={label} className="px-3 py-2">
+                  <ViewportReveal as="span" variant="fade" duration="fast" className="block truncate">
+                    {label}
+                  </ViewportReveal>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRecords.map((record, index) => {
+              const failed = record.outcome === "failure";
+              return (
+                <tr
+                  key={`${record.ts}-${record.tool ?? "tool"}-${index}`}
+                  className={cx(
+                    "border-b border-[#1A1A1A] text-white",
+                    failed && "bg-[#1B0505]/55",
+                    !flat && "hover:bg-[#070707]",
+                  )}
+                >
+                  <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#A8A8A8]">
+                    <ViewportReveal
+                      as="span"
+                      variant="fade"
+                      delay={walletCellDelay(index, "chain")}
+                      root={scrollRoot}
+                      className="block truncate"
+                    >
+                      {formatOpenedAt(record.ts)}
+                    </ViewportReveal>
+                  </td>
+                  <td className="truncate px-3 py-2 font-mono text-[12px] font-bold text-[#F2F2F2]">
+                    <ViewportReveal
+                      as="span"
+                      variant={walletColumnVariant("token")}
+                      delay={walletCellDelay(index, "token")}
+                      root={scrollRoot}
+                      className="block truncate"
+                    >
+                      {record.tool ?? "unknown"}
+                    </ViewportReveal>
+                  </td>
+                  <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                    <ViewportReveal
+                      as="span"
+                      variant={walletColumnVariant("amount")}
+                      delay={walletCellDelay(index, "amount")}
+                      root={scrollRoot}
+                      className="block truncate"
+                    >
+                      {formatUsdc(record.amount_usdc)}
+                    </ViewportReveal>
+                  </td>
+                  <td className="px-3 py-2">
+                    <ViewportReveal
+                      as="span"
+                      variant={activityStatusVariant(failed ? "red" : "green")}
+                      delay={walletCellDelay(index, "value")}
+                      root={scrollRoot}
+                      className="flex min-w-0 items-center justify-center gap-1"
+                    >
+                      <ActivityStatusIndicator
+                        status={failed ? "FAILED" : "SUCCESS"}
+                        tone={failed ? "red" : "green"}
+                        compact
+                      />
+                    </ViewportReveal>
+                  </td>
+                  <td
+                    className={cx(
+                      "truncate px-3 py-2 font-mono text-[12px]",
+                      failed ? "text-[#FF7373]" : "text-[#666666]",
+                    )}
+                    title={record.reason ?? undefined}
+                  >
+                    <ViewportReveal
+                      as="span"
+                      variant="fade"
+                      delay={walletCellDelay(index, "value")}
+                      root={scrollRoot}
+                      className="block truncate"
+                    >
+                      {failed ? record.reason ?? "failure" : "—"}
+                    </ViewportReveal>
+                  </td>
+                </tr>
+              );
+            })}
+            {sortedRecords.length === 0 ? (
+              <tr className="border-b border-[#1A1A1A]">
+                <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={5}>
+                  <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                    {emptyMessage}
                   </ViewportReveal>
                 </td>
               </tr>
@@ -4083,6 +4302,13 @@ function DesktopDashboard({
               />
             ) : section === "wallet" ? (
               <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} desktop />
+            ) : section === "x402" ? (
+              <X402PaymentsPanel
+                records={view.x402Records}
+                instrumented={view.x402Instrumented}
+                paidCallCount={view.x402PaidCallCount}
+                desktop
+              />
             ) : section === "positions" ? (
               <ActivePositionsPanel
                 rows={view.positionRows}
@@ -5064,7 +5290,7 @@ function MobileOverviewSection({
 const mobileNavSideItems = {
   left: [dashboardNavItems[1]!, dashboardNavItems[2]!],
   center: dashboardNavItems[0]!,
-  right: [dashboardNavItems[3]!, dashboardNavItems[4]!],
+  right: [dashboardNavItems[3]!, dashboardNavItems[4]!, dashboardNavItems[5]!],
 } as const;
 
 function MobileNavItemButton({
@@ -5201,6 +5427,13 @@ function MobileDashboard({
               />
             ) : section === "wallet" ? (
               <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} compact />
+            ) : section === "x402" ? (
+              <X402PaymentsPanel
+                records={view.x402Records}
+                instrumented={view.x402Instrumented}
+                paidCallCount={view.x402PaidCallCount}
+                compact
+              />
             ) : section === "positions" ? (
               <ActivePositionsPanel
                 rows={view.positionRows}

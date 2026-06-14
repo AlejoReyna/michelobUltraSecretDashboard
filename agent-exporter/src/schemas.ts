@@ -140,6 +140,19 @@ export const guardrailsSchema = z
   })
   .passthrough();
 
+export const x402CallSchema = z
+  .object({
+    ts: z.string(),
+    outcome: z.enum(["success", "failure"]),
+    tool: z.string().nullable().optional(),
+    amount_usdc: nullableNumber,
+    http_status: z.number().nullable().optional(),
+    reason: z.string().nullable().optional(),
+    daily_spend_usdc: nullableNumber,
+    total_spend_usdc: nullableNumber,
+  })
+  .passthrough();
+
 export type Decision = z.infer<typeof decisionSchema>;
 export type Execution = z.infer<typeof executionSchema>;
 export type Guardrails = z.infer<typeof guardrailsSchema>;
@@ -147,3 +160,4 @@ export type Positions = z.infer<typeof positionsSchema>;
 export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 export type WalletMovement = z.infer<typeof walletMovementSchema>;
 export type WalletTelemetry = z.infer<typeof walletSchema>;
+export type X402Call = z.infer<typeof x402CallSchema>;

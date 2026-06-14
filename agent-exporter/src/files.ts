@@ -19,6 +19,7 @@ export const FILES = {
   botLiveLog: "bot_live.log",
   decisionLog: "decision_log.jsonl",
   executionLog: "execution_log.jsonl",
+  x402CallLog: "logs/x402_calls.jsonl",
   positions: "positions.json",
   guardrails: "guardrail_state.json",
   priceCache: "price_cache.json",
