@@ -56,11 +56,11 @@ npm run test
 npm run build
 ```
 
-## GPT Integration
+## LLM Integration
 
-Market Intel chat (`/api/chat`) uses the OpenAI Responses API server-side. The browser never sees `OPENAI_API_KEY`.
+Market Intel chat (`/api/chat`) can use OpenAI or Kimi server-side. The browser never sees provider API keys.
 
-Required Vercel env vars for GPT:
+Required Vercel env vars for OpenAI:
 
 ```bash
 OPENAI_API_KEY=sk-...
@@ -69,15 +69,28 @@ OPENAI_FALLBACK_MODEL=gpt-4.1-nano
 OPENAI_TIMEOUT_MS=15000
 ```
 
+Required Vercel env vars for Kimi:
+
+```bash
+MARKET_INTEL_PROVIDER=kimi
+MOONSHOT_API_KEY=sk-...
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+KIMI_MODEL=kimi-k2.6
+KIMI_FALLBACK_MODEL=kimi-k2.6
+KIMI_THINKING=disabled
+MARKET_INTEL_TIMEOUT_MS=15000
+MARKET_INTEL_MAX_TOKENS=1200
+```
+
 Behavior:
 
-- Every chat message re-fetches live telemetry from the agent-exporter before calling OpenAI.
+- Every chat message re-fetches live telemetry from the agent-exporter before calling the LLM provider.
 - Responses stream as plain text to preserve the terminal typewriter UX.
-- If OpenAI or the exporter is unavailable, the route falls back to the local rule-based `resolveMarketChatResponse()` engine and sets `X-Fallback-Mode: true`.
-- Telemetry sent to OpenAI is trimmed and redacted (no wallet addresses, capped history arrays).
-- `store: false` — conversations are not persisted on OpenAI servers.
+- If the LLM provider or the exporter is unavailable, the route falls back to the local rule-based `resolveMarketChatResponse()` engine and sets `X-Fallback-Mode: true`.
+- Telemetry sent to the LLM provider is trimmed and redacted (no wallet addresses, capped history arrays).
+- OpenAI mode uses the Responses API with `store: false`. Kimi mode uses Kimi's OpenAI-compatible Chat Completions API.
 
-Local dev without OpenAI: omit `OPENAI_API_KEY` and the chat panel uses rule-based fallback automatically.
+Local dev without an LLM key: omit `OPENAI_API_KEY`/`MOONSHOT_API_KEY` and the chat panel uses rule-based fallback automatically.
 
 ## Environment Files
 
@@ -91,6 +104,14 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_FALLBACK_MODEL=gpt-4.1-nano
 OPENAI_TIMEOUT_MS=15000
+# MARKET_INTEL_PROVIDER=kimi
+# MOONSHOT_API_KEY=
+# KIMI_BASE_URL=https://api.moonshot.ai/v1
+# KIMI_MODEL=kimi-k2.6
+# KIMI_FALLBACK_MODEL=kimi-k2.6
+# KIMI_THINKING=disabled
+# MARKET_INTEL_TIMEOUT_MS=15000
+# MARKET_INTEL_MAX_TOKENS=1200
 ```
 
 EC2 exporter env (`agent-exporter/.env.example`):
