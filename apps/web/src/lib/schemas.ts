@@ -186,6 +186,20 @@ export const x402CallSchema = z
   })
   .passthrough();
 
+export const marketDataRowSchema = z
+  .object({
+    symbol: z.string(),
+    price: nullableNumber,
+    previousPrice: nullableNumber,
+    priceChangePct: nullableNumber,
+    volume: nullableNumber,
+    previousVolume: nullableNumber,
+    volumeChangePct: nullableNumber,
+    updatedAt: z.string().nullable(),
+    source: z.enum(["price_cache", "volume_cache", "price_and_volume"]),
+  })
+  .passthrough();
+
 const fileStatusSchema = z
   .object({
     path: z.string(),
@@ -220,6 +234,8 @@ export const statusSchema = z
         instrumented: z.boolean().optional(),
         paidCallCount: z.number().nullable().optional(),
         records: z.array(x402CallSchema).optional(),
+        marketData: z.array(marketDataRowSchema).optional(),
+        marketDataErrors: z.array(z.string()).optional(),
       })
       .passthrough(),
     files: z.record(z.string(), fileStatusSchema).default({}),
@@ -242,3 +258,4 @@ export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 export type WalletMovement = z.infer<typeof walletMovementSchema>;
 export type WalletTelemetry = z.infer<typeof walletSchema>;
 export type X402Call = z.infer<typeof x402CallSchema>;
+export type MarketDataRow = z.infer<typeof marketDataRowSchema>;

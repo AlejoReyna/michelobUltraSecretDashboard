@@ -78,7 +78,7 @@ import {
   detailsFromMovement,
   type LogEventDetails,
 } from "@/lib/log-event-details";
-import { statusSchema, type StatusPayload, type X402Call } from "@/lib/schemas";
+import { statusSchema, type MarketDataRow, type StatusPayload, type X402Call } from "@/lib/schemas";
 
 type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402";
 type ActivityView = "txs" | "sys";
@@ -304,6 +304,8 @@ type DashboardViewModel = {
   totalPositionValue: string;
   walletBalances: WalletBalanceRow[];
   x402Records: X402Call[];
+  x402MarketData: MarketDataRow[];
+  x402MarketDataErrors: string[];
   x402Instrumented: boolean;
   x402PaidCallCount: number | null;
   agentMode: string;
@@ -1053,6 +1055,22 @@ function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number])
   return `Analyzed ${symbol}${priced}: refreshed market data, tested breakout, regime, RSI, slippage, and derivatives risk, then logged ${stats.passed}/${stats.total} factors; ${result} before ${action}.`;
 }
 
+function decisionActivityRowId(
+  decision: StatusPayload["decisions"][number],
+  index: number,
+  scope: "recent" | "log",
+) {
+  return [
+    "decision",
+    scope,
+    decision.timestamp ?? "no-time",
+    decision.cycle_number ?? "no-cycle",
+    decision.symbol?.trim() || "no-symbol",
+    decision.action || "no-action",
+    index,
+  ].join("-");
+}
+
 function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   const executionTokens = executionTokenByTxHash(data);
   const executionTimestampTokens = executionTokenByTimestamp(data);
@@ -1118,7 +1136,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         const action = decision.action;
 
         return {
-          id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
+          id: decisionActivityRowId(decision, index, "recent"),
           amount: formatDecisionEvent(decision),
           narrative: decisionAnalysisNarrative(decision),
           timestamp: decision.timestamp ?? null,
@@ -1190,7 +1208,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
         const action = decision.action;
 
         return {
-          id: `decision-${decision.cycle_number ?? decision.timestamp ?? index}`,
+          id: decisionActivityRowId(decision, index, "log"),
           amount: formatDecisionEvent(decision),
           narrative: decisionAnalysisNarrative(decision),
           timestamp: decision.timestamp ?? null,
@@ -1396,6 +1414,8 @@ function buildViewModel(
     totalPositionValue: formatUsd(totalPositionValue),
     walletBalances: liveWalletBalancesFromTelemetry(data),
     x402Records: data?.x402?.records ?? [],
+    x402MarketData: data?.x402?.marketData ?? [],
+    x402MarketDataErrors: data?.x402?.marketDataErrors ?? [],
     x402Instrumented: data?.x402?.instrumented ?? false,
     x402PaidCallCount: data?.x402?.paidCallCount ?? null,
     agentMode: agentModeLabel(data),
@@ -1839,14 +1859,225 @@ function X402SummaryMetric({
   );
 }
 
+function x402MarketSourceLabel(source: MarketDataRow["source"]) {
+  switch (source) {
+    case "price_and_volume":
+      return "PRICE + VOLUME";
+    case "price_cache":
+      return "PRICE";
+    case "volume_cache":
+      return "VOLUME";
+  }
+}
+
+function latestMarketDataAge(rows: MarketDataRow[]) {
+  const latest = rows
+    .map((row) => (row.updatedAt ? Date.parse(row.updatedAt) : Number.NaN))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => right - left)[0];
+
+  if (latest == null) {
+    return "N/A";
+  }
+
+  const minutes = Math.max(0, Math.round((Date.now() - latest) / 60_000));
+  if (minutes < 1) {
+    return "<1m";
+  }
+
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  return `${Math.round(minutes / 60)}h`;
+}
+
+function formatMarketVolume(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  if (Math.abs(value) >= 1_000_000_000) {
+    return `${compactNumberFormatter.format(value / 1_000_000_000)}B`;
+  }
+
+  if (Math.abs(value) >= 1_000_000) {
+    return `${compactNumberFormatter.format(value / 1_000_000)}M`;
+  }
+
+  if (Math.abs(value) >= 1_000) {
+    return `${compactNumberFormatter.format(value / 1_000)}K`;
+  }
+
+  return compactNumberFormatter.format(value);
+}
+
+function marketChangeTone(value: number | null | undefined): "green" | "yellow" | "red" {
+  if (typeof value !== "number" || !Number.isFinite(value) || value === 0) {
+    return "yellow";
+  }
+
+  return value > 0 ? "green" : "red";
+}
+
+function marketToneClass(tone: "green" | "yellow" | "red") {
+  if (tone === "green") {
+    return "text-[#00FF66]";
+  }
+
+  if (tone === "red") {
+    return "text-[#FF7373]";
+  }
+
+  return "text-[#A8A8A8]";
+}
+
+function X402MarketDataPanel({
+  rows,
+  errors,
+  scrollRoot,
+}: {
+  rows: MarketDataRow[];
+  errors: string[];
+  scrollRoot: Element | null;
+}) {
+  const sortedRows = useMemo(
+    () =>
+      rows.slice().sort((left, right) => {
+        const leftTime = left.updatedAt ? Date.parse(left.updatedAt) : 0;
+        const rightTime = right.updatedAt ? Date.parse(right.updatedAt) : 0;
+        return rightTime - leftTime || left.symbol.localeCompare(right.symbol);
+      }),
+    [rows],
+  );
+  const pricedCount = sortedRows.filter((row) => row.price != null).length;
+  const volumeCount = sortedRows.filter((row) => row.volume != null).length;
+
+  return (
+    <div className="border-b border-[#1A1A1A] py-4">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-3">
+        <ViewportReveal variant="blur" duration="slow" root={scrollRoot} className="min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Data gathered</div>
+          <h2 className="mt-1 font-mono text-[18px] font-semibold leading-tight text-white">Market snapshot cache</h2>
+        </ViewportReveal>
+        <div className="grid grid-cols-3 gap-x-5 gap-y-2">
+          <X402SummaryMetric label="Symbols" value={String(sortedRows.length)} />
+          <X402SummaryMetric label="Prices" value={String(pricedCount)} />
+          <X402SummaryMetric label="Fresh" value={latestMarketDataAge(sortedRows)} />
+        </div>
+      </div>
+
+      {errors.length > 0 ? (
+        <div className="mx-3 mb-3 border border-[#3A2020] bg-[#1B0505]/55 px-3 py-2 font-mono text-[11px] leading-5 text-[#FF7373]">
+          {errors.slice(0, 2).join(" · ")}
+        </div>
+      ) : null}
+
+      <table className="min-w-[820px] w-full table-fixed border-collapse text-left">
+        <colgroup>
+          <col className="w-[15%]" />
+          <col className="w-[17%]" />
+          <col className="w-[14%]" />
+          <col className="w-[17%]" />
+          <col className="w-[14%]" />
+          <col className="w-[13%]" />
+          <col className="w-[10%]" />
+        </colgroup>
+        <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+          <tr>
+            {["Token", "Price", "Price Δ", "Volume", "Volume Δ", "Updated", "Source"].map((label) => (
+              <th key={label} className="px-3 py-2">
+                <ViewportReveal as="span" variant="fade" duration="fast" root={scrollRoot} className="block truncate">
+                  {label}
+                </ViewportReveal>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.map((row, index) => {
+            const priceTone = marketChangeTone(row.priceChangePct);
+            const volumeTone = marketChangeTone(row.volumeChangePct);
+            return (
+              <tr key={`${row.symbol}-${row.updatedAt ?? index}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+                <td className="px-3 py-2">
+                  <ViewportReveal
+                    as="span"
+                    variant={walletColumnVariant("token")}
+                    delay={walletCellDelay(index, "token")}
+                    root={scrollRoot}
+                    className="flex min-w-0 items-center gap-2"
+                  >
+                    <TokenIcon symbol={row.symbol} size={14} />
+                    <span className="truncate font-mono text-[12px] font-bold text-[#F2F2F2]">{row.symbol}</span>
+                  </ViewportReveal>
+                </td>
+                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
+                    {formatPrice(row.price)}
+                  </ViewportReveal>
+                </td>
+                <td className={cx("truncate px-3 py-2 font-mono text-[12px] tabular-nums", marketToneClass(priceTone))}>
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
+                    {formatPercent(row.priceChangePct)}
+                  </ViewportReveal>
+                </td>
+                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
+                    {formatMarketVolume(row.volume)}
+                  </ViewportReveal>
+                </td>
+                <td className={cx("truncate px-3 py-2 font-mono text-[12px] tabular-nums", marketToneClass(volumeTone))}>
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
+                    {formatPercent(row.volumeChangePct)}
+                  </ViewportReveal>
+                </td>
+                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#A8A8A8]">
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "chain")} root={scrollRoot} className="block truncate">
+                    {formatOpenedAt(row.updatedAt)}
+                  </ViewportReveal>
+                </td>
+                <td className="truncate px-3 py-2 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8A8A8A]">
+                  <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
+                    {x402MarketSourceLabel(row.source)}
+                  </ViewportReveal>
+                </td>
+              </tr>
+            );
+          })}
+          {sortedRows.length === 0 ? (
+            <tr className="border-b border-[#1A1A1A]">
+              <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={7}>
+                <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
+                  No market cache rows available yet
+                </ViewportReveal>
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+
+      {volumeCount === 0 && sortedRows.length > 0 ? (
+        <div className="px-3 pt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+          Volume cache has not populated for the visible rows.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function X402PaymentsPanel({
   records,
+  marketData,
+  marketDataErrors,
   instrumented,
   paidCallCount,
   compact = false,
   desktop = false,
 }: {
   records: X402Call[];
+  marketData: MarketDataRow[];
+  marketDataErrors: string[];
   instrumented: boolean;
   paidCallCount: number | null;
   compact?: boolean;
@@ -1912,6 +2143,8 @@ function X402PaymentsPanel({
           flat ? "min-h-0 flex-1" : "max-h-[min(70vh,720px)]",
         )}
       >
+        <X402MarketDataPanel rows={marketData} errors={marketDataErrors} scrollRoot={scrollRoot} />
+
         <table className="min-w-[760px] w-full table-fixed border-collapse text-left">
           <colgroup>
             <col className="w-[18%]" />
@@ -2682,7 +2915,7 @@ function MobileLogFeed({
   );
 }
 
-function formatPrice(value: number | null) {
+function formatPrice(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "N/A";
   }
@@ -3582,8 +3815,15 @@ function ActivePositionsPanel({
           />
         </div>
       ) : (
-        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-          <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
+        <div className="mt-4 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
+          <div className="shrink-0 border-b border-[#1A1A1A] px-4 py-3">
+            <ViewportReveal variant="left" delay={160} duration="fast">
+              <h2 className="font-mono text-[18px] text-[#DADADA]">Position Book</h2>
+            </ViewportReveal>
+          </div>
+          <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+            <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
+          </div>
         </div>
       )}
     </section>
@@ -4305,6 +4545,8 @@ function DesktopDashboard({
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
+                marketData={view.x402MarketData}
+                marketDataErrors={view.x402MarketDataErrors}
                 instrumented={view.x402Instrumented}
                 paidCallCount={view.x402PaidCallCount}
                 desktop
@@ -5286,32 +5528,28 @@ function MobileOverviewSection({
   );
 }
 
-// Guide is desktop-only; mobile bar uses the logo as Home.
-const mobileNavSideItems = {
-  left: [dashboardNavItems[1]!, dashboardNavItems[2]!],
-  center: dashboardNavItems[0]!,
-  right: [dashboardNavItems[3]!, dashboardNavItems[4]!, dashboardNavItems[5]!],
-} as const;
-
 function MobileNavItemButton({
   item,
   active,
   onNavigate,
+  buttonRef,
 }: {
   item: (typeof dashboardNavItems)[number];
   active: boolean;
   onNavigate: (section: DashboardSection) => void;
+  buttonRef?: (node: HTMLButtonElement | null) => void;
 }) {
   const Icon = item.icon;
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={() => onNavigate(item.section)}
       aria-current={active ? "page" : undefined}
       aria-label={item.label}
       className={cx(
-        "relative flex flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
+        "relative flex h-full min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
         active ? "text-white" : "text-[#7A7A7A] active:text-white",
       )}
     >
@@ -5330,49 +5568,32 @@ function MobileBottomNav({
   activeSection: DashboardSection;
   onNavigate: (section: DashboardSection) => void;
 }) {
-  const logoActive = mobileNavSideItems.center.section === activeSection;
+  const itemRefs = useRef<Partial<Record<DashboardSection, HTMLButtonElement | null>>>({});
+
+  useEffect(() => {
+    itemRefs.current[activeSection]?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeSection]);
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A2A] bg-black/75 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A1A] bg-black/75 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
-      <div className="flex h-full w-full items-center justify-between px-1">
-        <div className="flex flex-1 items-center justify-evenly">
-          {mobileNavSideItems.left.map((item) => (
-            <MobileNavItemButton
-              key={item.section}
-              item={item}
-              active={item.section === activeSection}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => onNavigate(mobileNavSideItems.center.section)}
-          aria-current={logoActive ? "page" : undefined}
-          aria-label={mobileNavSideItems.center.label}
-          className={cx(
-            "relative flex h-full min-w-[56px] items-center justify-center px-2 transition-opacity",
-            logoActive ? "opacity-100" : "opacity-70 active:opacity-100",
-          )}
-        >
-          {logoActive ? (
-            <span className="absolute top-0 h-0.5 w-5 rounded-full bg-white" aria-hidden="true" />
-          ) : null}
-          <BrandMark variant="rail" />
-        </button>
-        <div className="flex flex-1 items-center justify-evenly">
-          {mobileNavSideItems.right.map((item) => (
-            <MobileNavItemButton
-              key={item.section}
-              item={item}
-              active={item.section === activeSection}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
+      <div
+        className="flex h-full w-full items-center overflow-x-auto px-1 [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="Dashboard sections"
+      >
+        {dashboardNavItems.map((item) => (
+          <MobileNavItemButton
+            key={item.section}
+            item={item}
+            active={item.section === activeSection}
+            onNavigate={onNavigate}
+            buttonRef={(node) => {
+              itemRefs.current[item.section] = node;
+            }}
+          />
+        ))}
       </div>
     </nav>
   );
@@ -5430,6 +5651,8 @@ function MobileDashboard({
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
+                marketData={view.x402MarketData}
+                marketDataErrors={view.x402MarketDataErrors}
                 instrumented={view.x402Instrumented}
                 paidCallCount={view.x402PaidCallCount}
                 compact

@@ -334,6 +334,31 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       instrumented: false,
       paidCallCount: null,
       records: [],
+      marketData: [
+        {
+          symbol: "CAKE",
+          price: 11.42,
+          previousPrice: 10.98,
+          priceChangePct: 4.0073,
+          volume: 7600000,
+          previousVolume: 5200000,
+          volumeChangePct: 46.1538,
+          updatedAt: isoMinutesAgo(3),
+          source: "price_and_volume",
+        },
+        {
+          symbol: "BNB",
+          price: 642.1,
+          previousPrice: 639.4,
+          priceChangePct: 0.4223,
+          volume: null,
+          previousVolume: null,
+          volumeChangePct: null,
+          updatedAt: isoMinutesAgo(3),
+          source: "price_cache",
+        },
+      ],
+      marketDataErrors: [],
     },
     files: {
       decisionLog: {
@@ -413,6 +438,8 @@ export function createUnavailableStatus(error: string): StatusPayload {
       instrumented: false,
       paidCallCount: null,
       records: [],
+      marketData: [],
+      marketDataErrors: [],
     },
     files: {},
     connection: {
