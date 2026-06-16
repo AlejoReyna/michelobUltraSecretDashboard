@@ -153,6 +153,20 @@ export const x402CallSchema = z
   })
   .passthrough();
 
+export const marketDataRowSchema = z
+  .object({
+    symbol: z.string(),
+    price: nullableNumber,
+    previousPrice: nullableNumber,
+    priceChangePct: nullableNumber,
+    volume: nullableNumber,
+    previousVolume: nullableNumber,
+    volumeChangePct: nullableNumber,
+    updatedAt: z.string().nullable(),
+    source: z.enum(["price_cache", "volume_cache", "price_and_volume"]),
+  })
+  .passthrough();
+
 export type Decision = z.infer<typeof decisionSchema>;
 export type Execution = z.infer<typeof executionSchema>;
 export type Guardrails = z.infer<typeof guardrailsSchema>;
@@ -161,3 +175,4 @@ export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 export type WalletMovement = z.infer<typeof walletMovementSchema>;
 export type WalletTelemetry = z.infer<typeof walletSchema>;
 export type X402Call = z.infer<typeof x402CallSchema>;
+export type MarketDataRow = z.infer<typeof marketDataRowSchema>;
