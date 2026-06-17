@@ -28,6 +28,7 @@ export const decisionSchema = z
     symbol: z.string().nullable().optional(),
     position_size_usdc: nullableNumber,
     factor_scores: factorScoresSchema.default({}),
+    factor_metrics: z.record(z.string(), z.string()).nullable().optional(),
     true_factor_count: nullableNumber,
     estimated_slippage_pct: nullableNumber,
     reason: z.string().nullable().optional(),

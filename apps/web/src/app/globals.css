@@ -467,3 +467,106 @@ textarea {
     opacity: var(--wm-opacity);
   }
 }
+
+/* ── Live factor scan ───────────────────────────────────────────── */
+
+/* Sweep beam that travels down the factor list while analysing */
+@keyframes scan-beam-sweep {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(2400%);
+    opacity: 0;
+  }
+}
+
+.scan-beam {
+  animation: scan-beam-sweep 2.6s linear infinite;
+}
+
+/* A factor row entering from "pending" to its resolved state */
+@keyframes scan-row-resolve {
+  0% {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.scan-row-resolve {
+  animation: scan-row-resolve 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The row currently being analysed: subtle breathing highlight */
+@keyframes scan-row-active {
+  0%,
+  100% {
+    background-color: rgba(255, 255, 255, 0.02);
+    box-shadow: inset 2px 0 0 rgba(255, 210, 26, 0.35);
+  }
+  50% {
+    background-color: rgba(255, 210, 26, 0.06);
+    box-shadow: inset 2px 0 0 rgba(255, 210, 26, 0.9);
+  }
+}
+
+.scan-row-active {
+  animation: scan-row-active 1.05s ease-in-out infinite;
+}
+
+/* Pulsing dot used for the "analysing" glyph */
+@keyframes scan-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.scan-pulse {
+  animation: scan-pulse 0.7s ease-in-out infinite;
+}
+
+/* Conclusion / verdict fade-up once all factors resolve */
+@keyframes scan-verdict-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scan-verdict-in {
+  animation: scan-verdict-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-beam,
+  .scan-row-active,
+  .scan-pulse {
+    animation: none;
+  }
+
+  .scan-row-resolve,
+  .scan-verdict-in {
+    animation-duration: 0.01ms;
+  }
+}

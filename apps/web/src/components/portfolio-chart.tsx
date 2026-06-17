@@ -264,6 +264,10 @@ export function PortfolioChart({
   // Dollar (Y) axis ticks, derived from the money scale.
   const yTicks = chart.scale.ticks;
 
+  // Desktop renders the trend in white / transparent gray; mobile stays green.
+  const lineColor = isMobile ? "#00FF00" : "#FFFFFF";
+  const fillColor = isMobile ? "#00FF00" : "#B8B8B8";
+
   const chartSvg = (
     <svg
       className="block h-full min-h-0 w-full flex-1 overflow-visible"
@@ -274,8 +278,8 @@ export function PortfolioChart({
     >
       <defs>
         <linearGradient id={`portfolio-fill-${variant}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="#00FF00" stopOpacity="0.3" />
-          <stop offset="52%" stopColor="#00FF00" stopOpacity="0.12" />
+          <stop offset="0%" stopColor={fillColor} stopOpacity={isMobile ? 0.3 : 0.18} />
+          <stop offset="52%" stopColor={fillColor} stopOpacity={isMobile ? 0.12 : 0.07} />
           <stop offset="100%" stopColor="#000000" stopOpacity="0" />
         </linearGradient>
         <filter id={`portfolio-glow-${variant}`} x="-10%" y="-10%" width="120%" height="120%">
@@ -322,7 +326,7 @@ export function PortfolioChart({
       />
 
       <path d={chart.areaPath} fill={`url(#portfolio-fill-${variant})`} />
-      <path d={chart.linePath} fill="none" stroke="#00FF00" strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
+      <path d={chart.linePath} fill="none" stroke={lineColor} strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
       <line x1={leftMargin} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
       {!isMobile && desktopTicks.length > 0 ? (
