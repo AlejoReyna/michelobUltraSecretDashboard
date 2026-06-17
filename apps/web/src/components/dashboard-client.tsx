@@ -3750,6 +3750,27 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
           {decision.strategy_mode ? ` · ${decision.strategy_mode}` : ""}
         </div>
       )}
+      {decision.mlAudit && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className={cx(
+            "inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em]",
+            decision.mlAudit.mlActive
+              ? "border-[#2A2A2A] bg-[#00FF66]/10 text-[#00FF66]"
+              : decision.mlAudit.mlEnabled
+                ? "border-[#2A2A2A] bg-[#FFD700]/10 text-[#FFD700]"
+                : "border-[#2A2A2A] bg-[#0A0A0A] text-[#8A8A8A]"
+          )}>
+            <span className={cx(
+              "h-1 w-1 rounded-full",
+              decision.mlAudit.mlActive ? "bg-[#00FF66]" : decision.mlAudit.mlEnabled ? "bg-[#FFD700]" : "bg-[#666666]"
+            )} />
+            ML: {decision.mlAudit.mlRegime ?? "—"} · conf {(decision.mlAudit.mlConfidence != null ? (decision.mlAudit.mlConfidence * 100).toFixed(0) : "—")}% · {decision.mlAudit.mlPasserCount ?? 0} passers
+          </span>
+          {decision.mlAudit.mlShadowMode && (
+            <span className="font-mono text-[9px] text-[#666666]">shadow</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
