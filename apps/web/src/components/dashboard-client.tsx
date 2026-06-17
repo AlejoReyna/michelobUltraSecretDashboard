@@ -285,6 +285,31 @@ function positivePrice(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
+  let totalEntry = 0;
+  let totalCurrent = 0;
+  let valid = false;
+
+  for (const row of positionRows) {
+    if (
+      typeof row.entryValueUsd === "number" &&
+      Number.isFinite(row.entryValueUsd) &&
+      row.entryValueUsd > 0 &&
+      typeof row.amount === "number" &&
+      Number.isFinite(row.amount) &&
+      typeof row.currentPrice === "number" &&
+      Number.isFinite(row.currentPrice)
+    ) {
+      totalEntry += row.entryValueUsd;
+      totalCurrent += row.amount * row.currentPrice;
+      valid = true;
+    }
+  }
+
+  if (!valid || totalEntry === 0) return null;
+  return ((totalCurrent - totalEntry) / totalEntry) * 100;
+}
+
 function positionRiskStats(row: PositionRow) {
   const entry = row.entryPrice;
   const stop = row.trailingStopPrice;
@@ -2333,6 +2358,43 @@ function ActivityDetailPanel({
                 {factor.passed ? "PASS" : "FAIL"} {factor.label}
               </span>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {details.x402Evidence && details.x402Evidence.length > 0 ? (
+        <div>
+          <div className={cx("mb-2 flex items-center gap-2 font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+            <span className="border border-[#7A5CFF]/50 bg-[#120A2A] px-1.5 py-0.5 text-[#B9A6FF]">x402</span>
+            paid data → algorithm input
+          </div>
+          <div className="space-y-1.5">
+            {details.x402Evidence.map((row) => (
+              <div
+                key={row.tool + row.factor}
+                className={cx(
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#2A2A2A] bg-black/40 px-2.5 py-1.5 font-mono",
+                  readable ? "text-[11px]" : "text-[10px]",
+                )}
+              >
+                <span className="text-[#B9A6FF]">{row.tool}</span>
+                <span className="text-[#5C5C5C]">·</span>
+                <span className="text-[#9A9A9A]">{row.provides}</span>
+                <span className="text-[#5C5C5C]">→</span>
+                <span className="text-[#C8C8C8]">{row.factor}</span>
+                {row.reading && row.reading !== "—" ? (
+                  <span className="text-[#7C7C7C]">[{row.reading}]</span>
+                ) : null}
+                {row.passed != null ? (
+                  <span className={cx("ml-auto", row.passed ? "text-[#00FF66]" : "text-[#FF7373]")}>
+                    {row.passed ? "PASS" : "FAIL"}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className={cx("mt-1.5 text-[#5C5C5C]", readable ? "text-[10px]" : "text-[9px]")}>
+            Each tool is a 0.01 USDC x402 micropayment to CoinMarketCap; the returned value is what the entry factor above was computed from.
           </div>
         </div>
       ) : null}
@@ -4812,6 +4874,26 @@ function TxActivityPanel({
   );
 }
 
+function LiveClock({ className }: { className?: string }) {
+  // Live UTC digital clock. Starts null and fills on mount to avoid an SSR
+  // hydration mismatch, then ticks once a second.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const time = now ? now.toISOString().slice(11, 19) : "--:--:--";
+  return (
+    <div className={cx("flex items-baseline gap-2", className)}>
+      <span className="font-mono text-[34px] font-semibold leading-none tracking-[0.10em] tabular-nums text-white">
+        {time}
+      </span>
+      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">UTC</span>
+    </div>
+  );
+}
+
 function ActivityPanel({
   activityRows,
   logRows,
@@ -4839,6 +4921,7 @@ function ActivityPanel({
     return (
       <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
         <div className="shrink-0 border-b border-[#1A1A1A] pb-4">
+          <LiveClock className="mb-3" />
           <ViewportReveal variant="blur" duration="slow" className="min-w-0">
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
             <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
@@ -6234,13 +6317,46 @@ export function DashboardClient() {
   }, []);
 
   const view = useMemo(() => buildViewModel(data, error, timeRange), [data, error, timeRange]);
+
+  // Track the last position-based P&L% so it stays frozen after the position is sold.
+  const frozenPositionPnlRef = useRef<number | null>(null);
+  const positionPnlPercent = activePositionPnlPercent(view.positionRows);
+  if (positionPnlPercent !== null) {
+    frozenPositionPnlRef.current = positionPnlPercent;
+  }
+  const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnlRef.current;
+  const effectiveDelta =
+    effectivePnlPercent !== null ? formatPercent(effectivePnlPercent) : undefined;
+  const effectivePnlTone: "positive" | "negative" =
+    effectivePnlPercent !== null
+      ? effectivePnlPercent >= 0
+        ? "positive"
+        : "negative"
+      : view.pnlTone;
+
+  const effectiveView = useMemo(() => {
+    const deltaChanged = effectiveDelta !== view.pnlDelta;
+    const toneChanged = effectivePnlTone !== view.pnlTone;
+    if (!deltaChanged && !toneChanged) return view;
+    return {
+      ...view,
+      pnlDelta: effectiveDelta,
+      pnlTone: effectivePnlTone,
+      metrics: view.metrics.map((m) =>
+        m.label === "Window Profit/Loss"
+          ? { ...m, delta: effectiveDelta, tone: effectivePnlTone }
+          : m,
+      ),
+    };
+  }, [view, effectiveDelta, effectivePnlTone]);
+
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   return (
     <ChartTimeZoneProvider>
       <div className="flex min-h-dvh flex-1 flex-col">
         <MobileDashboard
-          view={view}
+          view={effectiveView}
           activeSection={activeSection}
           onNavigate={setActiveSection}
           data={data}
@@ -6249,7 +6365,7 @@ export function DashboardClient() {
           sectionTransitionEnabled={!isDesktop}
         />
         <DesktopDashboard
-          view={view}
+          view={effectiveView}
           activeSection={activeSection}
           onNavigate={setActiveSection}
           data={data}

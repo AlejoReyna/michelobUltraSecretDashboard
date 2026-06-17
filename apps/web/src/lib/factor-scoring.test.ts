@@ -74,6 +74,32 @@ test("breakout decision prefers entry_score over raw factor count", () => {
   assert.equal(decisionFactorSummary(d), "score 52/100");
 });
 
+test("activity detail surfaces x402 evidence linking paid tools to factors", () => {
+  const d = decision({
+    strategy_mode: "breakout",
+    entry_score: 52,
+    factor_scores: { rsi_in_range: true, derivatives_risk_clear: false, volume_breakout: true },
+    factor_metrics: {
+      rsi_in_range: "RSI 62.0 · band 55–75",
+      derivatives_risk_clear: "funding/OI data missing",
+      volume_breakout: "surge 2.10× · 24h vol $30,000,000",
+    },
+  });
+  const ev = detailsFromDecision(d).x402Evidence ?? [];
+  const rsi = ev.find((r) => r.tool === "get_crypto_technical_analysis");
+  assert.ok(rsi, "expected an RSI evidence row");
+  assert.equal(rsi!.factor, "RSI in range");
+  assert.equal(rsi!.reading, "RSI 62.0 · band 55–75");
+  assert.equal(rsi!.passed, true);
+  // derivatives evaluated but failed (missing data)
+  assert.equal(ev.find((r) => r.tool === "get_crypto_derivatives_metrics")?.passed, false);
+});
+
+test("compliance trade shows no x402 evidence rows", () => {
+  const d = decision({ source: "daily_minimum", factor_scores: { daily_minimum: true } });
+  assert.equal((detailsFromDecision(d).x402Evidence ?? []).length, 0);
+});
+
 test("breakout decision without entry_score still shows factor count", () => {
   const d = decision({
     strategy_mode: "breakout",

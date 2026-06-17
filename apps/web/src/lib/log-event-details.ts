@@ -20,9 +20,23 @@ export type FactorScoreDetail = {
   passed: boolean;
 };
 
+/**
+ * One line of evidence that a paid x402 micropayment fed the algorithm: which
+ * CMC x402 tool was called, what data it provided, the entry factor it drives,
+ * the live reading behind that factor, and whether the factor passed.
+ */
+export type X402EvidenceRow = {
+  tool: string;
+  provides: string;
+  factor: string;
+  reading: string;
+  passed: boolean | null;
+};
+
 export type LogEventDetails = {
   items: ActivityDetail[];
   factors?: FactorScoreDetail[];
+  x402Evidence?: X402EvidenceRow[];
 };
 
 const FACTOR_LABELS: Record<string, string> = {
@@ -187,6 +201,56 @@ function factorDetails(
   }));
 }
 
+/**
+ * Map each CMC x402 paid tool to the entry factor(s) it powers, so the activity
+ * view can show concretely how a micropayment turns into an algorithm input.
+ * Built from the decision's own factor_scores/factor_metrics so it reflects the
+ * real numbers behind that cycle.
+ */
+const X402_TOOL_FACTORS: { tool: string; provides: string; factor: string; key: string }[] = [
+  {
+    tool: "get_crypto_technical_analysis",
+    provides: "RSI-14 / MACD",
+    factor: "RSI in range",
+    key: "rsi_in_range",
+  },
+  {
+    tool: "get_crypto_derivatives_metrics",
+    provides: "funding rate / open interest",
+    factor: "Derivatives risk clear",
+    key: "derivatives_risk_clear",
+  },
+  {
+    tool: "get_crypto_quotes_latest",
+    provides: "price / 24h volume / highs",
+    factor: "Volume breakout · 6h high",
+    key: "volume_breakout",
+  },
+];
+
+function x402Evidence(decision: StatusPayload["decisions"][number]): X402EvidenceRow[] {
+  // Compliance swaps and scalping decisions aren't scored off the x402 factor set.
+  if (isComplianceDecision(decision) || resolveStrategyMode(decision) !== "breakout") {
+    return [];
+  }
+  const scores = decision.factor_scores ?? {};
+  const metrics = (decision.factor_metrics ?? {}) as Record<string, string>;
+  const rows: X402EvidenceRow[] = [];
+  for (const src of X402_TOOL_FACTORS) {
+    if (!(src.key in scores)) {
+      continue; // only show tools whose factor was actually evaluated this cycle
+    }
+    rows.push({
+      tool: src.tool,
+      provides: src.provides,
+      factor: src.factor,
+      reading: metrics[src.key] ?? "—",
+      passed: typeof scores[src.key] === "boolean" ? Boolean(scores[src.key]) : null,
+    });
+  }
+  return rows;
+}
+
 export function detailsFromDecision(decision: StatusPayload["decisions"][number]): LogEventDetails {
   const strategyMode = resolveStrategyMode(decision);
   const compliance = isComplianceDecision(decision);
@@ -284,6 +348,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       { label: "Reason", value: decision.reason?.trim() || "—" },
     ].filter((item): item is ActivityDetail => item != null),
     factors: factorDetails(decision.factor_scores, strategyMode),
+    x402Evidence: x402Evidence(decision),
   };
 }
 
