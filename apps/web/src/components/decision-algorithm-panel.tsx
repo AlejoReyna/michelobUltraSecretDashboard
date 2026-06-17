@@ -14,6 +14,7 @@ import {
   ENTRY_FACTOR_KEYS,
   breakoutEntryScoreStats,
   entryFactorStats,
+  isComplianceDecision,
   resolveStrategyMode,
   type EntryFactorKey,
 } from "@/lib/factor-scoring";
@@ -563,11 +564,13 @@ function DecisionSnapshot({
   const action = String(decision.action ?? "WAIT").toUpperCase();
   const resolvedBadge =
     badge ??
-    (strategyMode === "scalping"
-      ? `${scalpingStats.score}/${scalpingStats.max} · ${action}`
-      : breakoutScore.score != null
-        ? `${breakoutScore.score}/${breakoutScore.max} · ${action}`
-        : `${breakoutStats.passed}/${breakoutStats.total} · ${action}`);
+    (isComplianceDecision(decision)
+      ? `compliance · ${action}`
+      : strategyMode === "scalping"
+        ? `${scalpingStats.score}/${scalpingStats.max} · ${action}`
+        : breakoutScore.score != null
+          ? `${breakoutScore.score}/${breakoutScore.max} · ${action}`
+          : `${breakoutStats.passed}/${breakoutStats.total} · ${action}`);
 
   return (
     <div className="border border-[#2A2A2A] bg-black/88">

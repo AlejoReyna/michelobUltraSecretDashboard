@@ -61,6 +61,7 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
+  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
@@ -70,12 +71,13 @@ import {
   inferCycleIntervalMs,
   nextCycleAt,
 } from "@/lib/cycle-timing";
-import { breakoutEntryScoreStats, entryFactorStats, resolveStrategyMode } from "@/lib/factor-scoring";
+import { breakoutEntryScoreStats, entryFactorStats, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
 import { scalpingFactorStats } from "@/lib/scalping-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
   detailsFromMovement,
+  explainFactor,
   type LogEventDetails,
 } from "@/lib/log-event-details";
 import { statusSchema, type MarketDataRow, type StatusPayload, type X402Call } from "@/lib/schemas";
@@ -1029,6 +1031,11 @@ function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number])
     decision.priced_target_count != null
       ? ` across ${decision.priced_target_count} priced targets`
       : "";
+
+  if (isComplianceDecision(decision)) {
+    const target = decision.symbol?.trim() ? ` into ${decision.symbol.trim()}` : "";
+    return `Daily-minimum compliance swap${target}: a tiny trade to satisfy the one-trade-per-day rule. Not scored against the entry factors.`;
+  }
 
   if (strategyMode === "scalping") {
     const stats = scalpingFactorStats(decision);
@@ -4037,6 +4044,485 @@ function LiveScanPanel({
   );
 }
 
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === "undefined" || !window.matchMedia) {
+        return () => {};
+      }
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () =>
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        : false,
+    () => false,
+  );
+}
+
+type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
+
+const SCAN_STEP_MS = 540;
+
+/**
+ * Sequentially "analyses" each factor: a sweep beam travels the list, each row
+ * flips from pending → analysing → resolved (pass/fail), one at a time. Re-runs
+ * whenever `runKey` (symbol + cycle) changes so judges watch the agent think.
+ */
+function LiveFactorScan({
+  factors,
+  runKey,
+  readable = false,
+}: {
+  factors: ScanFactor[];
+  runKey: string;
+  readable?: boolean;
+}) {
+  const reduceMotion = usePrefersReducedMotion();
+  const [resolved, setResolved] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    if (factors.length === 0) {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
+    } else if (reduceMotion) {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(factors.length), 0));
+    } else {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
+      for (let i = 0; i < factors.length; i += 1) {
+        const timer = window.setTimeout(
+          () => {
+            if (!cancelled) {
+              setResolved((current) => Math.max(current, i + 1));
+            }
+          },
+          SCAN_STEP_MS * (i + 1),
+        );
+        timers.push(timer);
+      }
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [runKey, factors.length, reduceMotion]);
+
+  const activeIndex = resolved < factors.length ? resolved : -1;
+  const scanning = activeIndex !== -1;
+  const valueText = readable ? "text-[13px]" : "text-[12px]";
+
+  return (
+    <div className="relative">
+      {scanning ? (
+        <span
+          aria-hidden="true"
+          className="scan-beam pointer-events-none absolute inset-x-0 top-0 h-6 bg-[linear-gradient(180deg,rgba(255,210,26,0)_0%,rgba(255,210,26,0.12)_50%,rgba(255,210,26,0)_100%)]"
+        />
+      ) : null}
+      <ul className="relative space-y-1">
+        {factors.map((factor, index) => {
+          const isResolved = index < resolved;
+          const isActive = index === activeIndex;
+          const tone = factor.passed ? "text-[#00FF66]" : "text-[#FF6B6B]";
+
+          return (
+            <li
+              key={factor.key}
+              className={cx(
+                "rounded-sm px-2 py-1.5 font-mono transition-colors duration-300",
+                valueText,
+                isActive && "scan-row-active",
+                isResolved && "scan-row-resolve",
+                !isResolved && !isActive && "opacity-35",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                  {isResolved ? (
+                    <span className={cx("text-[13px] font-bold leading-none", tone)}>
+                      {factor.passed ? "✓" : "✗"}
+                    </span>
+                  ) : isActive ? (
+                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#FFD21A] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
+                  ) : (
+                    <span className="inline-block h-1 w-1 rounded-full bg-[#3A3A3A]" />
+                  )}
+                </span>
+                <span
+                  className={cx(
+                    "min-w-0 flex-1 truncate uppercase tracking-[0.06em]",
+                    isResolved ? "text-[#C8C8C8]" : isActive ? "text-white" : "text-[#6A6A6A]",
+                  )}
+                >
+                  {factor.label}
+                </span>
+                <span
+                  className={cx(
+                    "shrink-0 text-[10px] uppercase tracking-[0.12em]",
+                    isResolved ? tone : isActive ? "text-[#FFD21A]" : "text-[#3A3A3A]",
+                  )}
+                >
+                  {isResolved ? (factor.passed ? "PASS" : "FAIL") : isActive ? "SCAN" : "···"}
+                </span>
+              </div>
+              {isResolved ? (
+                <div className="mt-1 pl-7">
+                  {factor.reading ? (
+                    <p
+                      className={cx(
+                        "text-[11px] leading-4 tabular-nums",
+                        factor.passed ? "text-[#9AD3B0]" : "text-[#D89A9A]",
+                      )}
+                    >
+                      {factor.reading}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] leading-4 text-[#6A6A6A]">
+                    {explainFactor(factor.key, factor.passed)}
+                  </p>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Redesigned desktop left column: the detected token sits up top with the
+ * next-query countdown, then every signal factor is analysed live, and a verdict
+ * resolves once the scan completes.
+ */
+function LiveDecisionScan({
+  latestDecision,
+  decisions,
+  agentRunning,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  decisions: StatusPayload["decisions"];
+  agentRunning: boolean;
+}) {
+  const now = useNow();
+  const reduceMotion = usePrefersReducedMotion();
+  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
+  const nextAt = useMemo(
+    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
+    [intervalMs, latestDecision?.timestamp],
+  );
+  const remainingMs = cycleCountdownMs(nextAt, now);
+  const countdownLabel =
+    remainingMs === null
+      ? "N/A"
+      : remainingMs <= 0
+        ? agentRunning
+          ? "Scanning…"
+          : "Due now"
+        : formatCycleCountdown(remainingMs);
+  const countdownDue = remainingMs !== null && remainingMs <= 0 && agentRunning;
+
+  const analysis = useMemo(
+    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
+    [latestDecision],
+  );
+  const factors: ScanFactor[] = useMemo(() => {
+    const metrics = latestDecision?.factor_metrics ?? null;
+    return (analysis?.factors ?? []).map((factor) => ({
+      ...factor,
+      reading: metrics?.[factor.key] ?? null,
+    }));
+  }, [analysis, latestDecision]);
+  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
+  const symbol = latestDecision?.symbol ?? null;
+  const runKey = `${symbol ?? "none"}-${latestDecision?.cycle_number ?? "0"}`;
+
+  // Mirror the scan timeline so the verdict only appears once factors resolve.
+  const [scanDone, setScanDone] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    if (factors.length === 0) {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
+    } else if (reduceMotion) {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(true), 0));
+    } else {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
+      timers.push(
+        window.setTimeout(
+          () => !cancelled && setScanDone(true),
+          SCAN_STEP_MS * (factors.length + 0.5),
+        ),
+      );
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [runKey, factors.length, reduceMotion]);
+
+  const passedCount = factors.filter((factor) => factor.passed).length;
+  const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
+  const labelClass = "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]";
+
+  const scoreStats = latestDecision ? breakoutEntryScoreStats(latestDecision) : null;
+  const entryScoreReading =
+    latestDecision?.factor_metrics?.entry_score ??
+    (scoreStats?.score != null
+      ? `${scoreStats.score.toFixed(1)}/100 · need ${scoreStats.required}+ · floor ${scoreStats.quoteFloor}`
+      : null);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
+      {/* Detected asset + next query */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#1A1A1A] px-5 py-4">
+        <div className="min-w-0">
+          <div className={labelClass}>Detected asset</div>
+          {symbol ? (
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="relative">
+                <TokenIcon symbol={symbol} size={44} />
+                {agentRunning ? (
+                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#FFD21A]" />
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate font-mono text-[22px] font-semibold leading-none text-white">{symbol}</div>
+                <div className="mt-1 truncate font-mono text-[11px] text-[#8A8A8A]">
+                  Cycle #{latestDecision?.cycle_number ?? "N/A"}
+                  {latestDecision?.priced_target_count != null
+                    ? ` · ${latestDecision.priced_target_count} priced`
+                    : ""}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+          )}
+        </div>
+        <div className="flex flex-col items-end text-right">
+          <div className={labelClass}>Next query</div>
+          <div
+            className={cx(
+              "mt-1 font-mono text-[26px] font-semibold tabular-nums leading-none",
+              countdownDue ? "text-[#FFD21A]" : "text-white",
+            )}
+          >
+            {countdownLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Live analysis header */}
+      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <span
+            className={cx(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              scanDone ? "bg-[#00FF66] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#FFD21A]",
+            )}
+          />
+          <span className={labelClass}>{scanDone ? "Signal analysis" : "Analyzing signals"}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {strategyMode ? (
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#666666]">{strategyMode}</span>
+          ) : null}
+          {factors.length > 0 ? (
+            <span className="font-mono text-[11px] tabular-nums text-[#8A8A8A]">
+              <span className={passedCount > 0 ? "text-[#00FF66]" : "text-[#8A8A8A]"}>{passedCount}</span>
+              <span className="text-[#3A3A3A]">/</span>
+              {factors.length}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Entry score reading */}
+      {entryScoreReading ? (
+        <div className="shrink-0 px-5 pb-1">
+          <div className="flex items-center justify-between gap-2 border-b border-[#141414] pb-2">
+            <span className={labelClass}>Entry score</span>
+            <span
+              className={cx(
+                "font-mono text-[11px] tabular-nums",
+                scoreStats?.scoreMet ? "text-[#00FF66]" : "text-[#D89A9A]",
+              )}
+            >
+              {entryScoreReading}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Factor scan */}
+      <div className="console-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+        {factors.length > 0 ? (
+          <LiveFactorScan factors={factors} runKey={runKey} readable />
+        ) : (
+          <p className="px-2 py-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
+            {latestDecision?.reason?.trim()
+              ? latestDecision.reason
+              : "Signal audit will appear after the agent completes a scan cycle."}
+          </p>
+        )}
+      </div>
+
+      {/* Verdict */}
+      {latestDecision?.action ? (
+        <div className="shrink-0 border-t border-[#1A1A1A] px-5 py-4">
+          {scanDone ? (
+            <div className="scan-verdict-in">
+              <div className="flex items-center gap-2.5">
+                <StatusBadge status={latestDecision.action} tone={actionTone} />
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Decision</span>
+              </div>
+              {latestDecision.reason?.trim() ? (
+                <p className="mt-2.5 break-words font-mono text-[12px] leading-5 text-[#A8A8A8]">
+                  {latestDecision.reason}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[#FFD21A]">
+              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#FFD21A]" />
+              Resolving decision…
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Minimal Activity view: token + name on the left, the factor list on the
+ * right — laid out horizontally, no animations. A single button flips over to
+ * the historical log ("past").
+ */
+function SimpleLiveScan({
+  latestDecision,
+  onViewPast,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  onViewPast: () => void;
+}) {
+  const analysis = useMemo(
+    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
+    [latestDecision],
+  );
+  const factors: ScanFactor[] = useMemo(() => {
+    const metrics = latestDecision?.factor_metrics ?? null;
+    return (analysis?.factors ?? []).map((factor) => ({
+      ...factor,
+      reading: metrics?.[factor.key] ?? null,
+    }));
+  }, [analysis, latestDecision]);
+
+  const symbol = latestDecision?.symbol ?? null;
+  const passedCount = factors.filter((factor) => factor.passed).length;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Top bar: past toggle */}
+      <div className="flex shrink-0 justify-end pb-8">
+        <button
+          type="button"
+          onClick={onViewPast}
+          className="group inline-flex items-center gap-2 border border-[#2A2A2A] bg-black/40 px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#9A9A9A] transition-colors hover:border-[#3F3F3F] hover:text-white"
+        >
+          View past
+          <span aria-hidden="true" className="text-[#666666] transition-colors group-hover:text-[#FFD21A]">
+            →
+          </span>
+        </button>
+      </div>
+
+      {symbol ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Row 1: token + name */}
+          <div className="flex shrink-0 flex-col items-center text-center">
+            <TokenIcon symbol={symbol} size={104} />
+            <div className="mt-5 font-mono text-[30px] font-semibold leading-none text-white">{symbol}</div>
+            <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+              Cycle #{latestDecision?.cycle_number ?? "N/A"}
+              {factors.length > 0 ? (
+                <>
+                  {" · "}
+                  <span className={passedCount > 0 ? "text-[#00FF66]" : "text-[#8A8A8A]"}>{passedCount}</span>
+                  <span className="text-[#3A3A3A]">/</span>
+                  {factors.length}
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Row 2: factors, fit below */}
+          <div className="mt-8 min-h-0 flex-1">
+            {factors.length > 0 ? (
+              <StaticFactorList factors={factors} />
+            ) : (
+              <p className="py-3 text-center font-mono text-[12px] leading-5 text-[#8A8A8A]">
+                {latestDecision?.reason?.trim()
+                  ? latestDecision.reason
+                  : "Signal audit will appear after the agent completes a scan cycle."}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Static (non-animated) pass/fail factor list. */
+function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
+  return (
+    <ul className="grid grid-cols-2 gap-x-10 gap-y-1.5">
+      {factors.map((factor) => {
+        const tone = factor.passed ? "text-[#00FF66]" : "text-[#FF6B6B]";
+        return (
+          <li key={factor.key} className="rounded-sm px-2 py-1.5 font-mono text-[13px]">
+            <div className="flex items-center gap-3">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                <span className={cx("text-[13px] font-bold leading-none", tone)}>
+                  {factor.passed ? "✓" : "✗"}
+                </span>
+              </span>
+              <span className="min-w-0 flex-1 truncate uppercase tracking-[0.06em] text-[#C8C8C8]">
+                {factor.label}
+              </span>
+              <span className={cx("shrink-0 text-[10px] uppercase tracking-[0.12em]", tone)}>
+                {factor.passed ? "PASS" : "FAIL"}
+              </span>
+            </div>
+            <div className="mt-1 pl-7">
+              {factor.reading ? (
+                <p
+                  className={cx(
+                    "text-[11px] leading-4 tabular-nums",
+                    factor.passed ? "text-[#9AD3B0]" : "text-[#D89A9A]",
+                  )}
+                >
+                  {factor.reading}
+                </p>
+              ) : null}
+              <p className="text-[11px] leading-4 text-[#6A6A6A]">{explainFactor(factor.key, factor.passed)}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function ActivityTabSelector({
   value,
   onChange,
@@ -4346,51 +4832,70 @@ function ActivityPanel({
   desktop?: boolean;
 }) {
   const [view, setView] = useState<ActivityView>("sys");
+  const [pane, setPane] = useState<"live" | "past">("live");
   const flat = panelUsesFlatChrome(compact, desktop);
 
   if (desktop) {
     return (
       <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
         <div className="shrink-0 border-b border-[#1A1A1A] pb-4">
-          <div className="flex items-end justify-between gap-4">
-            <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-              <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
+          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+            <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
+          </ViewportReveal>
+        </div>
+
+        {pane === "live" ? (
+          <div className="flex min-h-0 flex-1 flex-col pt-10 pb-6">
+            <ViewportReveal variant="fade" delay={80} className="flex min-h-0 flex-1 flex-col">
+              <SimpleLiveScan latestDecision={latestDecision} onViewPast={() => setPane("past")} />
             </ViewportReveal>
-            <ActivityTabSelector value={view} onChange={setView} compact />
           </div>
-        </div>
-
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-6 pt-5">
-          <div className="flex min-h-0 flex-col">
-            <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
-              {(activeView) =>
-                activeView === "txs" ? (
-                  <TxActivityPanel rows={activityRows} compact readable />
-                ) : (
-                  <SysLogsPanel
-                    rows={logRows}
-                    agentLog={agentLog}
-                    latestDecision={latestDecision}
-                    agentRunning={agentRunning}
-                    compact
-                    readable
-                  />
-                )
-              }
-            </ActivityViewTransition>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col pt-5 pb-6">
+            <ViewportReveal variant="fade" delay={80} className="flex min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#1A1A1A] px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPane("live")}
+                      className="group inline-flex items-center gap-2 border border-[#2A2A2A] bg-black/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#9A9A9A] transition-colors hover:border-[#3F3F3F] hover:text-white"
+                    >
+                      <span aria-hidden="true" className="text-[#666666] transition-colors group-hover:text-[#FFD21A]">
+                        ←
+                      </span>
+                      Live
+                    </button>
+                    <h2 className="truncate font-mono text-[14px] uppercase tracking-[0.1em] text-[#DADADA]">
+                      {view === "txs" ? "Tx Activity" : "Decision & Execution Log"}
+                    </h2>
+                  </div>
+                  <ActivityTabSelector value={view} onChange={setView} compact />
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden px-5 py-4">
+                  <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
+                    {(activeView) =>
+                      activeView === "txs" ? (
+                        <TxActivityPanel rows={activityRows} compact readable fillHeight />
+                      ) : (
+                        <SysLogsPanel
+                          rows={logRows}
+                          agentLog={agentLog}
+                          latestDecision={latestDecision}
+                          agentRunning={agentRunning}
+                          compact
+                          readable
+                          fillHeight
+                        />
+                      )
+                    }
+                  </ActivityViewTransition>
+                </div>
+              </div>
+            </ViewportReveal>
           </div>
-
-          <div className="flex min-h-0 flex-col">
-            <LiveScanPanel
-              latestDecision={latestDecision}
-              decisions={decisions}
-              agentRunning={agentRunning}
-              compact
-              readable
-            />
-          </div>
-        </div>
+        )}
       </section>
     );
   }
@@ -5062,7 +5567,6 @@ function DesktopOverviewSection({
 }) {
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <DesktopHeroMetrics view={view} />
       <div className="flex min-h-0 flex-1 flex-col pb-6 pr-8 pt-3">
         <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E1E] bg-black/80">
           <ViewportReveal
@@ -5071,6 +5575,9 @@ function DesktopOverviewSection({
             duration="slow"
             className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E1E]"
           >
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+              <DesktopHeroMetrics view={view} />
+            </div>
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
@@ -5105,7 +5612,7 @@ function DesktopOverviewSection({
 
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="shrink-0 pr-8 pt-6">
+    <section className="px-4 pt-3">
       <div className="grid grid-cols-4 divide-x divide-[#1A1A1A]">
         {view.metrics.map((metric, index) => (
           <ViewportReveal
@@ -5115,14 +5622,14 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
             duration={metric.label.includes("Balance") ? "slow" : "normal"}
             className="min-w-0 px-6 text-center first:pl-0 last:pr-0"
           >
-            <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">{metric.label}</div>
-            <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-              <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-              {metric.unit ? <span className="font-mono text-[13px] text-[#B8B8B8]">{metric.unit}</span> : null}
+            <div className="font-mono text-[7px] font-medium text-[#B8B8B8]">{metric.label}</div>
+            <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
+              <span className="font-mono text-[12px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+              {metric.unit ? <span className="font-mono text-[7px] text-[#B8B8B8]">{metric.unit}</span> : null}
               {metric.delta ? (
                 <span
                   className={cx(
-                    "font-mono text-[14px] font-bold tabular-nums",
+                    "font-mono text-[7px] font-bold tabular-nums",
                     metric.tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
                   )}
                 >
@@ -5133,7 +5640,6 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
           </ViewportReveal>
         ))}
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
     </section>
   );
 }
