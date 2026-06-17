@@ -14,9 +14,12 @@ import {
 import {
   Activity,
   BookOpen,
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   CreditCard,
+  ExternalLink,
   Filter,
   Github,
   Globe,
@@ -80,7 +83,7 @@ import {
   explainFactor,
   type LogEventDetails,
 } from "@/lib/log-event-details";
-import { statusSchema, type MarketDataRow, type StatusPayload, type X402Call } from "@/lib/schemas";
+import { statusSchema, type Decision, type MarketDataRow, type StatusPayload, type X402Call } from "@/lib/schemas";
 
 type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402";
 type ActivityView = "txs" | "sys";
@@ -3281,12 +3284,14 @@ function PositionMetricCell({
   column,
   index,
   tone = "neutral",
+  valueClassName,
 }: {
   label: string;
   value: string;
   column: PositionColumn;
   index: number;
   tone?: PositionTone;
+  valueClassName?: string;
 }) {
   return (
     <ViewportReveal
@@ -3296,7 +3301,7 @@ function PositionMetricCell({
       className="min-w-0 bg-[#030303] px-4 py-3"
     >
       <div className="font-mono text-[10px] uppercase text-[#757575]">{label}</div>
-      <div className={cx("mt-1 truncate font-mono text-[14px] tabular-nums", positionToneClass(tone))}>{value}</div>
+      <div className={cx("mt-1 truncate font-mono text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
     </ViewportReveal>
   );
 }
@@ -3418,19 +3423,350 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
   );
 }
 
+function findEntryDecisionForPosition(
+  row: PositionRow,
+  decisions: Decision[],
+): Decision | null {
+  const symbol = row.symbol.trim().toUpperCase();
+  const openedAt = row.openedAt ? Date.parse(row.openedAt) : null;
+
+  const entryDecisions = decisions
+    .filter((d) => d.action === "ENTER" && d.symbol?.trim().toUpperCase() === symbol)
+    .sort((a, b) => {
+      const aTime = a.timestamp ? Date.parse(a.timestamp) : 0;
+      const bTime = b.timestamp ? Date.parse(b.timestamp) : 0;
+      return bTime - aTime;
+    });
+
+  if (!entryDecisions.length) return null;
+
+  if (openedAt) {
+    const match = entryDecisions.find((d) => {
+      const dTime = d.timestamp ? Date.parse(d.timestamp) : 0;
+      return Math.abs(dTime - openedAt) < 60 * 60 * 1000;
+    });
+    return match ?? entryDecisions[0];
+  }
+
+  return entryDecisions[0];
+}
+
+function formatDuration(minutes: number): string {
+  if (minutes < 1) return "<1m";
+  const h = Math.floor(minutes / 60);
+  const m = Math.floor(minutes % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function positionElapsedTime(openedAt: string | null): string {
+  if (!openedAt) return "N/A";
+  const opened = Date.parse(openedAt);
+  if (!Number.isFinite(opened)) return "N/A";
+  const minutes = (Date.now() - opened) / 60000;
+  return formatDuration(minutes);
+}
+
+function positionRemainingTime(
+  openedAt: string | null,
+  holdTimeSeconds: number | null | undefined,
+): string | null {
+  if (!openedAt || !holdTimeSeconds || !Number.isFinite(holdTimeSeconds)) return null;
+  const opened = Date.parse(openedAt);
+  if (!Number.isFinite(opened)) return null;
+  const elapsedMs = Date.now() - opened;
+  const remainingMs = holdTimeSeconds * 1000 - elapsedMs;
+  if (remainingMs <= 0) return "expiring";
+  return formatDuration(remainingMs / 60000);
+}
+
+function buildPositionsSnapshot(
+  data: StatusPayload | null,
+  rows: PositionRow[],
+  decisions: Decision[],
+  totalPositionValue: string,
+  agentMode: string,
+) {
+  const snapshotAt = new Date().toISOString();
+  const trackedRows = rows.filter((row) => row.source === "tracked");
+  const walletRows = rows.filter((row) => row.source === "wallet");
+  const managedRows = rows.filter(
+    (row) =>
+      positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
+  );
+  const partialRows = rows.filter((row) => !managedRows.includes(row));
+
+  const positionSymbols = new Set(rows.map((row) => competitionTokenKey(row.symbol)));
+
+  const positions = rows.map((row) => {
+    const entryDecision = findEntryDecisionForPosition(row, decisions);
+    const riskStats = positionRiskStats(row);
+    const status = positionStatus(row);
+    const emptyFields = [
+      !positivePrice(row.amount) && "amount",
+      !positivePrice(row.entryPrice) && "entryPrice",
+      !positivePrice(row.entryValueUsd) && "entryValueUsd",
+      !positivePrice(row.currentPrice) && "currentPrice",
+      !positivePrice(row.highestPrice) && "highestPrice",
+      !positivePrice(row.trailingStopPrice) && "trailingStopPrice",
+      !positivePrice(row.takeProfitPrice) && "takeProfitPrice",
+      !row.openedAt && "openedAt",
+    ].filter((field): field is string => typeof field === "string");
+
+    return {
+      ...row,
+      riskStats,
+      status,
+      entryDecision,
+      emptyFields,
+    };
+  });
+
+  const entryDecisions = positions.map((p) => p.entryDecision).filter((d): d is Decision => d !== null);
+
+  const relevantExecutions = (data?.executions ?? []).filter((execution) => {
+    const toSymbol = execution.to_symbol;
+    return toSymbol && positionSymbols.has(competitionTokenKey(toSymbol));
+  });
+
+  const relevantBalances = (data?.wallet.balances ?? []).filter((balance) => {
+    return positionSymbols.has(competitionTokenKey(balance.symbol));
+  });
+
+  const walletErrors = data?.wallet.errors ?? [];
+  const telemetryError =
+    data?.connection?.error ??
+    (walletErrors.length > 0 ? walletErrors.map((e) => `${e.source}: ${e.error}`).join("; ") : null);
+
+  const analysisNotes: string[] = [];
+  if (rows.length === 0) {
+    analysisNotes.push("No open positions in positions.json or wallet.");
+  }
+  if (walletRows.length > 0) {
+    analysisNotes.push(
+      `${walletRows.length} wallet-only position(s) detected without matching positions.json entry.`,
+    );
+  }
+  if (partialRows.length > 0) {
+    analysisNotes.push(
+      `${partialRows.length} position(s) missing one or more risk levels (entry/stop/target).`,
+    );
+  }
+  if (entryDecisions.length === 0 && rows.length > 0) {
+    analysisNotes.push("No matching ENTER decisions found for current positions.");
+  }
+  if (telemetryError) {
+    analysisNotes.push(`Telemetry error: ${telemetryError}`);
+  }
+
+  return {
+    snapshotAt,
+    agentMode,
+    summary: {
+      totalPositions: rows.length,
+      trackedPositions: trackedRows.length,
+      walletOnlyPositions: walletRows.length,
+      managedPositions: managedRows.length,
+      partialPositions: partialRows.length,
+      totalExposure: totalPositionValue,
+    },
+    positions,
+    entryDecisions,
+    latestDecision: data?.latestDecision ?? null,
+    rawPositions: data?.positions ?? null,
+    wallet: {
+      address: data?.wallet.address ?? null,
+      portfolioTotalUsd: data?.wallet.portfolioTotalUsd ?? null,
+      relevantBalances,
+      errors: walletErrors,
+    },
+    executions: relevantExecutions,
+    guardrails: data?.guardrails ?? null,
+    health: data?.health ?? null,
+    connection: data?.connection ?? null,
+    files: data?.files ?? null,
+    telemetryError,
+    analysisNotes,
+  };
+}
+
+function CopyJsonButton({ json }: { json: object }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(json, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // eslint-disable-next-line no-console
+      console.warn("Failed to copy positions snapshot to clipboard.");
+    }
+  }, [json]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="inline-flex items-center gap-1.5 rounded-sm border border-[#2A2A2A] bg-[#0A0A0A] px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[#A8A8A8] transition-colors hover:border-[#3A3A3A] hover:text-white"
+    >
+      {copied ? (
+        <>
+          <Check size={12} className="text-[#00FF66]" aria-hidden="true" />
+          <span>Copied</span>
+        </>
+      ) : (
+        <>
+          <Copy size={12} aria-hidden="true" />
+          <span>Copy JSON</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+const FACTOR_LABELS: Record<string, string> = {
+  volume_breakout: "Volume",
+  six_hour_high_break: "High break",
+  regime_not_risk_off: "Regime",
+  slippage_under_cap: "Slippage",
+  rsi_in_range: "RSI",
+  derivatives_risk_clear: "Derivatives",
+  micro_momentum: "Momentum",
+  slippage_ok: "Slippage",
+  regime_neutro: "Regime",
+  no_whale_dump: "No dump",
+  gas_viable: "Gas",
+};
+
+function PositionProgressBar({ row }: { row: PositionRow }) {
+  const entry = row.entryPrice;
+  const stop = row.trailingStopPrice;
+  const target = row.takeProfitPrice;
+  const current = row.currentPrice;
+
+  if (!positivePrice(stop) || !positivePrice(target) || !positivePrice(entry)) {
+    return null;
+  }
+
+  const range = (target as number) - (stop as number);
+  const currentRaw = positivePrice(current) ? (((current as number) - (stop as number)) / range) * 100 : null;
+  const currentPct = currentRaw !== null ? Math.min(100, Math.max(0, currentRaw)) : null;
+
+  const toTargetPct = positivePrice(current)
+    ? Math.max(0, ((target as number) - (current as number)) / range) * 100
+    : null;
+  const toStopPct = positivePrice(current)
+    ? Math.max(0, ((current as number) - (stop as number)) / range) * 100
+    : null;
+
+  const direction = positivePrice(current) && (current as number) >= (entry as number) ? "target" : "stop";
+
+  return (
+    <div className="border-t border-[#1A1A1A] px-5 py-4">
+      <div className="mb-3 flex items-center justify-between font-mono">
+        <div className="text-[10px] uppercase text-[#757575]">Position distance</div>
+        <div className="text-[11px] tabular-nums">
+          {toTargetPct !== null && toStopPct !== null ? (
+            <span className={direction === "target" ? "text-[#00FF66]" : "text-[#FFD21A]"}>
+              {direction === "target"
+                ? `${toTargetPct.toFixed(1)}% to target`
+                : `${toStopPct.toFixed(1)}% to stop`}
+            </span>
+          ) : (
+            <span className="text-[#666666]">N/A</span>
+          )}
+        </div>
+      </div>
+      <div className="relative h-px bg-[#242424]">
+        {/* White fill — covering percentage from stop to current */}
+        <div
+          className="absolute inset-y-0 left-0 bg-white"
+          style={{ width: `${currentPct ?? 0}%` }}
+        />
+        {/* Dot at the end of the fill */}
+        {currentPct !== null ? (
+          <div
+            className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+            style={{ left: `${currentPct}%` }}
+          />
+        ) : null}
+      </div>
+      <div className="mt-2.5 flex justify-between font-mono text-[10px] tabular-nums text-[#555555]">
+        <span>Stop {formatPrice(stop)}</span>
+        <span>Entry {formatPrice(entry)}</span>
+        <span>Target {formatPrice(target)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decision | null }) {
+  const elapsed = positionElapsedTime(row.openedAt);
+  const remaining = positionRemainingTime(row.openedAt, decision?.hold_time_seconds);
+
+  return (
+    <div className="flex items-center gap-3 font-mono text-[10px] uppercase text-[#757575]">
+      <span>Held: {elapsed}</span>
+      {remaining ? (
+        <>
+          <span className="h-1 w-1 rounded-full bg-[#3A3A3A]" aria-hidden="true" />
+          <span className={remaining === "expiring" ? "text-[#FF7373]" : "text-[#8FD9FF]"}>
+            {remaining === "expiring" ? "Time stop" : `${remaining} remaining`}
+          </span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function PositionEntryReason({ decision }: { decision: Decision | null }) {
+  if (!decision) return null;
+
+  const factors = Object.entries(decision.factor_scores ?? {})
+    .filter(([, passed]) => passed)
+    .map(([key]) => FACTOR_LABELS[key] ?? key.replace(/_/g, " "));
+
+  return (
+    <div className="border-t border-[#1A1A1A] px-5 py-3">
+      <div className="mb-1.5 font-mono text-[10px] uppercase text-[#757575]">Entry reason</div>
+      <div className="font-mono text-[11px] leading-4 text-[#A8A8A8]">{decision.reason ?? "—"}</div>
+      {factors.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {factors.map((factor) => (
+            <span
+              key={factor}
+              className="inline-flex items-center gap-1 border border-[#2A2A2A] bg-[#0A0A0A] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-[#8A8A8A]"
+            >
+              <span className="h-1 w-1 rounded-full bg-[#00FF66]" />
+              {factor}
+            </span>
+          ))}
+        </div>
+      )}
+      {decision.entry_score != null && (
+        <div className="mt-2 font-mono text-[10px] text-[#666666]">
+          Score: <span className="text-[#DADADA]">{decision.entry_score.toFixed(0)}/100</span>
+          {decision.strategy_mode ? ` · ${decision.strategy_mode}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DesktopPositionCard({
   row,
   index,
   explorerUrl,
   scrollRoot,
+  entryDecision,
 }: {
   row: PositionRow;
   index: number;
   explorerUrl: string | null;
   scrollRoot: Element | null;
+  entryDecision?: Decision | null;
 }) {
-  const status = positionStatus(row);
-
   const body = (
     <ViewportReveal
       variant={index === 0 ? positionLeadVariant(index) : "fade"}
@@ -3439,46 +3775,27 @@ function DesktopPositionCard({
       root={scrollRoot}
       className="group overflow-hidden border border-[#1A1A1A] bg-black/80 transition-colors hover:border-[#2A2A2A] hover:bg-[#030303]"
     >
-      <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(250px,0.72fr)_minmax(0,1.28fr)]">
+      <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(150px,0.32fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col justify-between border-b border-[#1A1A1A] px-5 py-5 xl:border-b-0 xl:border-r">
-          <div>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <TokenIcon symbol={row.symbol} size={44} />
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-mono text-[26px] font-bold leading-none text-white">
-                      {row.symbol}
-                    </span>
-                    {explorerUrl ? (
-                      <span
-                        className="shrink-0 font-mono text-[13px] text-[#666666] opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-hidden="true"
-                      >
-                        -&gt;
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 font-mono text-[11px] text-[#757575]">
-                    {row.source === "wallet" ? "Wallet balance" : `Opened ${formatOpenedAt(row.openedAt)}`}
-                  </div>
-                </div>
-              </div>
-              <span
-                className={cx(
-                  "shrink-0 border px-2 py-1 font-mono text-[10px] uppercase",
-                  positionBadgeClass(status.tone),
-                )}
-              >
-                {status.label}
-              </span>
-            </div>
-
-            <p className="mt-5 max-w-[32rem] break-words font-mono text-[12px] leading-5 text-[#8A8A8A]">
-              {status.detail}
-            </p>
+          {/* Top: date only */}
+          <div className="font-mono text-[11px] text-white">
+            {row.source === "wallet" ? "Wallet balance" : `Opened ${formatOpenedAt(row.openedAt)}`}
           </div>
 
+          {/* Center: large token icon */}
+          <div className="flex flex-1 items-center justify-center py-4">
+            <TokenIcon symbol={row.symbol} size={72} />
+          </div>
+
+          {/* Explorer indicator */}
+          {explorerUrl ? (
+            <div className="flex items-center gap-1 font-mono text-[10px] uppercase text-[#757575]">
+              <span>BSC</span>
+              <ExternalLink size={10} />
+            </div>
+          ) : null}
+
+          {/* Bottom stats */}
           <div className="mt-5 grid grid-cols-3 gap-px bg-[#141416]">
             <div className="min-w-0 bg-[#050505] px-3 py-3">
               <div className="font-mono text-[10px] uppercase text-[#757575]">Amount</div>
@@ -3508,39 +3825,34 @@ function DesktopPositionCard({
         </div>
 
         <div className="min-w-0">
-          <div className="grid grid-cols-2 gap-px bg-[#141416] md:grid-cols-3">
-            <PositionMetricCell label="Entry" value={formatPrice(row.entryPrice)} column="entry" index={index} />
+          <div className="grid grid-cols-4 gap-px bg-[#141416]">
+            <PositionMetricCell label="Entry" value={formatPrice(row.entryPrice)} column="entry" index={index} valueClassName="font-bold text-white" />
             <PositionMetricCell
               label="High"
               value={formatPrice(row.highestPrice)}
               column="high"
               index={index}
-              tone={positivePrice(row.highestPrice) ? "green" : "neutral"}
+              tone="neutral"
+              valueClassName="text-white/60"
             />
             <PositionMetricCell
               label="Stop"
               value={formatPrice(row.trailingStopPrice)}
               column="stop"
               index={index}
-              tone={positivePrice(row.trailingStopPrice) ? "yellow" : "neutral"}
+              tone="neutral"
+              valueClassName="text-white/60"
             />
             <PositionMetricCell
               label="Target"
               value={formatPrice(row.takeProfitPrice)}
               column="target"
               index={index}
-              tone={positivePrice(row.takeProfitPrice) ? "blue" : "neutral"}
-            />
-            <PositionMetricCell label="Opened" value={formatOpenedAt(row.openedAt)} column="opened" index={index} />
-            <PositionMetricCell
-              label="Source"
-              value={row.source === "wallet" ? "Wallet" : "positions.json"}
-              column="value"
-              index={index}
-              tone={row.source === "wallet" ? "yellow" : "green"}
+              valueClassName="font-bold text-white"
             />
           </div>
-          <PositionRiskCorridor row={row} />
+          <PositionProgressBar row={row} />
+          <PositionEntryReason decision={entryDecision ?? null} />
         </div>
       </div>
     </ViewportReveal>
@@ -3664,12 +3976,18 @@ function DesktopPositionsBoard({
   walletAddress,
   totalPositionValue,
   scrollRoot,
+  scrollRef,
+  decisions = [],
+  headerAction,
 }: {
   rows: PositionRow[];
   executions: StatusPayload["executions"];
   walletAddress: string | null;
   totalPositionValue: string;
   scrollRoot: Element | null;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  decisions?: Decision[];
+  headerAction?: ReactNode;
 }) {
   const stats = rows.map((row) => ({ row, ...positionRiskStats(row) }));
   const nearestStop = stats
@@ -3726,22 +4044,21 @@ function DesktopPositionsBoard({
   }
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="grid shrink-0 grid-cols-2 gap-px border-b border-[#1A1A1A] bg-[#1A1A1A] xl:grid-cols-4">
-        {summaryBlocks.map((block, index) => (
-          <PositionSummaryBlock
-            key={block.label}
-            label={block.label}
-            value={block.value}
-            detail={block.detail}
-            tone={block.tone}
-            index={index}
-            scrollRoot={scrollRoot}
-          />
-        ))}
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#1A1A1A] px-6 py-2.5">
+        <div className="flex items-center gap-4 font-mono text-[11px]">
+          <span className="text-[#757575]">
+            Positions: <span className="text-white">{rows.length}</span>
+          </span>
+          <span className="h-1 w-px bg-[#333]" />
+          <span className="text-[#757575]">
+            Exposure: <span className="text-white">{totalPositionValue}</span>
+          </span>
+        </div>
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 px-6 py-5 xl:grid-cols-[minmax(0,1fr)_minmax(270px,320px)]">
-        <div className="min-w-0 space-y-4">
+      <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="min-w-0">
           {rows.map((row, index) => (
             <DesktopPositionCard
               key={row.id}
@@ -3749,9 +4066,11 @@ function DesktopPositionsBoard({
               index={index}
               explorerUrl={positionExplorerUrl(row, executions, walletAddress)}
               scrollRoot={scrollRoot}
+              entryDecision={findEntryDecisionForPosition(row, decisions)}
             />
           ))}
         </div>
+        {/* PositionsInsightRail — sidebar hidden for full-width rows
         <PositionsInsightRail
           rows={rows}
           nearestStop={nearestStop}
@@ -3759,6 +4078,7 @@ function DesktopPositionsBoard({
           totalPositionValue={totalPositionValue}
           scrollRoot={scrollRoot}
         />
+        */}
       </div>
     </div>
   );
@@ -3772,6 +4092,8 @@ function ActivePositionsPanel({
   walletAddress = null,
   compact = false,
   desktop = false,
+  decisions = [],
+  data = null,
 }: {
   rows: PositionRow[];
   totalPositionValue: string;
@@ -3780,12 +4102,19 @@ function ActivePositionsPanel({
   walletAddress?: string | null;
   compact?: boolean;
   desktop?: boolean;
+  decisions?: Decision[];
+  data?: StatusPayload | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
-  const paperMode = agentMode === "PAPER";
   const flat = panelUsesFlatChrome(compact, desktop);
   const tableCompact = flat;
+
+  const snapshot = useMemo(
+    () => buildPositionsSnapshot(data, rows, decisions, totalPositionValue, agentMode),
+    [data, rows, decisions, totalPositionValue, agentMode],
+  );
+  const copyButton = <CopyJsonButton json={snapshot} />;
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
@@ -3794,104 +4123,71 @@ function ActivePositionsPanel({
   return (
     <section
       className={cx(
-        "flex min-h-0 flex-col",
+        "flex min-h-0 flex-col overflow-hidden",
         compact && "flex-1 px-4 pt-4",
-        desktop && "flex-1 px-8 pt-6",
+        desktop && "flex-1",
         !flat && "px-10 py-9",
       )}
     >
-      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "mb-6")}>
-        <ViewportReveal variant="blur" duration="slow">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-          <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-            <h1
-              className={cx(
-                "font-mono font-semibold leading-tight text-white",
-                flat ? "text-[28px]" : "text-[32px]",
-              )}
-            >
-              Active Positions
-            </h1>
-            {flat && !(desktop && !compact) ? (
-              <div className="shrink-0 text-right font-mono">
-                <ViewportReveal variant="fade" delay={70} duration="fast">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
-                    {rows.length} {rows.length === 1 ? "position" : "positions"}
-                  </div>
-                </ViewportReveal>
-                <ViewportReveal variant="scale" delay={130} duration="slow">
-                  <div className="mt-1 text-sm tabular-nums text-white">{totalPositionValue}</div>
-                </ViewportReveal>
-              </div>
-            ) : !flat ? (
-              <ViewportReveal variant="scale" delay={90} duration="fast">
-                <StatusBadge status={agentMode} tone={paperMode ? "yellow" : "green"} />
-              </ViewportReveal>
-            ) : null}
-          </div>
-          {!flat ? (
-            <ViewportReveal variant="left" delay={140}>
-              <p className="mt-2 max-w-3xl font-mono text-[12px] leading-5 text-[#8A8A8A]">
-                Open holdings tracked in `positions.json` on EC2. Entry price, trailing stop, and take-profit levels are
-                maintained by the agent after each decision cycle.
-              </p>
-            </ViewportReveal>
-          ) : null}
-        </ViewportReveal>
-        {!flat ? (
-          <ViewportReveal variant="expand" delay={180} duration="slow" className="mt-4 h-px w-full bg-[#1A1A1A]" />
-        ) : null}
-      </div>
-
       {!flat ? (
-        <div className="mb-6 grid gap-4 sm:grid-cols-2">
-          <ViewportReveal variant="fade" delay={100}>
-            <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
-              <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
-            </div>
-          </ViewportReveal>
-          <ViewportReveal variant="scale" delay={160} duration="slow">
-            <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total position value</div>
-              <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
-            </div>
-          </ViewportReveal>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="grid flex-1 gap-4 sm:grid-cols-2">
+            <ViewportReveal variant="fade" delay={100}>
+              <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
+                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="scale" delay={160} duration="slow">
+              <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total position value</div>
+                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
+              </div>
+            </ViewportReveal>
+          </div>
+          <div className="hidden shrink-0 sm:block">{copyButton}</div>
         </div>
       ) : null}
 
       {!flat ? (
         <ViewportReveal variant="fade" delay={200}>
           <div className="border border-[#2A2A2A] bg-black/88">
-            <div className="border-b border-[#1A1A1A] px-5 py-5">
-              <ViewportReveal variant="left" delay={240} duration="fast">
-                <h2 className="font-mono text-xl text-[#DADADA]">Position Book</h2>
-              </ViewportReveal>
-            </div>
             <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
           </div>
         </ViewportReveal>
       ) : desktop && !compact ? (
-        <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DesktopPositionsBoard
             rows={rows}
             executions={executions}
             walletAddress={walletAddress}
             totalPositionValue={totalPositionValue}
             scrollRoot={scrollRoot}
+            scrollRef={scrollRef}
+            decisions={decisions}
+            headerAction={copyButton}
           />
         </div>
       ) : (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
-          <div className="shrink-0 border-b border-[#1A1A1A] px-4 py-3">
-            <ViewportReveal variant="left" delay={160} duration="fast">
-              <h2 className="font-mono text-[18px] text-[#DADADA]">Position Book</h2>
-            </ViewportReveal>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#2A2A2A] bg-black/88 px-4 py-2.5">
+            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.08em] text-[#757575]">
+              <span>
+                Positions: <span className="text-white">{rows.length}</span>
+              </span>
+              <span className="h-1 w-px bg-[#333]" />
+              <span>
+                Exposure: <span className="text-white">{totalPositionValue}</span>
+              </span>
+            </div>
+            {copyButton}
           </div>
-          <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-            <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
+          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#2A2A2A] bg-black/88">
+            <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+              <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
+            </div>
           </div>
         </div>
       )}
@@ -5146,6 +5442,8 @@ function DesktopDashboard({
                 agentMode={view.agentMode}
                 executions={data?.executions ?? []}
                 walletAddress={data?.wallet.address ?? null}
+                decisions={data?.decisions ?? []}
+                data={data}
                 desktop
               />
             ) : section === "algorithm" ? (
@@ -5189,22 +5487,6 @@ function HomePositionsSummary({
         compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
       )}
     >
-      <div
-        className={cx(
-          "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
-          compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
-        )}
-      >
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-          <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
-            Active Positions
-          </h2>
-        </div>
-        <span className={cx("font-mono tabular-nums text-[#B8B8B8]", compact ? "text-[11px]" : "text-[13px]")}>
-          {totalPositionValue}
-        </span>
-      </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
@@ -6252,6 +6534,8 @@ function MobileDashboard({
                 totalPositionValue={view.totalPositionValue}
                 agentMode={view.agentMode}
                 compact
+                decisions={data?.decisions ?? []}
+                data={data}
               />
             ) : section === "algorithm" ? (
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
