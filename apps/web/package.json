@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test src/lib/market-chat-context.test.ts src/lib/market-chat-engine.test.ts"
+    "test": "npx tsx --test src/lib/market-chat-context.test.ts src/lib/market-chat-engine.test.ts src/lib/factor-scoring.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

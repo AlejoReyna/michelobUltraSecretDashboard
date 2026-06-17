@@ -31,6 +31,22 @@ export type EntryFactorKey = (typeof ENTRY_FACTOR_KEYS)[number];
 
 export type StrategyMode = "breakout" | "scalping";
 
+/**
+ * A daily-minimum compliance swap is a tiny end-of-day trade fired purely to
+ * satisfy the competition's one-trade-per-day rule. It is NOT evaluated against
+ * the six entry factors — the engine tags it with `source="daily_minimum"` and
+ * `factor_scores={ daily_minimum: true }`, which a naive factor counter renders
+ * as a misleading "1/6 factors". Detect it so callers can show "compliance
+ * trade" / "not scored" instead.
+ */
+export function isComplianceDecision(decision: StatusPayload["decisions"][number]): boolean {
+  const source = (decision as { source?: unknown }).source;
+  if (typeof source === "string" && source.trim().toLowerCase() === "daily_minimum") {
+    return true;
+  }
+  return Boolean(decision.factor_scores?.daily_minimum);
+}
+
 export function resolveStrategyMode(decision: StatusPayload["decisions"][number]): StrategyMode {
   if (decision.strategy_mode === "scalping" || decision.strategy_mode === "breakout") {
     return decision.strategy_mode;
@@ -68,7 +84,12 @@ export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
   };
 }
 
+export const COMPLIANCE_TRADE_LABEL = "compliance trade";
+
 export function decisionFactorSummary(decision: StatusPayload["decisions"][number]) {
+  if (isComplianceDecision(decision)) {
+    return COMPLIANCE_TRADE_LABEL;
+  }
   if (resolveStrategyMode(decision) === "breakout" && typeof decision.entry_score === "number") {
     return `score ${Math.round(decision.entry_score)}/${BREAKOUT_ENTRY_SCORE_MAX}`;
   }

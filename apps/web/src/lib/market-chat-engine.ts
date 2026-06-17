@@ -2,6 +2,7 @@ import { detailsFromDecision } from "@/lib/log-event-details";
 import {
   BREAKOUT_ENTRY_SCORE_MAX,
   breakoutEntryScoreStats,
+  isComplianceDecision,
   resolveStrategyMode,
 } from "@/lib/factor-scoring";
 import type { StatusPayload } from "@/lib/schemas";
@@ -164,8 +165,9 @@ function latestScanSummary(data: StatusPayload): string {
   const factors =
     analysis.factors?.map((factor) => `${factor.passed ? "✓" : "✗"} ${factor.label}`).join("\n") ??
     "Factor audit not available for this cycle.";
-  const scoreLine =
-    strategyMode === "breakout" && breakoutScore.score != null
+  const scoreLine = isComplianceDecision(decision)
+    ? "Compliance trade: daily-minimum swap (not scored against the 6 entry factors)."
+    : strategyMode === "breakout" && breakoutScore.score != null
       ? `Entry score: ${breakoutScore.score}/${BREAKOUT_ENTRY_SCORE_MAX} (need ${breakoutScore.required}+; slippage ${
           breakoutScore.slippageMet ? "under cap" : "not cleared"
         })`

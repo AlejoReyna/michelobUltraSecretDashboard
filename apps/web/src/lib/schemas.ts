@@ -26,6 +26,7 @@ export const decisionSchema = z
     symbol: z.string().nullable().optional(),
     position_size_usdc: nullableNumber,
     factor_scores: factorScoresSchema.default({}),
+    factor_metrics: z.record(z.string(), z.string()).nullable().optional(),
     true_factor_count: nullableNumber,
     estimated_slippage_pct: nullableNumber,
     reason: z.string().nullable().optional(),
@@ -35,6 +36,10 @@ export const decisionSchema = z
     entries_blocked_reason: z.string().nullable().optional(),
     exit_reason: z.string().nullable().optional(),
     hold_time_seconds: nullableNumber,
+    // Provenance of the decision. "daily_minimum" marks the tiny end-of-day
+    // compliance swap, which is NOT scored against the 6 entry factors and must
+    // not render as "1/6 factors".
+    source: z.string().nullable().optional(),
   })
   .passthrough();
 

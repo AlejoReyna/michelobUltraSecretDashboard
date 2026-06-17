@@ -3,6 +3,7 @@ import {
   ENTRY_FACTOR_KEYS,
   breakoutEntryScoreStats,
   entryFactorStats,
+  isComplianceDecision,
   resolveStrategyMode,
 } from "@/lib/factor-scoring";
 import { SCALPING_FACTOR_KEYS, scalpingFactorStats } from "@/lib/scalping-scoring";
@@ -40,6 +41,67 @@ const SCALPING_FACTOR_LABELS: Record<string, string> = {
   no_whale_dump: "No whale dump",
   gas_viable: "Gas viable",
 };
+
+/**
+ * Short, human-readable explanation for why each signal factor passed or failed.
+ * Shown inline under each factor row in the live decision scan so it's obvious
+ * what the agent actually checked and what blocked the trade.
+ */
+const FACTOR_EXPLANATIONS: Record<string, { pass: string; fail: string }> = {
+  volume_breakout: {
+    pass: "Volume surged above the breakout threshold.",
+    fail: "Volume hasn't surged enough to confirm a breakout.",
+  },
+  six_hour_high_break: {
+    pass: "Price cleared its 6-hour reference high.",
+    fail: "Price hasn't cleared its 6-hour reference high.",
+  },
+  regime_not_risk_off: {
+    pass: "Market regime is risk-on / neutral.",
+    fail: "Market regime is risk-off — broad conditions unfavourable.",
+  },
+  slippage_under_cap: {
+    pass: "Estimated slippage is within the cap.",
+    fail: "Slippage is missing or above the cap.",
+  },
+  rsi_in_range: {
+    pass: "RSI sits inside the entry band.",
+    fail: "RSI is outside the entry band (overbought / oversold).",
+  },
+  derivatives_risk_clear: {
+    pass: "Derivatives risk signals are clear.",
+    fail: "Derivatives risk elevated (funding / OI / liquidations).",
+  },
+  micro_momentum: {
+    pass: "Short-term momentum is positive.",
+    fail: "Short-term momentum is too weak to scalp.",
+  },
+  slippage_ok: {
+    pass: "Slippage is acceptable for a scalp.",
+    fail: "Slippage is too high for a scalp.",
+  },
+  regime_neutro: {
+    pass: "Regime is neutral / favourable.",
+    fail: "Regime is not neutral for scalping.",
+  },
+  no_whale_dump: {
+    pass: "No large sell pressure detected.",
+    fail: "Large sell pressure / whale dump detected.",
+  },
+  gas_viable: {
+    pass: "Gas cost is viable for the trade.",
+    fail: "Gas cost is too high to be viable.",
+  },
+};
+
+export function explainFactor(key: string, passed: boolean): string {
+  const entry = FACTOR_EXPLANATIONS[key];
+  if (entry) {
+    return passed ? entry.pass : entry.fail;
+  }
+  const readable = key.replaceAll("_", " ");
+  return passed ? `${readable}: condition met.` : `${readable}: condition not met.`;
+}
 
 const usdFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -127,12 +189,20 @@ function factorDetails(
 
 export function detailsFromDecision(decision: StatusPayload["decisions"][number]): LogEventDetails {
   const strategyMode = resolveStrategyMode(decision);
+  const compliance = isComplianceDecision(decision);
   const breakoutFactors = entryFactorStats(decision);
   const breakoutScore = breakoutEntryScoreStats(decision);
   const scalpingFactors = scalpingFactorStats(decision);
 
-  const scoreItem =
-    strategyMode === "scalping"
+  // A daily-minimum compliance swap is not scored against the entry factors;
+  // show it as such instead of a misleading "1/6 factors".
+  const scoreItem = compliance
+    ? {
+        label: "Entry score",
+        value: "Compliance trade — not scored",
+        tone: "neutral" as const,
+      }
+    : strategyMode === "scalping"
       ? {
           label: "Entry score",
           value: `${scalpingFactors.score}/${scalpingFactors.max} (need ${scalpingFactors.required}+)`,
@@ -178,7 +248,14 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       { label: "Position size", value: formatUsd(decision.position_size_usdc) },
       { label: "Slippage est.", value: formatSlippagePct(decision.estimated_slippage_pct) },
       scoreItem,
-      strategyMode === "breakout"
+      compliance
+        ? {
+            label: "Source",
+            value: "Daily-minimum compliance swap",
+            tone: "neutral" as const,
+          }
+        : null,
+      !compliance && strategyMode === "breakout"
         ? {
             label: "Slippage gate",
             value: breakoutScore.slippageMet ? "Under cap" : "Missing or above cap",
