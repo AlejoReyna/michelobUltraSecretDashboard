@@ -40,6 +40,17 @@ export const decisionSchema = z
     // compliance swap, which is NOT scored against the 6 entry factors and must
     // not render as "1/6 factors".
     source: z.string().nullable().optional(),
+    mlAudit: z.object({
+      mlEnabled: z.boolean().optional(),
+      mlActive: z.boolean().optional(),
+      mlShadowMode: z.boolean().optional(),
+      mlValidationAuc: z.number().optional(),
+      mlRegime: z.string().optional(),
+      mlConfidence: z.number().optional(),
+      mlPositionSizeMultiplier: z.number().optional(),
+      mlPasserCount: z.number().optional(),
+      mlPasserSymbols: z.array(z.string()).optional(),
+    }).optional(),
   })
   .passthrough();
 
