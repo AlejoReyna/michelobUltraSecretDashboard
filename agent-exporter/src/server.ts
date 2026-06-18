@@ -5,7 +5,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import { loadConfig, type ExporterConfig } from "./config.js";
 import { getHealth } from "./health.js";
 import { redact } from "./redact.js";
-import { getDecisions, getExecutions, getGuardrails, getPositions, getStatus, getWallet, parseLimit } from "./telemetry.js";
+import { getDecisions, getExecutions, getGuardrails, getPositions, getSellHistory, getStatus, getWallet, parseLimit } from "./telemetry.js";
 import { startTwakAutoRefresh, stopTwakAutoRefresh } from "./twak.js";
 
 function authMatches(authorization: string | undefined, expectedToken: string): boolean {
@@ -84,6 +84,10 @@ export function createApp(config: ExporterConfig = loadConfig()) {
 
   app.get("/executions", async (req, res) => {
     sendJson(res, await getExecutions(config.cascadeAiPath, parseLimit(req.query.limit)));
+  });
+
+  app.get("/sell-history", async (req, res) => {
+    sendJson(res, await getSellHistory(config.cascadeAiPath, parseLimit(req.query.limit)));
   });
 
   app.get("/positions", async (_req, res) => {

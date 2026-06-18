@@ -20,6 +20,7 @@ export const FILES = {
   decisionLog: "decision_log.jsonl",
   executionLog: "execution_log.jsonl",
   x402CallLog: "logs/x402_calls.jsonl",
+  sellHistoryLog: "logs/sell_history.jsonl",
   positions: "positions.json",
   guardrails: "guardrail_state.json",
   priceCache: "price_cache.json",
