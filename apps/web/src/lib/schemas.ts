@@ -202,6 +202,21 @@ export const x402CallSchema = z
   })
   .passthrough();
 
+export const sellHistorySchema = z
+  .object({
+    timestamp: z.string(),
+    symbol: z.string(),
+    trade_id: z.string().nullable().optional(),
+    amount_sold: z.number(),
+    balance_before: nullableNumber,
+    balance_after: nullableNumber,
+    exit_tx_hash: z.string().nullable().optional(),
+    exit_reason: z.string().nullable().optional(),
+    realized_pnl_usdc: z.number(),
+    verified: z.boolean(),
+  })
+  .passthrough();
+
 export const marketDataRowSchema = z
   .object({
     symbol: z.string(),
@@ -254,6 +269,8 @@ export const statusSchema = z
         marketDataErrors: z.array(z.string()).optional(),
       })
       .passthrough(),
+    sellHistory: z.array(sellHistorySchema).default([]),
+    sellHistoryErrors: z.array(z.string()).optional(),
     files: z.record(z.string(), fileStatusSchema).default({}),
     connection: z
       .object({
@@ -274,4 +291,5 @@ export type WalletBalance = z.infer<typeof walletBalanceSchema>;
 export type WalletMovement = z.infer<typeof walletMovementSchema>;
 export type WalletTelemetry = z.infer<typeof walletSchema>;
 export type X402Call = z.infer<typeof x402CallSchema>;
+export type SellHistoryRow = z.infer<typeof sellHistorySchema>;
 export type MarketDataRow = z.infer<typeof marketDataRowSchema>;

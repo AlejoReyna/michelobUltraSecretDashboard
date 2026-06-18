@@ -433,3 +433,43 @@ export function detailsFromMovement(movement: StatusPayload["wallet"]["movements
     ],
   };
 }
+
+export function detailsFromSellHistory(row: StatusPayload["sellHistory"][number]): LogEventDetails {
+  return {
+    items: [
+      { label: "Timestamp", value: formatTimestamp(row.timestamp) },
+      { label: "Symbol", value: row.symbol },
+      { label: "Trade ID", value: row.trade_id ?? "N/A" },
+      {
+        label: "Amount sold",
+        value: typeof row.amount_sold === "number" && Number.isFinite(row.amount_sold) ? String(row.amount_sold) : "N/A",
+      },
+      {
+        label: "Balance before",
+        value:
+          typeof row.balance_before === "number" && Number.isFinite(row.balance_before)
+            ? String(row.balance_before)
+            : "N/A",
+      },
+      {
+        label: "Balance after",
+        value:
+          typeof row.balance_after === "number" && Number.isFinite(row.balance_after)
+            ? String(row.balance_after)
+            : "N/A",
+      },
+      { label: "Exit reason", value: row.exit_reason?.trim() || "—" },
+      {
+        label: "Realized PnL",
+        value: formatUsd(row.realized_pnl_usdc),
+        tone: typeof row.realized_pnl_usdc === "number" && row.realized_pnl_usdc >= 0 ? "green" : "red",
+      },
+      {
+        label: "Verified",
+        value: row.verified ? "Yes" : "No",
+        tone: row.verified ? "green" : "red",
+      },
+      { label: "Tx hash", value: row.exit_tx_hash ?? "N/A" },
+    ],
+  };
+}

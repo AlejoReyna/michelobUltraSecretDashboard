@@ -9,12 +9,14 @@ import {
   guardrailsSchema,
   marketDataRowSchema,
   positionsSchema,
+  sellHistorySchema,
   x402CallSchema,
   type Decision,
   type Execution,
   type Guardrails,
   type MarketDataRow,
   type Positions,
+  type SellHistoryRow,
   type X402Call,
 } from "./schemas.js";
 import { getTwakTelemetrySnapshot, requestTwakRefresh } from "./twak.js";
@@ -44,6 +46,10 @@ export async function getExecutions(sourcePath: string, limit = DEFAULT_LIMIT) {
 
 export async function getX402Calls(sourcePath: string, limit = DEFAULT_LIMIT) {
   return readJsonlFile<X402Call>(sourceFile(sourcePath, FILES.x402CallLog), x402CallSchema, limit);
+}
+
+export async function getSellHistory(sourcePath: string, limit = DEFAULT_LIMIT) {
+  return readJsonlFile<SellHistoryRow>(sourceFile(sourcePath, FILES.sellHistoryLog), sellHistorySchema, limit);
 }
 
 export async function getPositions(sourcePath: string) {
@@ -147,16 +153,18 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, x402Calls, marketData, positions, guardrails, files] = await Promise.all([
-    getHealth(sourcePath),
-    getDecisions(sourcePath, limit),
-    getExecutions(sourcePath, limit),
-    getX402Calls(sourcePath, limit),
-    getMarketData(sourcePath, limit),
-    getPositions(sourcePath),
-    getGuardrails(sourcePath),
-    fileStatuses(sourcePath),
-  ]);
+  const [health, decisions, executions, x402Calls, sellHistory, marketData, positions, guardrails, files] =
+    await Promise.all([
+      getHealth(sourcePath),
+      getDecisions(sourcePath, limit),
+      getExecutions(sourcePath, limit),
+      getX402Calls(sourcePath, limit),
+      getSellHistory(sourcePath, limit),
+      getMarketData(sourcePath, limit),
+      getPositions(sourcePath),
+      getGuardrails(sourcePath),
+      fileStatuses(sourcePath),
+    ]);
 
   return redact({
     health,
@@ -166,6 +174,8 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
     latestExecution: executions.items.at(-1) ?? null,
     executions: executions.items,
     executionErrors: executions.errors,
+    sellHistory: sellHistory.fileMissing ? [] : sellHistory.items,
+    sellHistoryErrors: sellHistory.errors,
     positions: positions.data,
     positionsError: positions.error,
     guardrails: guardrails.data,

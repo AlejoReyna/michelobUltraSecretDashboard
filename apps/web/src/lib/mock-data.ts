@@ -369,6 +369,7 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       ],
       marketDataErrors: [],
     },
+    sellHistory: [],
     files: {
       decisionLog: {
         path: "mock://decision_log.jsonl",
@@ -450,6 +451,7 @@ export function createUnavailableStatus(error: string): StatusPayload {
       marketData: [],
       marketDataErrors: [],
     },
+    sellHistory: [],
     files: {},
     connection: {
       source: "error",

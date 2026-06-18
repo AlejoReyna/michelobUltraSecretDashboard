@@ -80,10 +80,18 @@ import {
   detailsFromDecision,
   detailsFromExecution,
   detailsFromMovement,
+  detailsFromSellHistory,
   explainFactor,
   type LogEventDetails,
 } from "@/lib/log-event-details";
-import { statusSchema, type Decision, type MarketDataRow, type StatusPayload, type X402Call } from "@/lib/schemas";
+import {
+  statusSchema,
+  type Decision,
+  type MarketDataRow,
+  type SellHistoryRow,
+  type StatusPayload,
+  type X402Call,
+} from "@/lib/schemas";
 
 type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402";
 type ActivityView = "txs" | "sys";
@@ -1157,6 +1165,27 @@ function decisionActivityRowId(
 function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
   const executionTokens = executionTokenByTxHash(data);
   const executionTimestampTokens = executionTokenByTimestamp(data);
+
+  const sellHistoryRows =
+    data?.sellHistory?.slice(0, 7).map((row, index) => {
+      const txHash = row.exit_tx_hash ?? null;
+
+      return {
+        id: `sell-${txHash ?? index}`,
+        amount: `${compactNumberFormatter.format(row.amount_sold)} ${row.symbol} sold`,
+        timestamp: row.timestamp ?? null,
+        token: row.symbol,
+        hash: shortHash(txHash),
+        explorerUrl: explorerUrlFor("bsc", txHash),
+        status: row.verified ? "VERIFIED" : "UNVERIFIED",
+        tone: row.verified ? "green" : "red",
+        details: detailsFromSellHistory(row),
+      } satisfies ActivityRow;
+    }) ?? [];
+
+  if (sellHistoryRows.length > 0) {
+    return sellHistoryRows;
+  }
 
   const movements =
     data?.wallet.movements.slice(0, 7).map((movement, index) => {
