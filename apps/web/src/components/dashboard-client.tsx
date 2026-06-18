@@ -326,6 +326,53 @@ function positionRiskStats(row: PositionRow) {
   };
 }
 
+function createFrozenValueStore<T>() {
+  let value: T | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    set(next: T | null) {
+      if (next !== null && next !== value) {
+        value = next;
+        listeners.forEach((l) => l());
+      }
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getSnapshot: () => value,
+  };
+}
+
+function createClockStore(intervalMs: number) {
+  let value: Date | null = null;
+  let intervalId: number | undefined;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      if (listeners.size === 1) {
+        value = new Date();
+        intervalId = window.setInterval(() => {
+          value = new Date();
+          listeners.forEach((l) => l());
+        }, intervalMs);
+      }
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0 && intervalId !== undefined) {
+          window.clearInterval(intervalId);
+          intervalId = undefined;
+        }
+      };
+    },
+    getSnapshot: () => value,
+    getServerSnapshot: () => null,
+  };
+}
+
 type DashboardViewModel = {
   metrics: MetricView[];
   activityRows: ActivityRow[];
@@ -5191,15 +5238,15 @@ function TxActivityPanel({
   );
 }
 
+function useLiveClock(intervalMs: number): Date | null {
+  const store = useMemo(() => createClockStore(intervalMs), [intervalMs]);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+}
+
 function LiveClock({ className }: { className?: string }) {
-  // Live UTC digital clock. Starts null and fills on mount to avoid an SSR
-  // hydration mismatch, then ticks once a second.
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // Live UTC digital clock. Starts null on the server to avoid an SSR
+  // hydration mismatch, then ticks once a second on the client.
+  const now = useLiveClock(1000);
   const time = now ? now.toISOString().slice(11, 19) : "--:--:--";
   return (
     <div className={cx("flex items-baseline gap-2", className)}>
@@ -6624,12 +6671,16 @@ export function DashboardClient() {
   const view = useMemo(() => buildViewModel(data, error, timeRange), [data, error, timeRange]);
 
   // Track the last position-based P&L% so it stays frozen after the position is sold.
-  const frozenPositionPnlRef = useRef<number | null>(null);
+  const frozenPnlStore = useMemo(() => createFrozenValueStore<number>(), []);
+  const frozenPositionPnl = useSyncExternalStore(
+    frozenPnlStore.subscribe,
+    frozenPnlStore.getSnapshot,
+  );
   const positionPnlPercent = activePositionPnlPercent(view.positionRows);
-  if (positionPnlPercent !== null) {
-    frozenPositionPnlRef.current = positionPnlPercent;
-  }
-  const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnlRef.current;
+  useEffect(() => {
+    frozenPnlStore.set(positionPnlPercent);
+  }, [frozenPnlStore, positionPnlPercent]);
+  const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnl;
   const effectiveDelta =
     effectivePnlPercent !== null ? formatPercent(effectivePnlPercent) : undefined;
   const effectivePnlTone: "positive" | "negative" =
