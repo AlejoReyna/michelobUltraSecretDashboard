@@ -343,6 +343,7 @@ function createFrozenValueStore<T>() {
       };
     },
     getSnapshot: () => value,
+    getServerSnapshot: () => null as T | null,
   };
 }
 
@@ -6675,6 +6676,7 @@ export function DashboardClient() {
   const frozenPositionPnl = useSyncExternalStore(
     frozenPnlStore.subscribe,
     frozenPnlStore.getSnapshot,
+    frozenPnlStore.getServerSnapshot,
   );
   const positionPnlPercent = activePositionPnlPercent(view.positionRows);
   useEffect(() => {
