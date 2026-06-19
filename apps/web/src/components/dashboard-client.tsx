@@ -394,6 +394,10 @@ type DashboardViewModel = {
   x402MarketDataErrors: string[];
   x402Instrumented: boolean;
   x402PaidCallCount: number | null;
+  x402DailySpendUsdc: number | null;
+  x402TotalSpendUsdc: number | null;
+  x402DailyBudgetUsdc: number | null;
+  x402TotalBudgetUsdc: number | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -1492,6 +1496,10 @@ function buildViewModel(
     pnl.absolute !== null && pnl.absolute !== 0 ? formatPercent(pnl.percent) : undefined;
   const positionRows = activePositionRowsFromTelemetry(data);
   const totalPositionValue = positionRows.reduce((sum, row) => sum + (row.entryValueUsd ?? 0), 0);
+  const latestX402 =
+    (data?.x402?.records ?? [])
+      .slice()
+      .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))[0] ?? null;
 
   return {
     metrics: [
@@ -1530,6 +1538,10 @@ function buildViewModel(
     x402MarketDataErrors: data?.x402?.marketDataErrors ?? [],
     x402Instrumented: data?.x402?.instrumented ?? false,
     x402PaidCallCount: data?.x402?.paidCallCount ?? null,
+    x402DailySpendUsdc: data?.x402?.dailySpendUsdc ?? latestX402?.daily_spend_usdc ?? null,
+    x402TotalSpendUsdc: data?.x402?.totalSpendUsdc ?? latestX402?.total_spend_usdc ?? null,
+    x402DailyBudgetUsdc: data?.x402?.dailyBudgetUsdc ?? null,
+    x402TotalBudgetUsdc: data?.x402?.totalBudgetUsdc ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1955,10 +1967,12 @@ function WalletPanel({
 function X402SummaryMetric({
   label,
   value,
+  sub,
   tone = "default",
 }: {
   label: string;
   value: string;
+  sub?: string;
   tone?: "default" | "red";
 }) {
   return (
@@ -1967,6 +1981,7 @@ function X402SummaryMetric({
       <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#FF7373]" : "text-white")}>
         {value}
       </div>
+      {sub ? <span className="font-mono text-[9px] text-[#666]">{sub}</span> : null}
     </div>
   );
 }
@@ -2184,6 +2199,10 @@ function X402PaymentsPanel({
   marketDataErrors,
   instrumented,
   paidCallCount,
+  dailySpendUsdc,
+  totalSpendUsdc,
+  dailyBudgetUsdc,
+  totalBudgetUsdc,
   compact = false,
   desktop = false,
 }: {
@@ -2192,6 +2211,10 @@ function X402PaymentsPanel({
   marketDataErrors: string[];
   instrumented: boolean;
   paidCallCount: number | null;
+  dailySpendUsdc: number | null;
+  totalSpendUsdc: number | null;
+  dailyBudgetUsdc: number | null;
+  totalBudgetUsdc: number | null;
   compact?: boolean;
   desktop?: boolean;
 }) {
@@ -2241,8 +2264,16 @@ function X402PaymentsPanel({
             <div className="grid shrink-0 grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
               <X402SummaryMetric label="Paid calls" value={String(paidCallCount ?? sortedRecords.length)} />
               <X402SummaryMetric label="Failures" value={String(failureCount)} tone={failureCount > 0 ? "red" : "default"} />
-              <X402SummaryMetric label="Today" value={formatUsdc(latestRecord?.daily_spend_usdc)} />
-              <X402SummaryMetric label="Total" value={formatUsdc(latestRecord?.total_spend_usdc)} />
+              <X402SummaryMetric
+                label="Today"
+                value={formatUsdc(dailySpendUsdc ?? latestRecord?.daily_spend_usdc)}
+                sub={dailyBudgetUsdc != null ? `/ ${formatUsdc(dailyBudgetUsdc)}` : undefined}
+              />
+              <X402SummaryMetric
+                label="Total"
+                value={formatUsdc(totalSpendUsdc ?? latestRecord?.total_spend_usdc)}
+                sub={totalBudgetUsdc != null ? `/ ${formatUsdc(totalBudgetUsdc)}` : undefined}
+              />
             </div>
           </div>
         </ViewportReveal>
@@ -5531,6 +5562,10 @@ function DesktopDashboard({
                 marketDataErrors={view.x402MarketDataErrors}
                 instrumented={view.x402Instrumented}
                 paidCallCount={view.x402PaidCallCount}
+                dailySpendUsdc={view.x402DailySpendUsdc}
+                totalSpendUsdc={view.x402TotalSpendUsdc}
+                dailyBudgetUsdc={view.x402DailyBudgetUsdc}
+                totalBudgetUsdc={view.x402TotalBudgetUsdc}
                 desktop
               />
             ) : section === "positions" ? (
@@ -6019,6 +6054,39 @@ function HomeWalletSummary({
   );
 }
 
+function ChartModeToggle({
+  experimental,
+  onToggle,
+}: {
+  experimental: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={experimental}
+      aria-label={experimental ? "Exit experimental chart mode" : "Enter experimental chart mode"}
+      className={cx(
+        "absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
+        experimental
+          ? "border-[#00FF66]/40 bg-[#001A0A]/90 text-[#00FF66] backdrop-blur-sm"
+          : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm hover:text-white",
+      )}
+    >
+      <span className="relative inline-flex h-3.5 w-6 items-center rounded-full bg-[#2A2A2A]">
+        <span
+          className={cx(
+            "absolute h-2.5 w-2.5 rounded-full transition-transform",
+            experimental ? "translate-x-3 bg-[#00FF66]" : "translate-x-0.5 bg-[#666666]",
+          )}
+        />
+      </span>
+      {experimental ? "Experimental" : "Standard"}
+    </button>
+  );
+}
+
 function DesktopOverviewSection({
   view,
   timeRange,
@@ -6028,19 +6096,35 @@ function DesktopOverviewSection({
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
+  const [experimentalMode, setExperimentalMode] = useState(false);
+
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col pb-6 pr-8 pt-3">
-        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E1E] bg-black/80">
+        <div
+          className={cx(
+            "grid min-h-0 flex-1 gap-0 border border-[#1E1E1E] bg-black/80",
+            experimentalMode ? "grid-cols-1 grid-rows-[minmax(0,1fr)]" : "grid-cols-3 grid-rows-[minmax(0,1fr)_300px]",
+          )}
+        >
           <ViewportReveal
             variant="fade"
             delay={200}
             duration="slow"
-            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E1E]"
+            className={cx(
+              "relative h-full min-h-0 overflow-hidden",
+              !experimentalMode && "col-span-3 border-b border-[#1E1E1E]",
+            )}
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
-              <DesktopHeroMetrics view={view} />
-            </div>
+            <ChartModeToggle
+              experimental={experimentalMode}
+              onToggle={() => setExperimentalMode((v) => !v)}
+            />
+            {!experimentalMode && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+                <DesktopHeroMetrics view={view} />
+              </div>
+            )}
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
@@ -6048,25 +6132,29 @@ function DesktopOverviewSection({
             </div>
           </ViewportReveal>
 
-          <ViewportReveal
-            variant="up"
-            delay={400}
-            duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
-          >
-            <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
-          </ViewportReveal>
-          <ViewportReveal
-            variant="up"
-            delay={460}
-            duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
-          >
-            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
-          </ViewportReveal>
-          <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} flush />
-          </ViewportReveal>
+          {!experimentalMode && (
+            <>
+              <ViewportReveal
+                variant="up"
+                delay={400}
+                duration="normal"
+                className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
+              >
+                <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
+              </ViewportReveal>
+              <ViewportReveal
+                variant="up"
+                delay={460}
+                duration="normal"
+                className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
+              >
+                <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
+              </ViewportReveal>
+              <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
+                <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} flush />
+              </ViewportReveal>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -6430,69 +6518,82 @@ function MobileOverviewSection({
   onTimeRangeChange: (range: TimeRange) => void;
   latestDecision?: StatusPayload["latestDecision"] | null;
 }) {
+  const [experimentalMode, setExperimentalMode] = useState(false);
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ViewportReveal
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#2A2A2A] bg-black/30"
+        className={cx(
+          "relative min-h-0 flex-1 bg-black/30",
+          !experimentalMode && "border-b border-[#2A2A2A]",
+        )}
       >
         <div className="absolute inset-0 flex flex-col">
-          <div className="grid grid-cols-2 gap-x-4 px-4 pt-3 pb-2">
-            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-              <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Total Balance</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-                <span className="font-mono text-[11px] text-[#B8B8B8]">USD</span>
-              </div>
-            </ViewportReveal>
-            <ViewportReveal
-              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-              delay={80}
-              duration="slow"
-              className="min-w-0 text-center"
-            >
-              <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Window P/L</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-                {view.pnlDelta ? (
-                  <span
-                    className={cx(
-                      "font-mono text-[11px] font-bold tabular-nums",
-                      view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
-                    )}
-                  >
-                    ({view.pnlDelta})
-                  </span>
-                ) : null}
-              </div>
-            </ViewportReveal>
-          </div>
+          {!experimentalMode && (
+            <div className="grid grid-cols-2 gap-x-4 px-4 pt-3 pb-2">
+              <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
+                <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Total Balance</div>
+                <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                  <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+                  <span className="font-mono text-[11px] text-[#B8B8B8]">USD</span>
+                </div>
+              </ViewportReveal>
+              <ViewportReveal
+                variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+                delay={80}
+                duration="slow"
+                className="min-w-0 text-center"
+              >
+                <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Window P/L</div>
+                <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                  <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+                  {view.pnlDelta ? (
+                    <span
+                      className={cx(
+                        "font-mono text-[11px] font-bold tabular-nums",
+                        view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                      )}
+                    >
+                      ({view.pnlDelta})
+                    </span>
+                  ) : null}
+                </div>
+              </ViewportReveal>
+            </div>
+          )}
           <div className="relative min-h-0 flex-1">
+            <ChartModeToggle
+              experimental={experimentalMode}
+              onToggle={() => setExperimentalMode((v) => !v)}
+            />
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-            <div className="absolute inset-0 p-2">
+            <div className={cx("absolute inset-0", !experimentalMode && "p-2")}>
               <PortfolioChart data={view.mobileChartData} variant="mobile" range={timeRange} />
             </div>
           </div>
         </div>
       </ViewportReveal>
-      <ViewportReveal
-        variant="up"
-        delay={200}
-        duration="normal"
-        className="flex shrink-0 flex-col"
-      >
-        <div className="grid grid-cols-2" style={{ height: "30vh" }}>
-          <div className="col-span-1 flex flex-col border-r border-[#2A2A2A]">
-            <HomeSignalSummary latestDecision={latestDecision} />
+      {!experimentalMode && (
+        <ViewportReveal
+          variant="up"
+          delay={200}
+          duration="normal"
+          className="flex shrink-0 flex-col"
+        >
+          <div className="grid grid-cols-2" style={{ height: "30vh" }}>
+            <div className="col-span-1 flex flex-col border-r border-[#2A2A2A]">
+              <HomeSignalSummary latestDecision={latestDecision} />
+            </div>
+            <div className="col-span-1 flex flex-col">
+              <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} compact />
+            </div>
           </div>
-          <div className="col-span-1 flex flex-col">
-            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} compact />
-          </div>
-        </div>
-      </ViewportReveal>
+        </ViewportReveal>
+      )}
     </section>
   );
 }
@@ -6624,6 +6725,10 @@ function MobileDashboard({
                 marketDataErrors={view.x402MarketDataErrors}
                 instrumented={view.x402Instrumented}
                 paidCallCount={view.x402PaidCallCount}
+                dailySpendUsdc={view.x402DailySpendUsdc}
+                totalSpendUsdc={view.x402TotalSpendUsdc}
+                dailyBudgetUsdc={view.x402DailyBudgetUsdc}
+                totalBudgetUsdc={view.x402TotalBudgetUsdc}
                 compact
               />
             ) : section === "positions" ? (
