@@ -6128,7 +6128,7 @@ function DesktopOverviewSection({
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
-              <PortfolioChart data={view.chartData} variant="desktop" range={timeRange} experimental={experimentalMode} />
+              <PortfolioChart data={view.chartData} variant="desktop" range={timeRange} />
             </div>
           </ViewportReveal>
 
@@ -6572,7 +6572,7 @@ function MobileOverviewSection({
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className={cx("absolute inset-0", !experimentalMode && "p-2")}>
-              <PortfolioChart data={view.mobileChartData} variant="mobile" range={timeRange} experimental={experimentalMode} />
+              <PortfolioChart data={view.mobileChartData} variant="mobile" range={timeRange} />
             </div>
           </div>
         </div>
