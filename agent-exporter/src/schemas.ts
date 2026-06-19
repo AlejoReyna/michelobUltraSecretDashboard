@@ -154,6 +154,16 @@ export const x402CallSchema = z
   })
   .passthrough();
 
+export const x402SpendLedgerSchema = z
+  .object({
+    day: z.string().nullable().optional(),
+    daily_spend_usdc: z.number().nullable().optional(),
+    total_spend_usdc: z.number().nullable().optional(),
+  })
+  .passthrough();
+
+export type X402SpendLedger = z.infer<typeof x402SpendLedgerSchema>;
+
 export const sellHistorySchema = z
   .object({
     timestamp: z.string(),

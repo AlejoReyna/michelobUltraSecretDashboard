@@ -267,6 +267,10 @@ export const statusSchema = z
         records: z.array(x402CallSchema).optional(),
         marketData: z.array(marketDataRowSchema).optional(),
         marketDataErrors: z.array(z.string()).optional(),
+        dailySpendUsdc: z.number().nullable().optional(),
+        totalSpendUsdc: z.number().nullable().optional(),
+        dailyBudgetUsdc: z.number().nullable().optional(),
+        totalBudgetUsdc: z.number().nullable().optional(),
       })
       .passthrough(),
     sellHistory: z.array(sellHistorySchema).default([]),
