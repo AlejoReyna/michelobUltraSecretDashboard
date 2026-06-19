@@ -11,6 +11,7 @@ import {
   positionsSchema,
   sellHistorySchema,
   x402CallSchema,
+  x402SpendLedgerSchema,
   type Decision,
   type Execution,
   type Guardrails,
@@ -18,6 +19,7 @@ import {
   type Positions,
   type SellHistoryRow,
   type X402Call,
+  type X402SpendLedger,
 } from "./schemas.js";
 import { getTwakTelemetrySnapshot, requestTwakRefresh } from "./twak.js";
 import { buildWalletTelemetry } from "./wallet.js";
@@ -46,6 +48,14 @@ export async function getExecutions(sourcePath: string, limit = DEFAULT_LIMIT) {
 
 export async function getX402Calls(sourcePath: string, limit = DEFAULT_LIMIT) {
   return readJsonlFile<X402Call>(sourceFile(sourcePath, FILES.x402CallLog), x402CallSchema, limit);
+}
+
+export async function getX402SpendLedger(sourcePath: string) {
+  return readJsonFile<X402SpendLedger>(
+    sourceFile(sourcePath, FILES.x402SpendLedger),
+    x402SpendLedgerSchema,
+    {},
+  );
 }
 
 export async function getSellHistory(sourcePath: string, limit = DEFAULT_LIMIT) {
@@ -153,12 +163,13 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, x402Calls, sellHistory, marketData, positions, guardrails, files] =
+  const [health, decisions, executions, x402Calls, x402SpendLedger, sellHistory, marketData, positions, guardrails, files] =
     await Promise.all([
       getHealth(sourcePath),
       getDecisions(sourcePath, limit),
       getExecutions(sourcePath, limit),
       getX402Calls(sourcePath, limit),
+      getX402SpendLedger(sourcePath),
       getSellHistory(sourcePath, limit),
       getMarketData(sourcePath, limit),
       getPositions(sourcePath),
@@ -190,6 +201,10 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
           records: [],
           marketData: marketData.rows,
           marketDataErrors: marketData.errors,
+          dailySpendUsdc: x402SpendLedger.data.daily_spend_usdc ?? null,
+          totalSpendUsdc: x402SpendLedger.data.total_spend_usdc ?? null,
+          dailyBudgetUsdc: 2.0,
+          totalBudgetUsdc: 15.0,
         }
       : {
           instrumented: true,
@@ -197,6 +212,10 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
           records: x402Calls.items,
           marketData: marketData.rows,
           marketDataErrors: marketData.errors,
+          dailySpendUsdc: x402SpendLedger.data.daily_spend_usdc ?? null,
+          totalSpendUsdc: x402SpendLedger.data.total_spend_usdc ?? null,
+          dailyBudgetUsdc: 2.0,
+          totalBudgetUsdc: 15.0,
         },
     files,
   });
