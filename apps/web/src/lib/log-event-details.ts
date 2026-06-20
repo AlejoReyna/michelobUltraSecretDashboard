@@ -181,7 +181,7 @@ function formatReasonCode(value: string | null | undefined) {
 function factorDetails(
   scores: StatusPayload["decisions"][number]["factor_scores"],
 ): FactorScoreDetail[] {
-  return ENTRY_FACTOR_KEYS.filter((key) => key in (scores ?? {})).map((key) => ({
+  return ENTRY_FACTOR_KEYS.map((key) => ({
     key,
     label: FACTOR_LABELS[key] ?? key.replaceAll("_", " "),
     passed: Boolean(scores?.[key]),
