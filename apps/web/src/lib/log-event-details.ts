@@ -6,7 +6,6 @@ import {
   isComplianceDecision,
   resolveStrategyMode,
 } from "@/lib/factor-scoring";
-import { SCALPING_FACTOR_KEYS, scalpingFactorStats } from "@/lib/scalping-scoring";
 
 export type ActivityDetail = {
   label: string;
@@ -46,14 +45,6 @@ const FACTOR_LABELS: Record<string, string> = {
   slippage_under_cap: "Slippage under cap",
   rsi_in_range: "RSI in range",
   derivatives_risk_clear: "Derivatives risk clear",
-};
-
-const SCALPING_FACTOR_LABELS: Record<string, string> = {
-  micro_momentum: "Micro-momentum",
-  slippage_ok: "Slippage OK",
-  regime_neutro: "Regime neutral",
-  no_whale_dump: "No whale dump",
-  gas_viable: "Gas viable",
 };
 
 /**
@@ -189,14 +180,10 @@ function formatReasonCode(value: string | null | undefined) {
 
 function factorDetails(
   scores: StatusPayload["decisions"][number]["factor_scores"],
-  strategyMode: "breakout" | "scalping",
 ): FactorScoreDetail[] {
-  const keys = strategyMode === "scalping" ? SCALPING_FACTOR_KEYS : ENTRY_FACTOR_KEYS;
-  const labels = strategyMode === "scalping" ? SCALPING_FACTOR_LABELS : FACTOR_LABELS;
-
-  return keys.filter((key) => key in (scores ?? {})).map((key) => ({
+  return ENTRY_FACTOR_KEYS.filter((key) => key in (scores ?? {})).map((key) => ({
     key,
-    label: labels[key] ?? key.replaceAll("_", " "),
+    label: FACTOR_LABELS[key] ?? key.replaceAll("_", " "),
     passed: Boolean(scores?.[key]),
   }));
 }
@@ -229,8 +216,8 @@ const X402_TOOL_FACTORS: { tool: string; provides: string; factor: string; key: 
 ];
 
 function x402Evidence(decision: StatusPayload["decisions"][number]): X402EvidenceRow[] {
-  // Compliance swaps and scalping decisions aren't scored off the x402 factor set.
-  if (isComplianceDecision(decision) || resolveStrategyMode(decision) !== "breakout") {
+  // Compliance swaps aren't scored off the x402 factor set.
+  if (isComplianceDecision(decision)) {
     return [];
   }
   const scores = decision.factor_scores ?? {};
@@ -256,7 +243,6 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
   const compliance = isComplianceDecision(decision);
   const breakoutFactors = entryFactorStats(decision);
   const breakoutScore = breakoutEntryScoreStats(decision);
-  const scalpingFactors = scalpingFactorStats(decision);
 
   // A daily-minimum compliance swap is not scored against the entry factors;
   // show it as such instead of a misleading "1/6 factors".
@@ -266,16 +252,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
         value: "Compliance trade — not scored",
         tone: "neutral" as const,
       }
-    : strategyMode === "scalping"
-      ? {
-          label: "Entry score",
-          value: `${scalpingFactors.score}/${scalpingFactors.max} (need ${scalpingFactors.required}+)`,
-          tone: (scalpingFactors.met ? "green" : scalpingFactors.score >= scalpingFactors.required - 10 ? "yellow" : "red") as
-            | "green"
-            | "yellow"
-            | "red",
-        }
-      : breakoutScore.score != null
+    : breakoutScore.score != null
         ? {
             label: "Entry score",
             value: `${breakoutScore.score}/${breakoutScore.max} (need ${breakoutScore.required}+; quote floor ${breakoutScore.quoteFloor})`,
@@ -347,7 +324,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       },
       { label: "Reason", value: decision.reason?.trim() || "—" },
     ].filter((item): item is ActivityDetail => item != null),
-    factors: factorDetails(decision.factor_scores, strategyMode),
+    factors: factorDetails(decision.factor_scores),
     x402Evidence: x402Evidence(decision),
   };
 }

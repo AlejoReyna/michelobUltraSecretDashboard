@@ -1,5 +1,4 @@
 import type { StatusPayload } from "@/lib/schemas";
-import { SCALPING_FACTOR_KEYS } from "@/lib/scalping-scoring";
 
 export const ENTRY_FACTOR_KEYS = [
   "volume_breakout",
@@ -29,7 +28,7 @@ export const BREAKOUT_QUOTE_SCORE_FLOOR = 40;
 
 export type EntryFactorKey = (typeof ENTRY_FACTOR_KEYS)[number];
 
-export type StrategyMode = "breakout" | "scalping";
+export type StrategyMode = "breakout";
 
 /**
  * A daily-minimum compliance swap is a tiny end-of-day trade fired purely to
@@ -47,16 +46,7 @@ export function isComplianceDecision(decision: StatusPayload["decisions"][number
   return Boolean(decision.factor_scores?.daily_minimum);
 }
 
-export function resolveStrategyMode(decision: StatusPayload["decisions"][number]): StrategyMode {
-  if (decision.strategy_mode === "scalping" || decision.strategy_mode === "breakout") {
-    return decision.strategy_mode;
-  }
-
-  const factorKeys = Object.keys(decision.factor_scores ?? {});
-  if (factorKeys.some((key) => SCALPING_FACTOR_KEYS.includes(key as (typeof SCALPING_FACTOR_KEYS)[number]))) {
-    return "scalping";
-  }
-
+export function resolveStrategyMode(_decision: StatusPayload["decisions"][number]): StrategyMode {
   return "breakout";
 }
 

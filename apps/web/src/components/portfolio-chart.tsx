@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChartTimeZone } from "@/components/chart-timezone-context";
 
 export type PortfolioChartPoint = {
@@ -57,15 +57,8 @@ function niceNum(range: number, round: boolean): number {
  * crushing every other point flat.
  */
 function buildDollarScale(values: number[], baseline: number, desiredTicks = 5) {
-  // Frame the scale from the starting capital ("initial balance") the same way a
-  // market-cap chart frames from the initial mcap: the baseline is always part
-  // of the domain so the chart reads as "started at $X, now at $Y". When the
-  // balance only grows, the baseline sits at the floor; if it drops below the
-  // baseline, the domain extends down so nothing clips.
   const min = Math.min(...values, baseline);
   const max = Math.max(...values, baseline);
-  // Pad by a fraction of the span (or of the value itself when the line is flat)
-  // so there is headroom and footroom around the data.
   const basis = max - min || Math.abs(max) || 1;
   const pad = basis * 0.12;
   const paddedMin = min - pad;
@@ -75,8 +68,6 @@ function buildDollarScale(values: number[], baseline: number, desiredTicks = 5) 
   const step = niceNum(span / Math.max(desiredTicks - 1, 1), true);
   let lo = Math.floor(paddedMin / step) * step;
   let hi = Math.ceil(paddedMax / step) * step;
-  // Never dip below zero for an all-positive balance — money charts read from a
-  // floor, not from a negative phantom value.
   if (min >= 0 && lo < 0) {
     lo = 0;
   }
@@ -95,30 +86,38 @@ function buildDollarScale(values: number[], baseline: number, desiredTicks = 5) 
 /** Default starting balance used when no initial balance can be detected. */
 const DEFAULT_INITIAL_BALANCE = 10;
 
-function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number, initialBalance?: number) {
+type ChartFrame = {
+  width: number;
+  height: number;
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number, initialBalance?: number, frame?: ChartFrame) {
+  const f = frame ?? chartFrame;
   const values = data.map((point) => point.value);
-  // Detected initial balance = first finite point of the series; fall back to $10.
   const detectedInitial = data.find((point) => Number.isFinite(point.value))?.value;
   const baseline = initialBalance ?? detectedInitial ?? DEFAULT_INITIAL_BALANCE;
   const scale = buildDollarScale(values, baseline);
   const range = scale.hi - scale.lo || 1;
-  const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
-  const innerHeight = chartFrame.height - chartFrame.top - chartFrame.bottom;
-  const bottomY = chartFrame.top + innerHeight;
+  const innerWidth = f.width - f.left - f.right;
+  const innerHeight = f.height - f.top - f.bottom;
+  const bottomY = f.top + innerHeight;
 
   const points = data.map((point, index) => {
-    const x = leftMargin + (index / Math.max(data.length - 1, 1)) * innerWidth;
-    const y = chartFrame.top + (1 - (point.value - scale.lo) / range) * innerHeight;
+    const x = f.left + (index / Math.max(data.length - 1, 1)) * innerWidth;
+    const y = f.top + (1 - (point.value - scale.lo) / range) * innerHeight;
     return { ...point, x, y };
   });
 
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
-  const areaPath = `${linePath} L ${points.at(-1)?.x.toFixed(2) ?? leftMargin} ${bottomY} L ${points[0]?.x.toFixed(2) ?? leftMargin} ${bottomY} Z`;
+  const areaPath = `${linePath} L ${points.at(-1)?.x.toFixed(2) ?? f.left} ${bottomY} L ${points[0]?.x.toFixed(2) ?? f.left} ${bottomY} Z`;
 
-  // Y position for a dollar value, used to place axis ticks/gridlines.
-  const yForValue = (value: number) => chartFrame.top + (1 - (value - scale.lo) / range) * innerHeight;
+  const yForValue = (value: number) => f.top + (1 - (value - scale.lo) / range) * innerHeight;
 
-  return { areaPath, linePath, points, bottomY, scale, yForValue, leftMargin, baseline };
+  return { areaPath, linePath, points, bottomY, scale, yForValue, leftMargin: f.left, baseline };
 }
 
 /** Format a dollar value for the Y axis, compact for large balances. */
@@ -140,20 +139,11 @@ function formatAxisMoney(value: number): string {
 }
 
 type AxisTick = {
-  /** Horizontal fraction across the plotted line (0 = first point, 1 = last). */
   fraction: number;
   text: string;
   anchor: "start" | "middle" | "end";
 };
 
-/**
- * Build time-axis ticks from the real timestamps carried by the data points.
- * The portfolio line is plotted by index, so a tick at fraction `f` maps to the
- * fractional index `f * (n - 1)`; we linearly interpolate the timestamp at that
- * index from whatever timestamps are present. Labels are formatted in the
- * selected time zone, switching between HH:mm and "d MMM" based on the span —
- * the same hour/minute distribution idea charting tools use.
- */
 function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: number, range?: ChartRange): AxisTick[] {
   const n = data.length;
   if (n < 2) {
@@ -172,10 +162,6 @@ function buildAxisTicks(data: PortfolioChartPoint[], timeZone: string, count: nu
   const lastTime = indexed.at(-1)!.time;
   const spanMs = Math.abs(lastTime - firstTime);
 
-  // Format granularity follows the SELECTED range, not just the data span.
-  // Week/Month always show the date; if the underlying data only covers part of
-  // a day we append the time so the ticks stay distinct instead of repeating the
-  // same date. Hour/Day (and the unknown fallback) show HH:mm.
   const wantsDate = range === "1W" || range === "1M";
   let options: Intl.DateTimeFormatOptions;
   if (wantsDate) {
@@ -230,22 +216,60 @@ export function PortfolioChart({
   timeZone: timeZoneProp,
   range,
   initialBalance,
+  experimental = false,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
   timeZone?: string;
   range?: ChartRange;
-  /** Starting capital to frame the chart from. Defaults to the first data point, then $10. */
   initialBalance?: number;
+  experimental?: boolean;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: chartFrame.width, height: chartFrame.height });
+
+  useLayoutEffect(() => {
+    if (!experimental || !containerRef.current) return;
+    const el = containerRef.current;
+    const rect = el.getBoundingClientRect();
+    setDimensions({ width: rect.width, height: rect.height });
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const cr = entry.contentRect;
+        setDimensions({ width: cr.width, height: cr.height });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [experimental]);
+
   const contextTimeZone = useChartTimeZone().timeZone;
   const timeZone = timeZoneProp ?? contextTimeZone;
   const isMobile = variant === "mobile";
   const leftMargin = isMobile ? yAxisGutter.mobile : yAxisGutter.desktop;
-  const chart = useMemo(() => buildChartPaths(data, leftMargin, initialBalance), [data, leftMargin, initialBalance]);
-  const gridColumns = isMobile ? 6 : 12;
 
-  const innerWidth = chartFrame.width - leftMargin - chartFrame.right;
+  const frame: ChartFrame = useMemo(() => {
+    if (!experimental) return chartFrame;
+    const { width, height } = dimensions;
+    return {
+      width: Math.max(width, 200),
+      height: Math.max(height, 120),
+      top: 0,
+      right: 12,
+      bottom: 32,
+      left: leftMargin,
+    };
+  }, [experimental, dimensions, leftMargin]);
+
+  const chart = useMemo(
+    () => buildChartPaths(data, leftMargin, initialBalance, experimental ? frame : undefined),
+    [data, leftMargin, initialBalance, experimental, frame],
+  );
+
+  const gridColumns = isMobile ? 6 : 12;
+  const innerWidth = frame.width - frame.left - frame.right;
+
   const desktopTicks = useMemo(
     () => (isMobile ? [] : buildAxisTicks(data, timeZone, 6, range)),
     [data, timeZone, isMobile, range],
@@ -256,22 +280,19 @@ export function PortfolioChart({
   );
 
   const tickX = (fraction: number) => {
-    const raw = leftMargin + fraction * innerWidth;
-    // Keep edge labels off the frame edges so they never clip.
-    return Math.min(Math.max(raw, leftMargin + 2), chartFrame.width - chartFrame.right - 2);
+    const raw = frame.left + fraction * innerWidth;
+    return Math.min(Math.max(raw, frame.left + 2), frame.width - frame.right - 2);
   };
 
-  // Dollar (Y) axis ticks, derived from the money scale.
   const yTicks = chart.scale.ticks;
 
-  // Desktop renders the trend in white / transparent gray; mobile stays green.
   const lineColor = isMobile ? "#00FF00" : "#FFFFFF";
   const fillColor = isMobile ? "#00FF00" : "#B8B8B8";
 
   const chartSvg = (
     <svg
       className="block h-full min-h-0 w-full flex-1 overflow-visible"
-      viewBox={`0 0 ${chartFrame.width} ${chartFrame.height}`}
+      viewBox={`0 0 ${frame.width} ${frame.height}`}
       preserveAspectRatio="none"
       role="img"
       aria-label="Portfolio trend chart"
@@ -292,13 +313,13 @@ export function PortfolioChart({
       </defs>
 
       {Array.from({ length: gridColumns + 1 }).map((_, index) => {
-        const x = leftMargin + (index / gridColumns) * (chartFrame.width - leftMargin - chartFrame.right);
-        return <line key={`x-${index}`} x1={x} x2={x} y1={chartFrame.top} y2={chart.bottomY} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
+        const x = frame.left + (index / gridColumns) * (frame.width - frame.left - frame.right);
+        return <line key={`x-${index}`} x1={x} x2={x} y1={frame.top} y2={chart.bottomY} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
       })}
       {/* Horizontal gridlines aligned to the dollar ticks. */}
       {yTicks.map((value, index) => {
         const y = chart.yForValue(value);
-        return <line key={`y-${index}`} x1={leftMargin} x2={chartFrame.width - chartFrame.right} y1={y} y2={y} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
+        return <line key={`y-${index}`} x1={frame.left} x2={frame.width - frame.right} y1={y} y2={y} stroke="#151515" strokeWidth="1" vectorEffect="non-scaling-stroke" />;
       })}
 
       {/* Dollar (Y) axis labels. */}
@@ -306,7 +327,7 @@ export function PortfolioChart({
         {yTicks.map((value, index) => {
           const y = chart.yForValue(value);
           return (
-            <text key={`ylabel-${index}`} x={leftMargin - 8} y={y + 3.5} textAnchor="end">
+            <text key={`ylabel-${index}`} x={frame.left - 8} y={y + 3.5} textAnchor="end">
               {formatAxisMoney(value)}
             </text>
           );
@@ -315,8 +336,8 @@ export function PortfolioChart({
 
       {/* Initial-balance reference: the chart is framed from the starting capital. */}
       <line
-        x1={leftMargin}
-        x2={chartFrame.width - chartFrame.right}
+        x1={frame.left}
+        x2={frame.width - frame.right}
         y1={chart.yForValue(chart.baseline)}
         y2={chart.yForValue(chart.baseline)}
         stroke="#3A3A3A"
@@ -327,12 +348,12 @@ export function PortfolioChart({
 
       <path d={chart.areaPath} fill={`url(#portfolio-fill-${variant})`} />
       <path d={chart.linePath} fill="none" stroke={lineColor} strokeWidth={isMobile ? 2.8 : 2.4} vectorEffect="non-scaling-stroke" filter={`url(#portfolio-glow-${variant})`} />
-      <line x1={leftMargin} x2={chartFrame.width - chartFrame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      <line x1={frame.left} x2={frame.width - frame.right} y1={chart.bottomY} y2={chart.bottomY} stroke="#2A2A2A" strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
       {!isMobile && desktopTicks.length > 0 ? (
         <g className="font-mono text-[11px] fill-[#8A8A8A]">
           {desktopTicks.map((tick, index) => (
-            <text key={`tick-${index}`} x={tickX(tick.fraction)} y={chartFrame.height - 12} textAnchor={tick.anchor}>
+            <text key={`tick-${index}`} x={tickX(tick.fraction)} y={frame.height - 12} textAnchor={tick.anchor}>
               {tick.text}
             </text>
           ))}
@@ -343,7 +364,7 @@ export function PortfolioChart({
 
   if (isMobile) {
     return (
-      <div className="flex h-full flex-col">
+      <div ref={containerRef} className="flex h-full flex-col">
         {chartSvg}
         {mobileTicks.length > 0 ? (
           <div
@@ -359,5 +380,5 @@ export function PortfolioChart({
     );
   }
 
-  return <div className="flex h-full min-h-0 w-full flex-1 flex-col">{chartSvg}</div>;
+  return <div ref={containerRef} className="flex h-full min-h-0 w-full flex-1 flex-col">{chartSvg}</div>;
 }

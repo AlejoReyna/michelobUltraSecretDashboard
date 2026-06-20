@@ -75,7 +75,6 @@ import {
   nextCycleAt,
 } from "@/lib/cycle-timing";
 import { breakoutEntryScoreStats, entryFactorStats, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
-import { scalpingFactorStats } from "@/lib/scalping-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -1123,13 +1122,6 @@ function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number])
   if (isComplianceDecision(decision)) {
     const target = decision.symbol?.trim() ? ` into ${decision.symbol.trim()}` : "";
     return `Daily-minimum compliance swap${target}: a tiny trade to satisfy the one-trade-per-day rule. Not scored against the entry factors.`;
-  }
-
-  if (strategyMode === "scalping") {
-    const stats = scalpingFactorStats(decision);
-    const result = stats.met ? "cleared the entry bar" : "stayed below the entry bar";
-
-    return `Analyzed ${symbol}${priced}: checked micro-momentum, slippage, regime, whale flow, and gas, then scored ${stats.score}/${stats.max}; ${result} before ${action}.`;
   }
 
   const breakoutScore = breakoutEntryScoreStats(decision);
