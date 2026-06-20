@@ -1988,7 +1988,27 @@ function WalletPanel({
             </div>
           </ViewportReveal>
         </div>
-      ) : null}
+      ) : (
+        <div className={cx("shrink-0 border-t border-[#161619]", flat ? "px-4 pb-4 pt-4" : "px-5 pb-5 pt-5")}>
+          <ViewportReveal variant="blur" duration="slow">
+            <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+            <div className="mt-2 flex items-start justify-between gap-4">
+              <div>
+                <h2 className={cx("font-sans font-semibold text-white", flat ? "text-[20px]" : "text-[24px]")}>
+                  Base USDC
+                </h2>
+                <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                  Not connected — restart bot with updated exporter
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
+                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#7F7F94]">—</div>
+              </div>
+            </div>
+          </ViewportReveal>
+        </div>
+      )}
     </section>
   );
 }
