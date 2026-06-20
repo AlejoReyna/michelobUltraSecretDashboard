@@ -324,7 +324,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       },
       { label: "Reason", value: decision.reason?.trim() || "—" },
     ].filter((item): item is ActivityDetail => item != null),
-    factors: factorDetails(decision.factor_scores),
+    factors: compliance ? [] : factorDetails(decision.factor_scores),
     x402Evidence: x402Evidence(decision),
   };
 }
