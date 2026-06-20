@@ -18,14 +18,17 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleDollarSign,
   Copy,
   CreditCard,
+  DollarSign,
   ExternalLink,
   Filter,
   Github,
   Globe,
   Home,
   Layers,
+  ShieldCheck,
   Terminal,
   Wallet,
   type LucideIcon,
@@ -1897,10 +1900,11 @@ function WalletPanel({
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1
               className={cx(
-                "font-sans font-semibold leading-tight text-white",
+                "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
+              <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
               Live Holdings
             </h1>
             <div className="shrink-0 text-right font-sans">
@@ -1967,12 +1971,16 @@ function WalletPanel({
         </table>
       </div>
       {x402WalletAddress ? (
-        <div className={cx("shrink-0 border-t border-[#161619]", flat ? "px-4 pb-4 pt-4" : "px-5 pb-5 pt-5")}>
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]", flat ? "px-4 py-4" : "px-5 py-5")}>
           <ViewportReveal variant="blur" duration="slow">
-            <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
-            <div className="mt-2 flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className={cx("font-sans font-semibold text-white", flat ? "text-[20px]" : "text-[24px]")}>
+                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+                <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
+                  <span className="relative inline-block">
+                    <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
+                  </span>
                   Base USDC
                 </h2>
                 <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
@@ -1988,7 +1996,31 @@ function WalletPanel({
             </div>
           </ViewportReveal>
         </div>
-      ) : null}
+      ) : (
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]", flat ? "px-4 py-4" : "px-5 py-5")}>
+          <ViewportReveal variant="blur" duration="slow">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+                <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
+                  <span className="relative inline-block">
+                    <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
+                  </span>
+                  Base USDC
+                </h2>
+                <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                  Not connected — restart bot with updated exporter
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
+                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#7F7F94]">—</div>
+              </div>
+            </div>
+          </ViewportReveal>
+        </div>
+      )}
     </section>
   );
 }
@@ -6093,36 +6125,34 @@ function HomeWalletSummary({
         {walletBalances.length} total {walletBalances.length === 1 ? "asset" : "assets"}
       </div>
       {x402WalletAddress ? (
-        <>
-          <div className="shrink-0 border-t border-[#161619]" />
-          <div
-            className={cx(
-              "flex shrink-0 items-baseline justify-between",
-              compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
-            )}
-          >
+        <div
+          className={cx(
+            "shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]",
+            compact ? "px-3 py-3" : "px-4 py-4",
+          )}
+        >
+          <div className="flex items-start justify-between gap-3">
             <div>
               <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
-              <h2 className={cx("font-sans font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
+              <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", compact ? "text-[14px]" : "text-[16px]")}>
+                <span className="relative inline-block">
+                  <img src="/usdc-logo.png" alt="USDC" className="h-4 w-4 object-contain" />
+                  <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
+                </span>
                 Base USDC
               </h2>
+              <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
+              </div>
             </div>
-            <span className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
-              {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
-            </span>
+            <div className="shrink-0 text-right">
+              <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
+              <div className="mt-1 font-sans text-[16px] font-semibold tabular-nums text-[#9E88F0]">
+                {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
+              </div>
+            </div>
           </div>
-          <div
-            className={cx(
-              "flex shrink-0 items-center justify-between border-b border-[#161619]",
-              compact ? "px-3 py-2" : "px-4 py-3",
-            )}
-          >
-            <span className="font-sans text-[13px] text-[#CCCDDA]">USDC</span>
-            <span className="font-sans text-[16px] font-semibold tabular-nums text-[#9E88F0]">
-              {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
-            </span>
-          </div>
-        </>
+        </div>
       ) : null}
     </div>
   );
