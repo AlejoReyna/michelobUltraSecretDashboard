@@ -98,7 +98,7 @@ type ChartFrame = {
 function buildChartPaths(data: PortfolioChartPoint[], leftMargin: number, initialBalance?: number, frame?: ChartFrame) {
   const f = frame ?? chartFrame;
   const values = data.map((point) => point.value);
-  const detectedInitial = data.find((point) => Number.isFinite(point.value))?.value;
+  const detectedInitial = data[0]?.value;
   const baseline = initialBalance ?? detectedInitial ?? DEFAULT_INITIAL_BALANCE;
   const scale = buildDollarScale(values, baseline);
   const range = scale.hi - scale.lo || 1;
@@ -216,7 +216,7 @@ export function PortfolioChart({
   timeZone: timeZoneProp,
   range,
   initialBalance,
-  experimental = false,
+  experimental = true,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
@@ -229,7 +229,7 @@ export function PortfolioChart({
   const [dimensions, setDimensions] = useState({ width: chartFrame.width, height: chartFrame.height });
 
   useLayoutEffect(() => {
-    if (!experimental || !containerRef.current) return;
+    if (!containerRef.current) return;
     const el = containerRef.current;
     const rect = el.getBoundingClientRect();
     setDimensions({ width: rect.width, height: rect.height });
@@ -242,7 +242,7 @@ export function PortfolioChart({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [experimental]);
+  }, []);
 
   const contextTimeZone = useChartTimeZone().timeZone;
   const timeZone = timeZoneProp ?? contextTimeZone;
@@ -250,7 +250,6 @@ export function PortfolioChart({
   const leftMargin = isMobile ? yAxisGutter.mobile : yAxisGutter.desktop;
 
   const frame: ChartFrame = useMemo(() => {
-    if (!experimental) return chartFrame;
     const { width, height } = dimensions;
     return {
       width: Math.max(width, 200),
@@ -260,11 +259,11 @@ export function PortfolioChart({
       bottom: 32,
       left: leftMargin,
     };
-  }, [experimental, dimensions, leftMargin]);
+  }, [dimensions, leftMargin]);
 
   const chart = useMemo(
-    () => buildChartPaths(data, leftMargin, initialBalance, experimental ? frame : undefined),
-    [data, leftMargin, initialBalance, experimental, frame],
+    () => buildChartPaths(data, leftMargin, initialBalance, frame),
+    [data, leftMargin, initialBalance, frame],
   );
 
   const gridColumns = isMobile ? 6 : 12;
