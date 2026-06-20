@@ -271,6 +271,8 @@ export const statusSchema = z
         totalSpendUsdc: z.number().nullable().optional(),
         dailyBudgetUsdc: z.number().nullable().optional(),
         totalBudgetUsdc: z.number().nullable().optional(),
+        walletAddress: z.string().nullable().optional(),
+        walletUsdcBalance: z.number().nullable().optional(),
       })
       .passthrough(),
     sellHistory: z.array(sellHistorySchema).default([]),

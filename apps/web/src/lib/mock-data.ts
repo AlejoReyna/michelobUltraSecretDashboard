@@ -368,6 +368,8 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
         },
       ],
       marketDataErrors: [],
+      walletAddress: "0x7c3a3f6b4c8a2e1d5f9a0b3c6d8e7f1a2b4c5d6e",
+      walletUsdcBalance: 4.82,
     },
     sellHistory: [],
     files: {
@@ -450,6 +452,8 @@ export function createUnavailableStatus(error: string): StatusPayload {
       records: [],
       marketData: [],
       marketDataErrors: [],
+      walletAddress: null,
+      walletUsdcBalance: null,
     },
     sellHistory: [],
     files: {},

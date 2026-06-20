@@ -11,6 +11,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import Image from "next/image";
 import {
   Activity,
   BookOpen,
@@ -74,7 +75,7 @@ import {
   inferCycleIntervalMs,
   nextCycleAt,
 } from "@/lib/cycle-timing";
-import { breakoutEntryScoreStats, entryFactorStats, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
+import { breakoutEntryScoreStats, entryFactorStats, ENTRY_FACTOR_KEYS, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -107,7 +108,7 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
 
 const DESKTOP_NAV_WIDTH = 56;
 const defaultDeviceTopSectionColor = "#000000";
-const focusedDeviceTopSectionColor = "#111111";
+const focusedDeviceTopSectionColor = "#111114";
 const focusedDeviceTopSections = new Set<DashboardSection>(["positions", "wallet", "market-chat", "x402"]);
 
 function deviceTopSectionColorFor(section: DashboardSection) {
@@ -397,6 +398,8 @@ type DashboardViewModel = {
   x402TotalSpendUsdc: number | null;
   x402DailyBudgetUsdc: number | null;
   x402TotalBudgetUsdc: number | null;
+  x402WalletAddress: string | null;
+  x402WalletUsdcBalance: number | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -1534,6 +1537,8 @@ function buildViewModel(
     x402TotalSpendUsdc: data?.x402?.totalSpendUsdc ?? latestX402?.total_spend_usdc ?? null,
     x402DailyBudgetUsdc: data?.x402?.dailyBudgetUsdc ?? null,
     x402TotalBudgetUsdc: data?.x402?.totalBudgetUsdc ?? null,
+    x402WalletAddress: data?.x402?.walletAddress ?? null,
+    x402WalletUsdcBalance: data?.x402?.walletUsdcBalance ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1554,12 +1559,17 @@ function DesktopNavRail({
 }) {
   return (
     <nav
-      className="relative z-[1] flex h-dvh shrink-0 flex-col items-center border-r border-[#1A1A1A] bg-[#050505]/95 backdrop-blur-sm"
+      className="relative z-[1] flex h-dvh shrink-0 flex-col items-center border-r border-[#161619] bg-[#111114]/95 backdrop-blur-sm"
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
-      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111111]">
-        <BrandMark variant="rail" />
+      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
+        <img
+          src="/ascii-raccoon.png"
+          alt="Raccoon"
+          className="h-9 w-auto object-contain opacity-90"
+          style={{ filter: "brightness(1.5) drop-shadow(0 0 3px rgba(255,255,255,0.4))" }}
+        />
       </div>
       <div className="flex w-full flex-1 flex-col items-center gap-1 px-2 py-3">
         {desktopNavItems.map((item) => {
@@ -1618,27 +1628,27 @@ function DesktopNavRail({
 
 function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
   const classes = {
-    green: "border-[#00FF66] bg-[#001A0A] text-[#00FF66]",
-    yellow: "border-[#FFD21A] bg-[#1B1600] text-[#FFD21A]",
-    red: "border-[#FF3737] bg-[#1B0505] text-[#FF3737]",
+    green: "border-[#33C28E] bg-[#0C0C0F] text-[#33C28E]",
+    yellow: "border-[#CCCDDA] bg-[#0C0C0F] text-[#CCCDDA]",
+    red: "border-[#E05B73] bg-[#0C0C0F] text-[#E05B73]",
   }[tone];
 
-  return <span className={cx("inline-flex border px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
+  return <span className={cx("inline-flex border px-2.5 py-1 font-sans text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
 }
 
 function statusToneTextClass(tone: "green" | "yellow" | "red") {
   return {
-    green: "text-[#00FF66]",
-    yellow: "text-[#FFD21A]",
-    red: "text-[#FF3737]",
+    green: "text-[#33C28E]",
+    yellow: "text-[#CCCDDA]",
+    red: "text-[#E05B73]",
   }[tone];
 }
 
 function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
   const color = {
-    green: "bg-[#00FF66] shadow-[0_0_6px_rgba(0,255,102,0.45)]",
-    yellow: "bg-[#FFD21A] shadow-[0_0_6px_rgba(255,210,26,0.35)]",
-    red: "bg-[#FF3737] shadow-[0_0_6px_rgba(255,55,55,0.35)]",
+    green: "bg-[#33C28E] shadow-[0_0_6px_rgba(51,194,142,0.45)]",
+    yellow: "bg-[#CCCDDA] shadow-[0_0_6px_rgba(204,204,218,0.35)]",
+    red: "bg-[#E05B73] shadow-[0_0_6px_rgba(224,91,115,0.35)]",
   }[tone];
 
   return (
@@ -1691,7 +1701,7 @@ function ActivityStatusIndicator({
     return (
       <span
         className={cx(
-          "inline-flex shrink-0 items-center justify-center font-mono font-bold leading-none",
+          "inline-flex shrink-0 items-center justify-center font-sans font-bold leading-none",
           compact ? (readable ? "text-[15px]" : "text-[13px]") : "text-[15px]",
           statusToneTextClass(tone),
         )}
@@ -1708,7 +1718,7 @@ function ActivityStatusIndicator({
       <StatusDot status={status} tone={tone} />
       <span
         className={cx(
-          "truncate font-mono font-bold uppercase tracking-[0.06em]",
+          "truncate font-sans font-bold uppercase tracking-[0.06em]",
           compact ? (readable ? "text-[10px]" : "text-[8px]") : "text-[10px]",
           statusToneTextClass(tone),
         )}
@@ -1741,9 +1751,9 @@ function formatTokenAmount(value: number | null) {
 
 function TelemetryBanner({ message }: { message: string }) {
   return (
-    <div className="border-b border-[#3A2200] bg-[#1B1200] px-5 py-3 font-mono text-[12px] leading-5 text-[#FFD21A]">
+    <div className="border-b border-[#161619] bg-[#1B1200] px-5 py-3 font-sans text-[12px] leading-5 text-[#CCCDDA]">
       <span className="font-bold uppercase tracking-[0.12em]">Telemetry:</span> {message}
-      <span className="mt-1 block text-[#CFCFCF]">
+      <span className="mt-1 block text-[#CCCDDA]">
         Local dev: set `AGENT_EXPORTER_URL` in `apps/web/.env.local` to the same EC2 HTTPS URL used on Vercel, or run the
         local exporter on port 8787.
       </span>
@@ -1793,9 +1803,9 @@ function WalletBalanceTableRow({
 
   return (
     <tr
-      className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}
+      className={cx("border-b border-[#161619] text-white", !compact && "hover:bg-[#0C0C0F]")}
     >
-      <td className="truncate px-3 py-2 font-mono text-[12px] uppercase text-[#A8A8A8]">
+      <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#CCCDDA]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("chain")}
@@ -1806,7 +1816,7 @@ function WalletBalanceTableRow({
           {balance.chain}
         </ViewportReveal>
       </td>
-      <td className="truncate px-2 py-2 font-mono text-[13px] font-bold text-[#F2F2F2]">
+      <td className="truncate px-2 py-2 font-sans text-[13px] font-bold text-[#FFFFFF]">
         <ViewportReveal
           as="span"
           variant={tokenVariant}
@@ -1819,7 +1829,7 @@ function WalletBalanceTableRow({
           <span className="truncate">{balance.symbol}</span>
         </ViewportReveal>
       </td>
-      <td className="truncate px-2 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+      <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("amount")}
@@ -1830,7 +1840,7 @@ function WalletBalanceTableRow({
           {formatTokenAmount(balance.amount)}
         </ViewportReveal>
       </td>
-      <td className="truncate px-3 py-2 text-right font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+      <td className="truncate px-3 py-2 text-right font-sans text-[12px] tabular-nums text-[#CCCDDA]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("value")}
@@ -1849,11 +1859,15 @@ function WalletBalanceTableRow({
 function WalletPanel({
   balances,
   agentMode,
+  x402WalletAddress,
+  x402WalletUsdcBalance,
   compact = false,
   desktop = false,
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
+  x402WalletAddress?: string | null;
+  x402WalletUsdcBalance?: number | null;
   compact?: boolean;
   desktop?: boolean;
 }) {
@@ -1874,24 +1888,24 @@ function WalletPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
+        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#111114]",
       )}
     >
-      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "border-b border-[#1A1A1A] px-5 py-5")}>
+      <div className={cx(flat ? "shrink-0 border-b border-[#161619] pb-4" : "border-b border-[#161619] px-5 py-5")}>
         <ViewportReveal variant="blur" duration="slow">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">TWAK Wallet</div>
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1
               className={cx(
-                "font-mono font-semibold leading-tight text-white",
+                "font-sans font-semibold leading-tight text-white",
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
               Live Holdings
             </h1>
-            <div className="shrink-0 text-right font-mono">
+            <div className="shrink-0 text-right font-sans">
               <ViewportReveal variant="fade" delay={70} duration="fast">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-[#757575]">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
                   {balances.length} {balances.length === 1 ? "token" : "tokens"}
                 </div>
               </ViewportReveal>
@@ -1900,7 +1914,7 @@ function WalletPanel({
               </ViewportReveal>
               {paperMode ? (
                 <ViewportReveal variant="down" delay={190} duration="fast">
-                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#FFD21A]">Paper mode</div>
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#CCCDDA]">Paper mode</div>
                 </ViewportReveal>
               ) : null}
             </div>
@@ -1922,7 +1936,7 @@ function WalletPanel({
             <col className="w-[32%]" />
             <col className="w-[24%]" />
           </colgroup>
-          <thead className="border-b border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+          <thead className="border-b border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
             <tr>
               <WalletHeaderCell column="chain" label="Chain" className="px-3 py-2" />
               <WalletHeaderCell column="token" label="Token" className="px-2 py-2" />
@@ -1941,8 +1955,8 @@ function WalletPanel({
               />
             ))}
             {balances.length === 0 ? (
-              <tr className="border-b border-[#1A1A1A]">
-                <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={4}>
+              <tr className="border-b border-[#161619]">
+                <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={4}>
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     Waiting for TWAK wallet balances
                   </ViewportReveal>
@@ -1952,6 +1966,29 @@ function WalletPanel({
           </tbody>
         </table>
       </div>
+      {x402WalletAddress ? (
+        <div className={cx("shrink-0 border-t border-[#161619]", flat ? "px-4 pb-4 pt-4" : "px-5 pb-5 pt-5")}>
+          <ViewportReveal variant="blur" duration="slow">
+            <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+            <div className="mt-2 flex items-start justify-between gap-4">
+              <div>
+                <h2 className={cx("font-sans font-semibold text-white", flat ? "text-[20px]" : "text-[24px]")}>
+                  Base USDC
+                </h2>
+                <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                  {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
+                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#9E88F0]">
+                  {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
+                </div>
+              </div>
+            </div>
+          </ViewportReveal>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1968,12 +2005,12 @@ function X402SummaryMetric({
   tone?: "default" | "red";
 }) {
   return (
-    <div className="min-w-0 text-right font-mono">
-      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-[#757575]">{label}</div>
-      <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#FF7373]" : "text-white")}>
+    <div className="min-w-0 text-right font-sans">
+      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">{label}</div>
+      <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#E05B73]" : "text-white")}>
         {value}
       </div>
-      {sub ? <span className="font-mono text-[9px] text-[#666]">{sub}</span> : null}
+      {sub ? <span className="font-sans text-[9px] text-[#666]">{sub}</span> : null}
     </div>
   );
 }
@@ -2041,14 +2078,14 @@ function marketChangeTone(value: number | null | undefined): "green" | "yellow" 
 
 function marketToneClass(tone: "green" | "yellow" | "red") {
   if (tone === "green") {
-    return "text-[#00FF66]";
+    return "text-[#33C28E]";
   }
 
   if (tone === "red") {
-    return "text-[#FF7373]";
+    return "text-[#E05B73]";
   }
 
-  return "text-[#A8A8A8]";
+  return "text-[#CCCDDA]";
 }
 
 function X402MarketDataPanel({
@@ -2073,11 +2110,11 @@ function X402MarketDataPanel({
   const volumeCount = sortedRows.filter((row) => row.volume != null).length;
 
   return (
-    <div className="border-b border-[#1A1A1A] py-4">
+    <div className="border-b border-[#161619] py-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-3">
         <ViewportReveal variant="blur" duration="slow" root={scrollRoot} className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Data gathered</div>
-          <h2 className="mt-1 font-mono text-[18px] font-semibold leading-tight text-white">Market snapshot cache</h2>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Data gathered</div>
+          <h2 className="mt-1 font-sans text-[18px] font-semibold leading-tight text-white">Market snapshot cache</h2>
         </ViewportReveal>
         <div className="grid grid-cols-3 gap-x-5 gap-y-2">
           <X402SummaryMetric label="Symbols" value={String(sortedRows.length)} />
@@ -2087,7 +2124,7 @@ function X402MarketDataPanel({
       </div>
 
       {errors.length > 0 ? (
-        <div className="mx-3 mb-3 border border-[#3A2020] bg-[#1B0505]/55 px-3 py-2 font-mono text-[11px] leading-5 text-[#FF7373]">
+        <div className="mx-3 mb-3 border border-[#161619] bg-[#0C0C0F]/55 px-3 py-2 font-sans text-[11px] leading-5 text-[#E05B73]">
           {errors.slice(0, 2).join(" · ")}
         </div>
       ) : null}
@@ -2102,7 +2139,7 @@ function X402MarketDataPanel({
           <col className="w-[13%]" />
           <col className="w-[10%]" />
         </colgroup>
-        <thead className="border-y border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+        <thead className="border-y border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
           <tr>
             {["Token", "Price", "Price Δ", "Volume", "Volume Δ", "Updated", "Source"].map((label) => (
               <th key={label} className="px-3 py-2">
@@ -2118,7 +2155,7 @@ function X402MarketDataPanel({
             const priceTone = marketChangeTone(row.priceChangePct);
             const volumeTone = marketChangeTone(row.volumeChangePct);
             return (
-              <tr key={`${row.symbol}-${row.updatedAt ?? index}`} className="border-b border-[#1A1A1A] text-white hover:bg-[#070707]">
+              <tr key={`${row.symbol}-${row.updatedAt ?? index}`} className="border-b border-[#161619] text-white hover:bg-[#0C0C0F]">
                 <td className="px-3 py-2">
                   <ViewportReveal
                     as="span"
@@ -2128,35 +2165,35 @@ function X402MarketDataPanel({
                     className="flex min-w-0 items-center gap-2"
                   >
                     <TokenIcon symbol={row.symbol} size={14} />
-                    <span className="truncate font-mono text-[12px] font-bold text-[#F2F2F2]">{row.symbol}</span>
+                    <span className="truncate font-sans text-[12px] font-bold text-[#FFFFFF]">{row.symbol}</span>
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
                     {formatPrice(row.price)}
                   </ViewportReveal>
                 </td>
-                <td className={cx("truncate px-3 py-2 font-mono text-[12px] tabular-nums", marketToneClass(priceTone))}>
+                <td className={cx("truncate px-3 py-2 font-sans text-[12px] tabular-nums", marketToneClass(priceTone))}>
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
                     {formatPercent(row.priceChangePct)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
                     {formatMarketVolume(row.volume)}
                   </ViewportReveal>
                 </td>
-                <td className={cx("truncate px-3 py-2 font-mono text-[12px] tabular-nums", marketToneClass(volumeTone))}>
+                <td className={cx("truncate px-3 py-2 font-sans text-[12px] tabular-nums", marketToneClass(volumeTone))}>
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
                     {formatPercent(row.volumeChangePct)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#A8A8A8]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "chain")} root={scrollRoot} className="block truncate">
                     {formatOpenedAt(row.updatedAt)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-mono text-[10px] font-bold tracking-[0.08em] text-[#8A8A8A]">
+                <td className="truncate px-3 py-2 font-sans text-[10px] font-bold tracking-[0.08em] text-[#7F7F94]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
                     {x402MarketSourceLabel(row.source)}
                   </ViewportReveal>
@@ -2165,8 +2202,8 @@ function X402MarketDataPanel({
             );
           })}
           {sortedRows.length === 0 ? (
-            <tr className="border-b border-[#1A1A1A]">
-              <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={7}>
+            <tr className="border-b border-[#161619]">
+              <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={7}>
                 <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                   No market cache rows available yet
                 </ViewportReveal>
@@ -2177,7 +2214,7 @@ function X402MarketDataPanel({
       </table>
 
       {volumeCount === 0 && sortedRows.length > 0 ? (
-        <div className="px-3 pt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+        <div className="px-3 pt-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
           Volume cache has not populated for the visible rows.
         </div>
       ) : null}
@@ -2238,16 +2275,16 @@ function X402PaymentsPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#2A2A2A] bg-black/88",
+        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#111114]",
       )}
     >
-      <div className={cx(flat ? "shrink-0 border-b border-[#1A1A1A] pb-4" : "border-b border-[#1A1A1A] px-5 py-5")}>
+      <div className={cx(flat ? "shrink-0 border-b border-[#161619] pb-4" : "border-b border-[#161619] px-5 py-5")}>
         <ViewportReveal variant="blur" duration="slow">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">x402 Payments</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Payments</div>
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1
               className={cx(
-                "min-w-0 font-mono font-semibold leading-tight text-white",
+                "min-w-0 font-sans font-semibold leading-tight text-white",
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
@@ -2288,7 +2325,7 @@ function X402PaymentsPanel({
             <col className="w-[14%]" />
             <col className="w-[24%]" />
           </colgroup>
-          <thead className="border-b border-[#1A1A1A] font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]">
+          <thead className="border-b border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
             <tr>
               {["Time", "Tool", "Amount (USDC)", "Status", "Reason"].map((label) => (
                 <th key={label} className="px-3 py-2">
@@ -2306,12 +2343,12 @@ function X402PaymentsPanel({
                 <tr
                   key={`${record.ts}-${record.tool ?? "tool"}-${index}`}
                   className={cx(
-                    "border-b border-[#1A1A1A] text-white",
-                    failed && "bg-[#1B0505]/55",
-                    !flat && "hover:bg-[#070707]",
+                    "border-b border-[#161619] text-white",
+                    failed && "bg-[#0C0C0F]/55",
+                    !flat && "hover:bg-[#0C0C0F]",
                   )}
                 >
-                  <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#A8A8A8]">
+                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
                     <ViewportReveal
                       as="span"
                       variant="fade"
@@ -2322,7 +2359,7 @@ function X402PaymentsPanel({
                       {formatOpenedAt(record.ts)}
                     </ViewportReveal>
                   </td>
-                  <td className="truncate px-3 py-2 font-mono text-[12px] font-bold text-[#F2F2F2]">
+                  <td className="truncate px-3 py-2 font-sans text-[12px] font-bold text-[#FFFFFF]">
                     <ViewportReveal
                       as="span"
                       variant={walletColumnVariant("token")}
@@ -2333,7 +2370,7 @@ function X402PaymentsPanel({
                       {record.tool ?? "unknown"}
                     </ViewportReveal>
                   </td>
-                  <td className="truncate px-3 py-2 font-mono text-[12px] tabular-nums text-[#D0D0D0]">
+                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
                     <ViewportReveal
                       as="span"
                       variant={walletColumnVariant("amount")}
@@ -2361,8 +2398,8 @@ function X402PaymentsPanel({
                   </td>
                   <td
                     className={cx(
-                      "truncate px-3 py-2 font-mono text-[12px]",
-                      failed ? "text-[#FF7373]" : "text-[#666666]",
+                      "truncate px-3 py-2 font-sans text-[12px]",
+                      failed ? "text-[#E05B73]" : "text-[#7F7F94]",
                     )}
                     title={record.reason ?? undefined}
                   >
@@ -2380,8 +2417,8 @@ function X402PaymentsPanel({
               );
             })}
             {sortedRecords.length === 0 ? (
-              <tr className="border-b border-[#1A1A1A]">
-                <td className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]" colSpan={5}>
+              <tr className="border-b border-[#161619]">
+                <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={5}>
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     {emptyMessage}
                   </ViewportReveal>
@@ -2397,18 +2434,18 @@ function X402PaymentsPanel({
 
 function detailValueToneClass(tone: LogEventDetails["items"][number]["tone"]) {
   if (tone === "green") {
-    return "text-[#00FF66]";
+    return "text-[#33C28E]";
   }
 
   if (tone === "yellow") {
-    return "text-[#FFD21A]";
+    return "text-[#CCCDDA]";
   }
 
   if (tone === "red") {
-    return "text-[#FF7373]";
+    return "text-[#E05B73]";
   }
 
-  return "text-[#DADADA]";
+  return "text-[#CCCDDA]";
 }
 
 function ActivityDetailPanel({
@@ -2425,12 +2462,12 @@ function ActivityDetailPanel({
       <dl className="grid gap-3 sm:grid-cols-2">
         {details.items.map((item) => (
           <div key={item.label} className="min-w-0">
-            <dt className={cx("font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+            <dt className={cx("font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
               {item.label}
             </dt>
             <dd
               className={cx(
-                "mt-1 break-words font-mono leading-5",
+                "mt-1 break-words font-sans leading-5",
                 readable ? "text-[13px]" : "text-[12px]",
                 detailValueToneClass(item.tone),
               )}
@@ -2443,7 +2480,7 @@ function ActivityDetailPanel({
 
       {details.factors && details.factors.length > 0 ? (
         <div>
-          <div className={cx("mb-2 font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+          <div className={cx("mb-2 font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
             Factor audit · boolean flags from the decision log
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2451,11 +2488,11 @@ function ActivityDetailPanel({
               <span
                 key={factor.key}
                 className={cx(
-                  "inline-flex border px-2 py-1 font-mono uppercase tracking-[0.08em]",
+                  "inline-flex border px-2 py-1 font-sans uppercase tracking-[0.08em]",
                   readable ? "text-[11px]" : "text-[10px]",
                   factor.passed
-                    ? "border-[#00FF66]/40 bg-[#001A0A] text-[#00FF66]"
-                    : "border-[#FF3737]/40 bg-[#1B0505] text-[#FF7373]",
+                    ? "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]"
+                    : "border-[#E05B73]/40 bg-[#0C0C0F] text-[#E05B73]",
                 )}
               >
                 {factor.passed ? "PASS" : "FAIL"} {factor.label}
@@ -2467,7 +2504,7 @@ function ActivityDetailPanel({
 
       {details.x402Evidence && details.x402Evidence.length > 0 ? (
         <div>
-          <div className={cx("mb-2 flex items-center gap-2 font-mono uppercase tracking-[0.12em] text-[#757575]", readable ? "text-[11px]" : "text-[10px]")}>
+          <div className={cx("mb-2 flex items-center gap-2 font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
             <span className="border border-[#7A5CFF]/50 bg-[#120A2A] px-1.5 py-0.5 text-[#B9A6FF]">x402</span>
             paid data → algorithm input
           </div>
@@ -2476,20 +2513,20 @@ function ActivityDetailPanel({
               <div
                 key={row.tool + row.factor}
                 className={cx(
-                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#2A2A2A] bg-black/40 px-2.5 py-1.5 font-mono",
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1E1E26] bg-[#111114]/50 px-2.5 py-1.5 font-sans",
                   readable ? "text-[11px]" : "text-[10px]",
                 )}
               >
                 <span className="text-[#B9A6FF]">{row.tool}</span>
                 <span className="text-[#5C5C5C]">·</span>
-                <span className="text-[#9A9A9A]">{row.provides}</span>
+                <span className="text-[#CCCDDA]">{row.provides}</span>
                 <span className="text-[#5C5C5C]">→</span>
-                <span className="text-[#C8C8C8]">{row.factor}</span>
+                <span className="text-[#CCCDDA]">{row.factor}</span>
                 {row.reading && row.reading !== "—" ? (
                   <span className="text-[#7C7C7C]">[{row.reading}]</span>
                 ) : null}
                 {row.passed != null ? (
-                  <span className={cx("ml-auto", row.passed ? "text-[#00FF66]" : "text-[#FF7373]")}>
+                  <span className={cx("ml-auto", row.passed ? "text-[#33C28E]" : "text-[#E05B73]")}>
                     {row.passed ? "PASS" : "FAIL"}
                   </span>
                 ) : null}
@@ -2572,15 +2609,15 @@ function ActivityTableRow({
     <Fragment>
       <tr
         className={cx(
-          "border-b border-[#1A1A1A] text-white",
+          "border-b border-[#161619] text-white",
           canExpand && "cursor-pointer",
-          !compact && "hover:bg-[#070707]",
+          !compact && "hover:bg-[#0C0C0F]",
         )}
         onClick={canExpand ? onToggle : undefined}
       >
         <td
           className={cx(
-            "font-mono font-bold text-[#F2F2F2]",
+            "font-sans font-bold text-[#FFFFFF]",
             dense
               ? "px-1 py-1.5 text-[9px] leading-4"
               : compact
@@ -2597,7 +2634,7 @@ function ActivityTableRow({
             className="flex min-w-0 items-center gap-1.5"
           >
             {expandable ? (
-              <span className="shrink-0 text-[#757575]">
+              <span className="shrink-0 text-[#7F7F94]">
                 {canExpand ? (
                   expanded ? (
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -2614,7 +2651,7 @@ function ActivityTableRow({
         </td>
         <td
           className={cx(
-            "truncate font-mono text-[#D0D0D0]",
+            "truncate font-sans text-[#CCCDDA]",
             dense
               ? "px-1 py-1.5 text-[8px] leading-4"
               : compact
@@ -2635,13 +2672,13 @@ function ActivityTableRow({
                 <span className="truncate">{row.token}</span>
               </>
             ) : (
-              <span className="text-[#666666]">—</span>
+              <span className="text-[#7F7F94]">—</span>
             )}
           </ViewportReveal>
         </td>
         <td
           className={cx(
-            "truncate font-mono text-[#D0D0D0]",
+            "truncate font-sans text-[#CCCDDA]",
             dense
               ? "px-1 py-1.5 text-[8px] leading-4"
               : compact
@@ -2661,7 +2698,7 @@ function ActivityTableRow({
                 href={row.explorerUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="font-bold text-[#8FD9FF] transition-colors hover:text-white"
+                className="font-bold text-[#9E88F0] transition-colors hover:text-white"
                 title={row.explorerUrl}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -2685,7 +2722,7 @@ function ActivityTableRow({
         </td>
       </tr>
       {expanded && row.details ? (
-        <tr className="border-b border-[#1A1A1A] bg-[#050505]">
+        <tr className="border-b border-[#161619] bg-[#111114]">
           <td colSpan={4}>
             <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
               <ActivityDetailPanel details={row.details} compact={dense} readable={readable} />
@@ -2722,7 +2759,7 @@ function RowPaginator({
   return (
     <div
       className={cx(
-        "flex shrink-0 items-center justify-between gap-3 border-t border-[#1A1A1A] bg-black/88 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8A8A8A]",
+        "flex shrink-0 items-center justify-between gap-3 border-t border-[#161619] bg-[#111114] font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]",
         compact ? "px-3 py-2" : "px-4 py-3",
       )}
     >
@@ -2737,12 +2774,12 @@ function RowPaginator({
           aria-label="Previous page"
           className={cx(
             "transition-colors",
-            page === 0 ? "cursor-not-allowed text-[#444444]" : "text-[#B8B8B8] hover:text-white",
+            page === 0 ? "cursor-not-allowed text-[#444444]" : "text-[#CCCDDA] hover:text-white",
           )}
         >
           Prev
         </button>
-        <span className="tabular-nums text-[#B8B8B8]">
+        <span className="tabular-nums text-[#CCCDDA]">
           {page + 1} / {totalPages}
         </span>
         <button
@@ -2752,7 +2789,7 @@ function RowPaginator({
           aria-label="Next page"
           className={cx(
             "transition-colors",
-            page >= totalPages - 1 ? "cursor-not-allowed text-[#444444]" : "text-[#B8B8B8] hover:text-white",
+            page >= totalPages - 1 ? "cursor-not-allowed text-[#444444]" : "text-[#CCCDDA] hover:text-white",
           )}
         >
           Next
@@ -2841,9 +2878,9 @@ function RecentActivity({
           </colgroup>
           <thead
             className={cx(
-              "font-mono font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
+              "font-sans font-bold uppercase tracking-[0.12em] text-[#7F7F94]",
               dense ? "text-[8px]" : readable ? "text-[11px]" : "text-[10px]",
-              compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+              compact ? "border-b border-[#161619]" : "border-y border-[#161619]",
             )}
           >
             <tr>
@@ -2891,10 +2928,10 @@ function RecentActivity({
               />
             ))}
             {rows.length === 0 ? (
-              <tr className="border-b border-[#1A1A1A]">
+              <tr className="border-b border-[#161619]">
                 <td
                   className={cx(
-                    "font-mono text-[#8A8A8A]",
+                    "font-sans text-[#7F7F94]",
                     dense ? "px-1 py-3 text-[9px]" : compact ? "px-3 py-4 text-[12px]" : "px-4 py-5 text-[12px]",
                   )}
                   colSpan={4}
@@ -2974,17 +3011,17 @@ function MobileLogFeed({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div
         ref={scrollContainerRef}
-        className="console-scroll min-h-0 flex-1 overflow-y-auto border-t border-[#202024] bg-black/45"
+        className="console-scroll min-h-0 flex-1 overflow-y-auto border-t border-[#161619] bg-[#111114]/50"
       >
         {pagedRows.length === 0 ? (
-          <div className="px-3 py-4 font-mono text-[12px] text-[#8A8A8A]">
+          <div className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]">
             <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
               Waiting for telemetry
             </ViewportReveal>
           </div>
         ) : (
           <div
-            className="grid min-h-full divide-y divide-[#18181C]"
+            className="grid min-h-full divide-y divide-[#161619]"
             style={{ gridTemplateRows: `repeat(${rowTrackCount}, minmax(0, 1fr))` }}
           >
             {pagedRows.map((row, index) => {
@@ -2993,14 +3030,14 @@ function MobileLogFeed({
               const token = row.token ?? tokenFromAmountLabel(row.amount);
 
               return (
-                <div key={row.id} className="min-h-0 bg-[#030303]/70">
+                <div key={row.id} className="min-h-0 bg-[#0C0C0F]/70">
                   <button
                     type="button"
                     onClick={canExpand ? () => toggleRow(row.id) : undefined}
                     disabled={!canExpand}
                     className={cx(
                       "grid h-full w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2 text-left",
-                      canExpand && "active:bg-[#080808]",
+                      canExpand && "active:bg-[#0C0C0F]",
                     )}
                   >
                     <ViewportReveal
@@ -3010,7 +3047,7 @@ function MobileLogFeed({
                       root={scrollRoot}
                       className="flex items-center gap-1.5"
                     >
-                      <span className="shrink-0 text-[#757575]">
+                      <span className="shrink-0 text-[#7F7F94]">
                         {canExpand ? (
                           expanded ? (
                             <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3022,7 +3059,7 @@ function MobileLogFeed({
                       {token ? (
                         <TokenIcon symbol={token} size={18} />
                       ) : (
-                        <span className="h-[18px] w-[18px] rounded-full border border-[#2A2A2A]" aria-hidden="true" />
+                        <span className="h-[18px] w-[18px] rounded-full border border-[#1E1E26]" aria-hidden="true" />
                       )}
                     </ViewportReveal>
 
@@ -3033,16 +3070,16 @@ function MobileLogFeed({
                       className="min-w-0"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8A8A8A]">
+                        <span className="truncate font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7F7F94]">
                           {row.hash}
                         </span>
-                        <span className="h-1 w-1 shrink-0 rounded-full bg-[#3A3A3A]" aria-hidden="true" />
-                        <span className="truncate font-mono text-[10px] tabular-nums text-[#6F6F6F]">
+                        <span className="h-1 w-1 shrink-0 rounded-full bg-[#282830]" aria-hidden="true" />
+                        <span className="truncate font-sans text-[10px] tabular-nums text-[#7F7F94]">
                           {formatOpenedAt(row.timestamp)}
                         </span>
                       </div>
                       <p
-                        className="mt-1 overflow-hidden break-words font-mono text-[11px] font-semibold leading-4 text-[#E6E6E6]"
+                        className="mt-1 overflow-hidden break-words font-sans text-[11px] font-semibold leading-4 text-[#FFFFFF]"
                         style={{
                           display: "-webkit-box",
                           WebkitLineClamp: 2,
@@ -3156,9 +3193,9 @@ function PositionTableRow({
   scrollRoot: Element | null;
 }) {
   const isLead = index === 0;
-  const cellClass = (column: PositionColumn, colorClass = "text-[#D0D0D0]") =>
+  const cellClass = (column: PositionColumn, colorClass = "text-[#CCCDDA]") =>
     cx(
-      "truncate font-mono text-[12px] tabular-nums",
+      "truncate font-sans text-[12px] tabular-nums",
       colorClass,
       compact ? "px-2 py-2" : "px-3 py-4",
       column === "token" && (compact ? "px-3 py-2" : "px-5 py-4"),
@@ -3181,19 +3218,19 @@ function PositionTableRow({
   );
 
   return (
-    <tr className={cx("border-b border-[#1A1A1A] text-white", !compact && "hover:bg-[#070707]")}>
+    <tr className={cx("border-b border-[#161619] text-white", !compact && "hover:bg-[#0C0C0F]")}>
       {renderCell(
         "token",
         <>
           <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
-          <span className="truncate font-mono text-[13px] font-bold text-[#F2F2F2]">{row.symbol}</span>
+          <span className="truncate font-sans text-[13px] font-bold text-[#FFFFFF]">{row.symbol}</span>
           {row.source === "wallet" ? (
-            <span className="shrink-0 border border-[#3A3A3A] px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[#8A8A8A]">
+            <span className="shrink-0 border border-[#282830] px-1.5 py-0.5 font-sans text-[8px] uppercase tracking-[0.08em] text-[#7F7F94]">
               wallet
             </span>
           ) : null}
         </>,
-        cx("font-mono text-[13px] font-bold text-[#F2F2F2]", compact ? "px-3 py-2" : "px-5 py-4"),
+        cx("font-sans text-[13px] font-bold text-[#FFFFFF]", compact ? "px-3 py-2" : "px-5 py-4"),
       )}
       {renderCell("amount", formatTokenAmount(row.amount), cellClass("amount"))}
       {renderCell("entry", formatPrice(row.entryPrice), cellClass("entry"))}
@@ -3201,16 +3238,16 @@ function PositionTableRow({
       {renderCell(
         "current",
         formatPrice(row.currentPrice),
-        cellClass("current", positivePrice(row.currentPrice) ? "text-[#8FD9FF]" : "text-[#666666]"),
+        cellClass("current", positivePrice(row.currentPrice) ? "text-[#9E88F0]" : "text-[#7F7F94]"),
       )}
-      {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#00FF66]"))}
-      {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#FFD21A]"))}
-      {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#8FD9FF]"))}
+      {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#33C28E]"))}
+      {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#CCCDDA]"))}
+      {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#9E88F0]"))}
       {renderCell(
         "opened",
         formatOpenedAt(row.openedAt),
         cx(
-          "truncate text-right font-mono text-[12px] text-[#A8A8A8]",
+          "truncate text-right font-sans text-[12px] text-[#CCCDDA]",
           compact ? "px-3 py-2" : "px-5 py-4",
         ),
       )}
@@ -3259,8 +3296,8 @@ function ActivePositionsTable({
       </colgroup>
       <thead
         className={cx(
-          "font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#8A8A8A]",
-          compact ? "border-b border-[#1A1A1A]" : "border-y border-[#1A1A1A]",
+          "font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]",
+          compact ? "border-b border-[#161619]" : "border-y border-[#161619]",
         )}
       >
         <tr>
@@ -3286,8 +3323,8 @@ function ActivePositionsTable({
           />
         ))}
         {rows.length === 0 ? (
-          <tr className="border-b border-[#1A1A1A]">
-            <td className={cx("py-6 font-mono text-[12px] text-[#8A8A8A]", compact ? "px-3" : "px-5")} colSpan={9}>
+          <tr className="border-b border-[#161619]">
+            <td className={cx("py-6 font-sans text-[12px] text-[#7F7F94]", compact ? "px-3" : "px-5")} colSpan={9}>
               <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                 No open positions in positions.json
               </ViewportReveal>
@@ -3327,21 +3364,21 @@ function positionStatus(row: PositionRow) {
 
 function positionToneClass(tone: PositionTone) {
   return {
-    green: "text-[#00FF66]",
-    yellow: "text-[#FFD21A]",
-    blue: "text-[#8FD9FF]",
-    red: "text-[#FF7373]",
-    neutral: "text-[#D0D0D0]",
+    green: "text-[#33C28E]",
+    yellow: "text-[#CCCDDA]",
+    blue: "text-[#9E88F0]",
+    red: "text-[#E05B73]",
+    neutral: "text-[#CCCDDA]",
   }[tone];
 }
 
 function positionBadgeClass(tone: PositionTone) {
   return {
-    green: "border-[#00FF66]/40 bg-[#001A0A] text-[#00FF66]",
-    yellow: "border-[#FFD21A]/40 bg-[#1B1600] text-[#FFD21A]",
-    blue: "border-[#8FD9FF]/40 bg-[#03131C] text-[#8FD9FF]",
-    red: "border-[#FF3737]/40 bg-[#1B0505] text-[#FF7373]",
-    neutral: "border-[#3A3A3A] bg-[#080808] text-[#A8A8A8]",
+    green: "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]",
+    yellow: "border-[#CCCDDA]/40 bg-[#0C0C0F] text-[#CCCDDA]",
+    blue: "border-[#9E88F0]/40 bg-[#0C0C0F] text-[#9E88F0]",
+    red: "border-[#E05B73]/40 bg-[#0C0C0F] text-[#E05B73]",
+    neutral: "border-[#282830] bg-[#0C0C0F] text-[#CCCDDA]",
   }[tone];
 }
 
@@ -3362,17 +3399,17 @@ function PositionSummaryBlock({
 }) {
   return (
     <ViewportReveal variant="fade" delay={80 + index * 60} root={scrollRoot}>
-      <div className="min-w-0 bg-[#050505] px-6 py-5">
-        <div className="font-mono text-[10px] uppercase text-[#757575]">{label}</div>
+      <div className="min-w-0 bg-[#111114] px-6 py-5">
+        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">{label}</div>
         <div
           className={cx(
-            "mt-2 truncate font-mono text-[24px] font-semibold tabular-nums text-white xl:text-[28px]",
+            "mt-2 truncate font-sans text-[24px] font-semibold tabular-nums text-white xl:text-[28px]",
             positionToneClass(tone),
           )}
         >
           {value}
         </div>
-        {detail ? <div className="mt-1 truncate font-mono text-[11px] text-[#666666]">{detail}</div> : null}
+        {detail ? <div className="mt-1 truncate font-sans text-[11px] text-[#7F7F94]">{detail}</div> : null}
       </div>
     </ViewportReveal>
   );
@@ -3398,10 +3435,10 @@ function PositionMetricCell({
       variant={positionColumnVariant(column)}
       delay={positionCellDelay(index, column)}
       duration="fast"
-      className="min-w-0 bg-[#030303] px-4 py-3"
+      className="min-w-0 bg-[#0C0C0F] px-4 py-3"
     >
-      <div className="font-mono text-[10px] uppercase text-[#757575]">{label}</div>
-      <div className={cx("mt-1 truncate font-mono text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
+      <div className="font-sans text-[10px] uppercase text-[#7F7F94]">{label}</div>
+      <div className={cx("mt-1 truncate font-sans text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
     </ViewportReveal>
   );
 }
@@ -3409,12 +3446,12 @@ function PositionMetricCell({
 function PositionRiskCorridor({ row }: { row: PositionRow }) {
   if (row.source === "wallet") {
     return (
-      <div className="border-t border-[#1A1A1A] px-5 py-4">
+      <div className="border-t border-[#161619] px-5 py-4">
         <div className="flex items-start gap-3">
-          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#FFD21A]" aria-hidden="true" />
+          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#CCCDDA]" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="font-mono text-[10px] uppercase text-[#757575]">Position state</div>
-            <p className="mt-1 break-words font-mono text-[12px] leading-5 text-[#A8A8A8]">
+            <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Position state</div>
+            <p className="mt-1 break-words font-sans text-[12px] leading-5 text-[#CCCDDA]">
               Entry, stop, and target are unavailable until the position state syncs.
             </p>
           </div>
@@ -3436,18 +3473,18 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
     Math.min(100, Math.max(0, ((value - (stop as number)) / ((target as number) - (stop as number))) * 100));
 
   return (
-    <div className="border-t border-[#1A1A1A] px-5 py-4">
+    <div className="border-t border-[#161619] px-5 py-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="font-mono text-[10px] uppercase text-[#757575]">Risk corridor</div>
-        <div className="font-mono text-[12px] tabular-nums text-[#8A8A8A]">
+        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Risk corridor</div>
+        <div className="font-sans text-[12px] tabular-nums text-[#7F7F94]">
           {stopDistancePct !== null ? (
-            <span className="text-[#FFD21A]">-{stopDistancePct.toFixed(1)}% stop</span>
+            <span className="text-[#CCCDDA]">-{stopDistancePct.toFixed(1)}% stop</span>
           ) : (
             <span>stop N/A</span>
           )}
-          <span className="mx-2 text-[#3A3A3A]">/</span>
+          <span className="mx-2 text-[#282830]">/</span>
           {targetUpsidePct !== null ? (
-            <span className="text-[#8FD9FF]">+{targetUpsidePct.toFixed(1)}% target</span>
+            <span className="text-[#9E88F0]">+{targetUpsidePct.toFixed(1)}% target</span>
           ) : (
             <span>target N/A</span>
           )}
@@ -3457,16 +3494,16 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
       {valid ? (
         <>
           <div className="flex items-center gap-4">
-            <div className="font-mono text-[10px] uppercase text-[#FFD21A]">Stop</div>
+            <div className="font-sans text-[10px] uppercase text-[#CCCDDA]">Stop</div>
             <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
               <div
-                className="absolute inset-y-0 left-0 rounded-full bg-[#222222]"
+                className="absolute inset-y-0 left-0 rounded-full bg-[#282830]"
                 style={{ width: `${place(entry as number)}%` }}
                 aria-hidden="true"
               />
               {positivePrice(high) ? (
                 <span
-                  className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#00FF66]"
+                  className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#33C28E]"
                   style={{ left: `${place(high)}%` }}
                   title={`High ${formatPrice(high)}`}
                   aria-hidden="true"
@@ -3480,42 +3517,42 @@ function PositionRiskCorridor({ row }: { row: PositionRow }) {
               />
               {positivePrice(current) ? (
                 <span
-                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#8FD9FF] shadow-[0_0_6px_#8FD9FF]"
+                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#9E88F0] shadow-[0_0_6px_#9E88F0]"
                   style={{ left: `${place(current)}%` }}
                   title={`Current ${formatPrice(current)}`}
                   aria-hidden="true"
                 />
               ) : null}
             </div>
-            <div className="font-mono text-[10px] uppercase text-[#8FD9FF]">Target</div>
+            <div className="font-sans text-[10px] uppercase text-[#9E88F0]">Target</div>
           </div>
-          <div className="mt-3 grid grid-cols-5 gap-3 font-mono text-[11px] tabular-nums">
+          <div className="mt-3 grid grid-cols-5 gap-3 font-sans text-[11px] tabular-nums">
             <div className="min-w-0">
-              <div className="text-[#666666]">Stop</div>
-              <div className="truncate text-[#FFD21A]">{formatPrice(stop)}</div>
+              <div className="text-[#7F7F94]">Stop</div>
+              <div className="truncate text-[#CCCDDA]">{formatPrice(stop)}</div>
             </div>
             <div className="min-w-0">
-              <div className="text-[#666666]">Entry</div>
+              <div className="text-[#7F7F94]">Entry</div>
               <div className="truncate text-white">{formatPrice(entry)}</div>
             </div>
             <div className="min-w-0">
-              <div className="text-[#666666]">Current</div>
-              <div className={cx("truncate", positivePrice(current) ? "text-[#8FD9FF]" : "text-[#666666]")}>
+              <div className="text-[#7F7F94]">Current</div>
+              <div className={cx("truncate", positivePrice(current) ? "text-[#9E88F0]" : "text-[#7F7F94]")}>
                 {formatPrice(current)}
               </div>
             </div>
             <div className="min-w-0">
-              <div className="text-[#666666]">High</div>
-              <div className="truncate text-[#00FF66]">{formatPrice(high)}</div>
+              <div className="text-[#7F7F94]">High</div>
+              <div className="truncate text-[#33C28E]">{formatPrice(high)}</div>
             </div>
             <div className="min-w-0 text-right">
-              <div className="text-[#666666]">Target</div>
-              <div className="truncate text-[#8FD9FF]">{formatPrice(target)}</div>
+              <div className="text-[#7F7F94]">Target</div>
+              <div className="truncate text-[#9E88F0]">{formatPrice(target)}</div>
             </div>
           </div>
         </>
       ) : (
-        <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
+        <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">
           Stop and target levels will appear here after the position state is fully synced.
         </p>
       )}
@@ -3708,11 +3745,11 @@ function CopyJsonButton({ json }: { json: object }) {
     <button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1.5 rounded-sm border border-[#2A2A2A] bg-[#0A0A0A] px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[#A8A8A8] transition-colors hover:border-[#3A3A3A] hover:text-white"
+      className="inline-flex items-center gap-1.5 rounded-sm border border-[#1E1E26] bg-[#0C0C0F] px-2.5 py-1.5 font-sans text-[10px] uppercase tracking-[0.08em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
     >
       {copied ? (
         <>
-          <Check size={12} className="text-[#00FF66]" aria-hidden="true" />
+          <Check size={12} className="text-[#33C28E]" aria-hidden="true" />
           <span>Copied</span>
         </>
       ) : (
@@ -3763,36 +3800,40 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
   const direction = positivePrice(current) && (current as number) >= (entry as number) ? "target" : "stop";
 
   return (
-    <div className="border-t border-[#1A1A1A] px-5 py-4">
-      <div className="mb-3 flex items-center justify-between font-mono">
-        <div className="text-[10px] uppercase text-[#757575]">Position distance</div>
+    <div className="border-t border-[#161619] px-5 py-4">
+      <div className="mb-3 flex items-center justify-between font-sans">
+        <div className="text-[10px] uppercase text-[#7F7F94]">Position distance</div>
         <div className="text-[11px] tabular-nums">
           {toTargetPct !== null && toStopPct !== null ? (
-            <span className={direction === "target" ? "text-[#00FF66]" : "text-[#FFD21A]"}>
+            <span className={direction === "target" ? "text-[#33C28E]" : "text-[#CCCDDA]"}>
               {direction === "target"
                 ? `${toTargetPct.toFixed(1)}% to target`
                 : `${toStopPct.toFixed(1)}% to stop`}
             </span>
           ) : (
-            <span className="text-[#666666]">N/A</span>
+            <span className="text-[#7F7F94]">N/A</span>
           )}
         </div>
       </div>
-      <div className="relative h-px bg-[#242424]">
-        {/* White fill — covering percentage from stop to current */}
-        <div
-          className="absolute inset-y-0 left-0 bg-white"
-          style={{ width: `${currentPct ?? 0}%` }}
-        />
-        {/* Dot at the end of the fill */}
-        {currentPct !== null ? (
-          <div
-            className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
-            style={{ left: `${currentPct}%` }}
-          />
-        ) : null}
+      <div className="flex items-center gap-[2px]">
+        {Array.from({ length: 10 }).map((_, i) => {
+          const filled = currentPct !== null && i < Math.round((currentPct / 100) * 10);
+          return (
+            <div
+              key={i}
+              className={cx(
+                "h-3.5 w-1 rounded-sm",
+                filled
+                  ? i % 2 === 0
+                    ? "bg-[#9E88F0]"
+                    : "bg-[#8C76E0]"
+                  : "bg-[#1E1E26]"
+              )}
+            />
+          );
+        })}
       </div>
-      <div className="mt-2.5 flex justify-between font-mono text-[10px] tabular-nums text-[#555555]">
+      <div className="mt-2.5 flex justify-between font-sans text-[10px] tabular-nums text-[#7F7F94]">
         <span>Stop {formatPrice(stop)}</span>
         <span>Entry {formatPrice(entry)}</span>
         <span>Target {formatPrice(target)}</span>
@@ -3806,12 +3847,12 @@ function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decis
   const remaining = positionRemainingTime(row.openedAt, decision?.hold_time_seconds);
 
   return (
-    <div className="flex items-center gap-3 font-mono text-[10px] uppercase text-[#757575]">
+    <div className="flex items-center gap-3 font-sans text-[10px] uppercase text-[#7F7F94]">
       <span>Held: {elapsed}</span>
       {remaining ? (
         <>
-          <span className="h-1 w-1 rounded-full bg-[#3A3A3A]" aria-hidden="true" />
-          <span className={remaining === "expiring" ? "text-[#FF7373]" : "text-[#8FD9FF]"}>
+          <span className="h-1 w-1 rounded-full bg-[#282830]" aria-hidden="true" />
+          <span className={remaining === "expiring" ? "text-[#E05B73]" : "text-[#9E88F0]"}>
             {remaining === "expiring" ? "Time stop" : `${remaining} remaining`}
           </span>
         </>
@@ -3823,51 +3864,56 @@ function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decis
 function PositionEntryReason({ decision }: { decision: Decision | null }) {
   if (!decision) return null;
 
-  const factors = Object.entries(decision.factor_scores ?? {})
-    .filter(([, passed]) => passed)
-    .map(([key]) => FACTOR_LABELS[key] ?? key.replace(/_/g, " "));
+  const scores = decision.factor_scores ?? {};
 
   return (
-    <div className="border-t border-[#1A1A1A] px-5 py-3">
-      <div className="mb-1.5 font-mono text-[10px] uppercase text-[#757575]">Entry reason</div>
-      <div className="font-mono text-[11px] leading-4 text-[#A8A8A8]">{decision.reason ?? "—"}</div>
-      {factors.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {factors.map((factor) => (
+    <div className="border-t border-[#161619] px-5 py-3">
+      <div className="mb-1.5 font-sans text-[10px] uppercase text-[#7F7F94]">Entry reason</div>
+      <div className="font-sans text-[11px] leading-4 text-[#CCCDDA]">{decision.reason ?? "—"}</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {ENTRY_FACTOR_KEYS.map((key) => {
+          const passed = Boolean(scores[key]);
+          const label = FACTOR_LABELS[key] ?? key.replace(/_/g, " ");
+          return (
             <span
-              key={factor}
-              className="inline-flex items-center gap-1 border border-[#2A2A2A] bg-[#0A0A0A] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em] text-[#8A8A8A]"
+              key={key}
+              className={cx(
+                "inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
+                passed
+                  ? "border-[#1E1E26] bg-[#0C0C0F] text-[#33C28E]"
+                  : "border-[#1E1E26] bg-[#0C0C0F] text-[#7F7F94]"
+              )}
             >
-              <span className="h-1 w-1 rounded-full bg-[#00FF66]" />
-              {factor}
+              <span className={cx("h-1 w-1 rounded-full", passed ? "bg-[#33C28E]" : "bg-[#7F7F94]")} />
+              {label}
             </span>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
       {decision.entry_score != null && (
-        <div className="mt-2 font-mono text-[10px] text-[#666666]">
-          Score: <span className="text-[#DADADA]">{decision.entry_score.toFixed(0)}/100</span>
+        <div className="mt-2 font-sans text-[10px] text-[#7F7F94]">
+          Score: <span className="text-[#CCCDDA]">{decision.entry_score.toFixed(0)}/100</span>
           {decision.strategy_mode ? ` · ${decision.strategy_mode}` : ""}
         </div>
       )}
       {decision.mlAudit && (
         <div className="mt-2 flex items-center gap-1.5">
           <span className={cx(
-            "inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.06em]",
+            "inline-flex items-center gap-1 border px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
             decision.mlAudit.mlActive
-              ? "border-[#2A2A2A] bg-[#00FF66]/10 text-[#00FF66]"
+              ? "border-[#1E1E26] bg-[#33C28E]/10 text-[#33C28E]"
               : decision.mlAudit.mlEnabled
-                ? "border-[#2A2A2A] bg-[#FFD700]/10 text-[#FFD700]"
-                : "border-[#2A2A2A] bg-[#0A0A0A] text-[#8A8A8A]"
+                ? "border-[#1E1E26] bg-[#9E88F0]/10 text-[#9E88F0]"
+                : "border-[#1E1E26] bg-[#0C0C0F] text-[#7F7F94]"
           )}>
             <span className={cx(
               "h-1 w-1 rounded-full",
-              decision.mlAudit.mlActive ? "bg-[#00FF66]" : decision.mlAudit.mlEnabled ? "bg-[#FFD700]" : "bg-[#666666]"
+              decision.mlAudit.mlActive ? "bg-[#33C28E]" : decision.mlAudit.mlEnabled ? "bg-[#9E88F0]" : "bg-[#7F7F94]"
             )} />
             ML: {decision.mlAudit.mlRegime ?? "—"} · conf {(decision.mlAudit.mlConfidence != null ? (decision.mlAudit.mlConfidence * 100).toFixed(0) : "—")}% · {decision.mlAudit.mlPasserCount ?? 0} passers
           </span>
           {decision.mlAudit.mlShadowMode && (
-            <span className="font-mono text-[9px] text-[#666666]">shadow</span>
+            <span className="font-sans text-[9px] text-[#7F7F94]">shadow</span>
           )}
         </div>
       )}
@@ -3894,12 +3940,12 @@ function DesktopPositionCard({
       delay={index * 70}
       duration={index === 0 ? "slow" : "normal"}
       root={scrollRoot}
-      className="group overflow-hidden border border-[#1A1A1A] bg-black/80 transition-colors hover:border-[#2A2A2A] hover:bg-[#030303]"
+      className="group overflow-hidden border border-[#161619] bg-[#111114]/80 transition-colors hover:border-[#1E1E26] hover:bg-[#0C0C0F]"
     >
       <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(150px,0.32fr)_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col justify-between border-b border-[#1A1A1A] px-5 py-5 xl:border-b-0 xl:border-r">
+        <div className="flex min-w-0 flex-col justify-between border-b border-[#161619] px-5 py-5 xl:border-b-0 xl:border-r">
           {/* Top: date only */}
-          <div className="font-mono text-[11px] text-white">
+          <div className="font-sans text-[11px] text-white">
             {row.source === "wallet" ? "Wallet balance" : `Opened ${formatOpenedAt(row.openedAt)}`}
           </div>
 
@@ -3910,32 +3956,32 @@ function DesktopPositionCard({
 
           {/* Explorer indicator */}
           {explorerUrl ? (
-            <div className="flex items-center gap-1 font-mono text-[10px] uppercase text-[#757575]">
+            <div className="flex items-center gap-1 font-sans text-[10px] uppercase text-[#7F7F94]">
               <span>BSC</span>
               <ExternalLink size={10} />
             </div>
           ) : null}
 
           {/* Bottom stats */}
-          <div className="mt-5 grid grid-cols-3 gap-px bg-[#141416]">
-            <div className="min-w-0 bg-[#050505] px-3 py-3">
-              <div className="font-mono text-[10px] uppercase text-[#757575]">Amount</div>
-              <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-[#D0D0D0]">
+          <div className="mt-5 grid grid-cols-3 gap-px bg-[#161619]">
+            <div className="min-w-0 bg-[#111114] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Amount</div>
+              <div className="mt-1 truncate font-sans text-[15px] tabular-nums text-[#CCCDDA]">
                 {formatTokenAmount(row.amount)}
               </div>
             </div>
-            <div className="min-w-0 bg-[#050505] px-3 py-3">
-              <div className="font-mono text-[10px] uppercase text-[#757575]">Value</div>
-              <div className="mt-1 truncate font-mono text-[15px] tabular-nums text-white">
+            <div className="min-w-0 bg-[#111114] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Value</div>
+              <div className="mt-1 truncate font-sans text-[15px] tabular-nums text-white">
                 {formatUsd(row.entryValueUsd)}
               </div>
             </div>
-            <div className="min-w-0 bg-[#050505] px-3 py-3">
-              <div className="font-mono text-[10px] uppercase text-[#757575]">Current</div>
+            <div className="min-w-0 bg-[#111114] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Current</div>
               <div
                 className={cx(
-                  "mt-1 truncate font-mono text-[15px] tabular-nums",
-                  positivePrice(row.currentPrice) ? "text-[#8FD9FF]" : "text-[#666666]",
+                  "mt-1 truncate font-sans text-[15px] tabular-nums",
+                  positivePrice(row.currentPrice) ? "text-[#9E88F0]" : "text-[#7F7F94]",
                 )}
                 title={positivePrice(row.currentPrice) ? `Live price ${formatPrice(row.currentPrice)}` : undefined}
               >
@@ -3946,7 +3992,7 @@ function DesktopPositionCard({
         </div>
 
         <div className="min-w-0">
-          <div className="grid grid-cols-4 gap-px bg-[#141416]">
+          <div className="grid grid-cols-4 gap-px bg-[#161619]">
             <PositionMetricCell label="Entry" value={formatPrice(row.entryPrice)} column="entry" index={index} valueClassName="font-bold text-white" />
             <PositionMetricCell
               label="High"
@@ -4032,15 +4078,15 @@ function PositionsInsightRail({
   ];
 
   return (
-    <aside className="min-w-0 border border-[#1A1A1A] bg-black/70">
+    <aside className="min-w-0 border border-[#161619] bg-[#111114]/70">
       <ViewportReveal variant="fade" delay={160} root={scrollRoot}>
-        <div className="border-b border-[#1A1A1A] px-5 py-4">
-          <div className="font-mono text-[10px] uppercase text-[#757575]">Position readout</div>
-          <div className="mt-1 font-mono text-[18px] font-semibold text-white">Exposure & state</div>
+        <div className="border-b border-[#161619] px-5 py-4">
+          <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Position readout</div>
+          <div className="mt-1 font-sans text-[18px] font-semibold text-white">Exposure & state</div>
         </div>
       </ViewportReveal>
 
-      <div className="divide-y divide-[#141416]">
+      <div className="divide-y divide-[#161619]">
         {railRows.map((item, index) => (
           <ViewportReveal
             key={item.label}
@@ -4050,39 +4096,39 @@ function PositionsInsightRail({
             root={scrollRoot}
             className="flex items-baseline justify-between gap-4 px-5 py-3"
           >
-            <span className="font-mono text-[11px] uppercase text-[#757575]">{item.label}</span>
-            <span className={cx("truncate font-mono text-[14px] tabular-nums", positionToneClass(item.tone))}>
+            <span className="font-sans text-[11px] uppercase text-[#7F7F94]">{item.label}</span>
+            <span className={cx("truncate font-sans text-[14px] tabular-nums", positionToneClass(item.tone))}>
               {item.value}
             </span>
           </ViewportReveal>
         ))}
       </div>
 
-      <ViewportReveal variant="fade" delay={440} root={scrollRoot} className="border-t border-[#1A1A1A] px-5 py-4">
-        <div className="font-mono text-[10px] uppercase text-[#757575]">Closest levels</div>
+      <ViewportReveal variant="fade" delay={440} root={scrollRoot} className="border-t border-[#161619] px-5 py-4">
+        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Closest levels</div>
         <div className="mt-4 space-y-4">
           <div>
-            <div className="flex items-baseline justify-between gap-3 font-mono">
-              <span className="text-[11px] uppercase text-[#757575]">Stop</span>
-              <span className="text-[13px] tabular-nums text-[#FFD21A]">
+            <div className="flex items-baseline justify-between gap-3 font-sans">
+              <span className="text-[11px] uppercase text-[#7F7F94]">Stop</span>
+              <span className="text-[13px] tabular-nums text-[#CCCDDA]">
                 {nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : "N/A"}
               </span>
             </div>
-            <div className="mt-2 h-px bg-[#242424]">
-              <div className="h-px w-1/3 bg-[#FFD21A]" aria-hidden="true" />
+            <div className="mt-2 h-px bg-[#161619]">
+              <div className="h-px w-1/3 bg-[#CCCDDA]" aria-hidden="true" />
             </div>
           </div>
           <div>
-            <div className="flex items-baseline justify-between gap-3 font-mono">
-              <span className="text-[11px] uppercase text-[#757575]">Target</span>
-              <span className="text-[13px] tabular-nums text-[#8FD9FF]">
+            <div className="flex items-baseline justify-between gap-3 font-sans">
+              <span className="text-[11px] uppercase text-[#7F7F94]">Target</span>
+              <span className="text-[13px] tabular-nums text-[#9E88F0]">
                 {nearestTarget
                   ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
                   : "N/A"}
               </span>
             </div>
-            <div className="mt-2 h-px bg-[#242424]">
-              <div className="h-px w-2/3 bg-[#8FD9FF]" aria-hidden="true" />
+            <div className="mt-2 h-px bg-[#161619]">
+              <div className="h-px w-2/3 bg-[#9E88F0]" aria-hidden="true" />
             </div>
           </div>
         </div>
@@ -4153,10 +4199,10 @@ function DesktopPositionsBoard({
     return (
       <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
         <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
-          <div className="font-mono text-[22px] font-semibold uppercase tracking-[0.18em] text-[#3A3A3A]">
+          <div className="font-sans text-[22px] font-semibold uppercase tracking-[0.18em] text-[#282830]">
             No open positions
           </div>
-          <div className="mt-3 font-mono text-[13px] text-[#5A5A5A]">
+          <div className="mt-3 font-sans text-[13px] text-[#7F7F94]">
             positions.json is empty — the agent scans every 5 minutes
           </div>
         </ViewportReveal>
@@ -4166,13 +4212,13 @@ function DesktopPositionsBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#1A1A1A] px-6 py-2.5">
-        <div className="flex items-center gap-4 font-mono text-[11px]">
-          <span className="text-[#757575]">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#161619] px-6 py-2.5">
+        <div className="flex items-center gap-4 font-sans text-[11px]">
+          <span className="text-[#7F7F94]">
             Positions: <span className="text-white">{rows.length}</span>
           </span>
           <span className="h-1 w-px bg-[#333]" />
-          <span className="text-[#757575]">
+          <span className="text-[#7F7F94]">
             Exposure: <span className="text-white">{totalPositionValue}</span>
           </span>
         </div>
@@ -4254,15 +4300,15 @@ function ActivePositionsPanel({
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="grid flex-1 gap-4 sm:grid-cols-2">
             <ViewportReveal variant="fade" delay={100}>
-              <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Open positions</div>
-                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
+              <div className="border border-[#1E1E26] bg-[#111114] px-5 py-4">
+                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Open positions</div>
+                <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
               </div>
             </ViewportReveal>
             <ViewportReveal variant="scale" delay={160} duration="slow">
-              <div className="border border-[#2A2A2A] bg-black/88 px-5 py-4">
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Total position value</div>
-                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
+              <div className="border border-[#1E1E26] bg-[#111114] px-5 py-4">
+                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Total position value</div>
+                <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
               </div>
             </ViewportReveal>
           </div>
@@ -4272,7 +4318,7 @@ function ActivePositionsPanel({
 
       {!flat ? (
         <ViewportReveal variant="fade" delay={200}>
-          <div className="border border-[#2A2A2A] bg-black/88">
+          <div className="border border-[#1E1E26] bg-[#111114]">
             <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -4293,8 +4339,8 @@ function ActivePositionsPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-[#2A2A2A] bg-black/88 px-4 py-2.5">
-            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.08em] text-[#757575]">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] bg-[#111114] px-4 py-2.5">
+            <div className="flex items-center gap-3 font-sans text-[10px] uppercase tracking-[0.08em] text-[#7F7F94]">
               <span>
                 Positions: <span className="text-white">{rows.length}</span>
               </span>
@@ -4305,7 +4351,7 @@ function ActivePositionsPanel({
             </div>
             {copyButton}
           </div>
-          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#2A2A2A] bg-black/88">
+          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#1E1E26] bg-[#111114]">
             <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -4363,15 +4409,15 @@ function LiveScanPanel({
   const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
   const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
   const symbol = latestDecision?.symbol ?? null;
-  const sectionGap = mobileFit ? "mt-2 border-t border-[#1A1A1A] pt-2" : cx("mt-4 border-t border-[#1A1A1A] pt-4", compact && "mt-3 pt-3");
+  const sectionGap = mobileFit ? "mt-2 border-t border-[#161619] pt-2" : cx("mt-4 border-t border-[#161619] pt-4", compact && "mt-3 pt-3");
   const labelClass = mobileFit
-    ? "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]"
-    : cx("font-mono uppercase tracking-[0.14em] text-[#8A8A8A]", readable ? "text-[11px]" : "text-[10px]");
+    ? "font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]"
+    : cx("font-sans uppercase tracking-[0.14em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]");
 
   return (
     <div
       className={cx(
-        !mobileFit && "border border-[#2A2A2A] bg-black/88",
+        !mobileFit && "border border-[#1E1E26] bg-[#111114]",
         mobileFit && "flex min-h-0 flex-col overflow-hidden px-3 py-3 shadow-[0_0_24px_rgba(255,255,255,0.04)]",
         !mobileFit && compact && "px-4 py-4",
         !mobileFit && !compact && "px-5 py-5",
@@ -4379,20 +4425,20 @@ function LiveScanPanel({
     >
       {mobileFit ? (
         <div className="flex shrink-0 items-start justify-between gap-3 pb-2">
-          <div className="font-mono text-[11px] leading-none text-[#8A8A8A]">
+          <div className="font-sans text-[11px] leading-none text-[#7F7F94]">
             Cycle #{latestDecision?.cycle_number ?? "N/A"}
           </div>
           {mobileTabs}
         </div>
       ) : null}
       {mobileFit ? (
-        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#1A1A1A] pb-2">
-          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-sm border border-[#181818] bg-[#050505]/80 px-2 py-2 text-center">
+        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#161619] pb-2">
+          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-sm border border-[#161619] bg-[#111114]/80 px-2 py-2 text-center">
             <div className={labelClass}>Next query</div>
             <div
               className={cx(
-                "mt-1 font-mono text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#FFD21A]" : "text-white",
+                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#CCCDDA]" : "text-white",
               )}
             >
               {countdownLabel}
@@ -4400,15 +4446,15 @@ function LiveScanPanel({
           </div>
           {symbol ? (
             <>
-              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-sm border border-[#333333] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
+              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-sm border border-[#282830] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
                 <span className="pointer-events-none absolute inset-x-3 top-1 h-px bg-white/35" aria-hidden="true" />
                 <span className="pointer-events-none absolute -bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#FF173D]/20 blur-xl" aria-hidden="true" />
                 <div className="relative flex max-w-full items-center gap-2">
                   <TokenIcon symbol={symbol} size={42} />
                   <div className="min-w-0 text-center">
-                    <div className="truncate font-mono text-[18px] font-semibold leading-tight text-white">{symbol}</div>
+                    <div className="truncate font-sans text-[18px] font-semibold leading-tight text-white">{symbol}</div>
                     {latestDecision?.priced_target_count != null ? (
-                      <div className="mt-1 truncate font-mono text-[11px] leading-tight text-[#8A8A8A]">
+                      <div className="mt-1 truncate font-sans text-[11px] leading-tight text-[#7F7F94]">
                         {latestDecision.priced_target_count} targets priced
                       </div>
                     ) : null}
@@ -4418,7 +4464,7 @@ function LiveScanPanel({
             </>
           ) : (
             <>
-              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-sm border border-[#181818] bg-[#050505]/80 px-2 py-2 text-center font-mono text-[10px] leading-4 text-[#8A8A8A]">
+              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-sm border border-[#161619] bg-[#111114]/80 px-2 py-2 text-center font-sans text-[10px] leading-4 text-[#7F7F94]">
                 Waiting for decision…
               </p>
             </>
@@ -4430,8 +4476,8 @@ function LiveScanPanel({
             <div className={labelClass}>Next query</div>
             <div
               className={cx(
-                "mt-1 font-mono text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#FFD21A]" : "text-white",
+                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#CCCDDA]" : "text-white",
               )}
             >
               {countdownLabel}
@@ -4444,8 +4490,8 @@ function LiveScanPanel({
               <div className="mt-3 flex items-center gap-3.5">
                 <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
                 <div className="min-w-0">
-                  <div className={cx("font-mono font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
-                  <div className={cx("mt-1 font-mono text-[#8A8A8A]", readable ? "text-[12px]" : "text-[11px]")}>
+                  <div className={cx("font-sans font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
+                  <div className={cx("mt-1 font-sans text-[#7F7F94]", readable ? "text-[12px]" : "text-[11px]")}>
                     Cycle #{latestDecision?.cycle_number ?? "N/A"}
                     {latestDecision?.priced_target_count != null
                       ? ` · ${latestDecision.priced_target_count} targets priced`
@@ -4454,7 +4500,7 @@ function LiveScanPanel({
                 </div>
               </div>
             ) : (
-              <p className="mt-2 font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+              <p className="mt-2 font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
             )}
           </div>
         </>
@@ -4465,7 +4511,7 @@ function LiveScanPanel({
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className={labelClass}>Signal inputs</div>
             {strategyMode ? (
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#666666]">{strategyMode}</span>
+              <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]">{strategyMode}</span>
             ) : null}
           </div>
         ) : null}
@@ -4480,7 +4526,7 @@ function LiveScanPanel({
               <li
                 key={factor.key}
                 className={cx(
-                  "flex min-w-0 items-start font-mono text-[#8A8A8A]",
+                  "flex min-w-0 items-start font-sans text-[#7F7F94]",
                   mobileFit
                     ? "justify-center gap-1.5 text-[11px] leading-5"
                     : cx("gap-2 leading-5", readable ? "text-[13px]" : "text-[11px]"),
@@ -4496,7 +4542,7 @@ function LiveScanPanel({
         ) : (
           <p
             className={cx(
-              "font-mono leading-5 text-[#8A8A8A]",
+              "font-sans leading-5 text-[#7F7F94]",
               mobileFit ? "text-center text-[12px]" : readable ? "text-[13px]" : "text-[12px]",
             )}
           >
@@ -4509,7 +4555,7 @@ function LiveScanPanel({
         {latestDecision?.reason ? (
           <p
             className={cx(
-              "break-words font-mono text-[#A8A8A8]",
+              "break-words font-sans text-[#CCCDDA]",
               mobileFit
                 ? "shrink-0 text-center text-[11px] font-semibold leading-5"
                 : cx("mt-3 leading-5", readable ? "text-[13px]" : "text-[11px]"),
@@ -4605,13 +4651,13 @@ function LiveFactorScan({
         {factors.map((factor, index) => {
           const isResolved = index < resolved;
           const isActive = index === activeIndex;
-          const tone = factor.passed ? "text-[#00FF66]" : "text-[#FF6B6B]";
+          const tone = factor.passed ? "text-[#33C28E]" : "text-[#E05B73]";
 
           return (
             <li
               key={factor.key}
               className={cx(
-                "rounded-sm px-2 py-1.5 font-mono transition-colors duration-300",
+                "rounded-sm px-2 py-1.5 font-sans transition-colors duration-300",
                 valueText,
                 isActive && "scan-row-active",
                 isResolved && "scan-row-resolve",
@@ -4625,15 +4671,15 @@ function LiveFactorScan({
                       {factor.passed ? "✓" : "✗"}
                     </span>
                   ) : isActive ? (
-                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#FFD21A] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
+                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#CCCDDA] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
                   ) : (
-                    <span className="inline-block h-1 w-1 rounded-full bg-[#3A3A3A]" />
+                    <span className="inline-block h-1 w-1 rounded-full bg-[#282830]" />
                   )}
                 </span>
                 <span
                   className={cx(
                     "min-w-0 flex-1 truncate uppercase tracking-[0.06em]",
-                    isResolved ? "text-[#C8C8C8]" : isActive ? "text-white" : "text-[#6A6A6A]",
+                    isResolved ? "text-[#CCCDDA]" : isActive ? "text-white" : "text-[#7F7F94]",
                   )}
                 >
                   {factor.label}
@@ -4641,7 +4687,7 @@ function LiveFactorScan({
                 <span
                   className={cx(
                     "shrink-0 text-[10px] uppercase tracking-[0.12em]",
-                    isResolved ? tone : isActive ? "text-[#FFD21A]" : "text-[#3A3A3A]",
+                    isResolved ? tone : isActive ? "text-[#CCCDDA]" : "text-[#282830]",
                   )}
                 >
                   {isResolved ? (factor.passed ? "PASS" : "FAIL") : isActive ? "SCAN" : "···"}
@@ -4653,13 +4699,13 @@ function LiveFactorScan({
                     <p
                       className={cx(
                         "text-[11px] leading-4 tabular-nums",
-                        factor.passed ? "text-[#9AD3B0]" : "text-[#D89A9A]",
+                        factor.passed ? "text-[#33C28E]" : "text-[#E05B73]",
                       )}
                     >
                       {factor.reading}
                     </p>
                   ) : null}
-                  <p className="text-[11px] leading-4 text-[#6A6A6A]">
+                  <p className="text-[11px] leading-4 text-[#7F7F94]">
                     {explainFactor(factor.key, factor.passed)}
                   </p>
                 </div>
@@ -4745,7 +4791,7 @@ function LiveDecisionScan({
 
   const passedCount = factors.filter((factor) => factor.passed).length;
   const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
-  const labelClass = "font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]";
+  const labelClass = "font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]";
 
   const scoreStats = latestDecision ? breakoutEntryScoreStats(latestDecision) : null;
   const entryScoreReading =
@@ -4755,9 +4801,9 @@ function LiveDecisionScan({
       : null);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
+    <div className="flex min-h-0 flex-1 flex-col border border-[#1E1E26] bg-[#111114]">
       {/* Detected asset + next query */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#1A1A1A] px-5 py-4">
+      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#161619] px-5 py-4">
         <div className="min-w-0">
           <div className={labelClass}>Detected asset</div>
           {symbol ? (
@@ -4765,12 +4811,12 @@ function LiveDecisionScan({
               <div className="relative">
                 <TokenIcon symbol={symbol} size={44} />
                 {agentRunning ? (
-                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#FFD21A]" />
+                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#CCCDDA]" />
                 ) : null}
               </div>
               <div className="min-w-0">
-                <div className="truncate font-mono text-[22px] font-semibold leading-none text-white">{symbol}</div>
-                <div className="mt-1 truncate font-mono text-[11px] text-[#8A8A8A]">
+                <div className="truncate font-sans text-[22px] font-semibold leading-none text-white">{symbol}</div>
+                <div className="mt-1 truncate font-sans text-[11px] text-[#7F7F94]">
                   Cycle #{latestDecision?.cycle_number ?? "N/A"}
                   {latestDecision?.priced_target_count != null
                     ? ` · ${latestDecision.priced_target_count} priced`
@@ -4779,15 +4825,15 @@ function LiveDecisionScan({
               </div>
             </div>
           ) : (
-            <p className="mt-2 font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+            <p className="mt-2 font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
           )}
         </div>
         <div className="flex flex-col items-end text-right">
           <div className={labelClass}>Next query</div>
           <div
             className={cx(
-              "mt-1 font-mono text-[26px] font-semibold tabular-nums leading-none",
-              countdownDue ? "text-[#FFD21A]" : "text-white",
+              "mt-1 font-sans text-[26px] font-semibold tabular-nums leading-none",
+              countdownDue ? "text-[#CCCDDA]" : "text-white",
             )}
           >
             {countdownLabel}
@@ -4801,19 +4847,19 @@ function LiveDecisionScan({
           <span
             className={cx(
               "inline-block h-1.5 w-1.5 rounded-full",
-              scanDone ? "bg-[#00FF66] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#FFD21A]",
+              scanDone ? "bg-[#33C28E] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#CCCDDA]",
             )}
           />
           <span className={labelClass}>{scanDone ? "Signal analysis" : "Analyzing signals"}</span>
         </div>
         <div className="flex items-center gap-3">
           {strategyMode ? (
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#666666]">{strategyMode}</span>
+            <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]">{strategyMode}</span>
           ) : null}
           {factors.length > 0 ? (
-            <span className="font-mono text-[11px] tabular-nums text-[#8A8A8A]">
-              <span className={passedCount > 0 ? "text-[#00FF66]" : "text-[#8A8A8A]"}>{passedCount}</span>
-              <span className="text-[#3A3A3A]">/</span>
+            <span className="font-sans text-[11px] tabular-nums text-[#7F7F94]">
+              <span className={passedCount > 0 ? "text-[#33C28E]" : "text-[#7F7F94]"}>{passedCount}</span>
+              <span className="text-[#282830]">/</span>
               {factors.length}
             </span>
           ) : null}
@@ -4827,8 +4873,8 @@ function LiveDecisionScan({
             <span className={labelClass}>Entry score</span>
             <span
               className={cx(
-                "font-mono text-[11px] tabular-nums",
-                scoreStats?.scoreMet ? "text-[#00FF66]" : "text-[#D89A9A]",
+                "font-sans text-[11px] tabular-nums",
+                scoreStats?.scoreMet ? "text-[#33C28E]" : "text-[#E05B73]",
               )}
             >
               {entryScoreReading}
@@ -4842,7 +4888,7 @@ function LiveDecisionScan({
         {factors.length > 0 ? (
           <LiveFactorScan factors={factors} runKey={runKey} readable />
         ) : (
-          <p className="px-2 py-3 font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          <p className="px-2 py-3 font-sans text-[12px] leading-5 text-[#7F7F94]">
             {latestDecision?.reason?.trim()
               ? latestDecision.reason
               : "Signal audit will appear after the agent completes a scan cycle."}
@@ -4852,22 +4898,22 @@ function LiveDecisionScan({
 
       {/* Verdict */}
       {latestDecision?.action ? (
-        <div className="shrink-0 border-t border-[#1A1A1A] px-5 py-4">
+        <div className="shrink-0 border-t border-[#161619] px-5 py-4">
           {scanDone ? (
             <div className="scan-verdict-in">
               <div className="flex items-center gap-2.5">
                 <StatusBadge status={latestDecision.action} tone={actionTone} />
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">Decision</span>
+                <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Decision</span>
               </div>
               {latestDecision.reason?.trim() ? (
-                <p className="mt-2.5 break-words font-mono text-[12px] leading-5 text-[#A8A8A8]">
+                <p className="mt-2.5 break-words font-sans text-[12px] leading-5 text-[#CCCDDA]">
                   {latestDecision.reason}
                 </p>
               ) : null}
             </div>
           ) : (
-            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[#FFD21A]">
-              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#FFD21A]" />
+            <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.12em] text-[#CCCDDA]">
+              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#CCCDDA]" />
               Resolving decision…
             </div>
           )}
@@ -4911,10 +4957,10 @@ function SimpleLiveScan({
         <button
           type="button"
           onClick={onViewPast}
-          className="group inline-flex items-center gap-2 border border-[#2A2A2A] bg-black/40 px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#9A9A9A] transition-colors hover:border-[#3F3F3F] hover:text-white"
+          className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#111114]/50 px-3.5 py-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
         >
           View past
-          <span aria-hidden="true" className="text-[#666666] transition-colors group-hover:text-[#FFD21A]">
+          <span aria-hidden="true" className="text-[#7F7F94] transition-colors group-hover:text-[#CCCDDA]">
             →
           </span>
         </button>
@@ -4925,14 +4971,14 @@ function SimpleLiveScan({
           {/* Row 1: token + name */}
           <div className="flex shrink-0 flex-col items-center text-center">
             <TokenIcon symbol={symbol} size={104} />
-            <div className="mt-5 font-mono text-[30px] font-semibold leading-none text-white">{symbol}</div>
-            <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+            <div className="mt-5 font-sans text-[30px] font-semibold leading-none text-white">{symbol}</div>
+            <div className="mt-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#7F7F94]">
               Cycle #{latestDecision?.cycle_number ?? "N/A"}
               {factors.length > 0 ? (
                 <>
                   {" · "}
-                  <span className={passedCount > 0 ? "text-[#00FF66]" : "text-[#8A8A8A]"}>{passedCount}</span>
-                  <span className="text-[#3A3A3A]">/</span>
+                  <span className={passedCount > 0 ? "text-[#33C28E]" : "text-[#7F7F94]"}>{passedCount}</span>
+                  <span className="text-[#282830]">/</span>
                   {factors.length}
                 </>
               ) : null}
@@ -4944,7 +4990,7 @@ function SimpleLiveScan({
             {factors.length > 0 ? (
               <StaticFactorList factors={factors} />
             ) : (
-              <p className="py-3 text-center font-mono text-[12px] leading-5 text-[#8A8A8A]">
+              <p className="py-3 text-center font-sans text-[12px] leading-5 text-[#7F7F94]">
                 {latestDecision?.reason?.trim()
                   ? latestDecision.reason
                   : "Signal audit will appear after the agent completes a scan cycle."}
@@ -4954,7 +5000,7 @@ function SimpleLiveScan({
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center">
-          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">Waiting for the next decision row…</p>
+          <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
         </div>
       )}
     </div>
@@ -4966,16 +5012,16 @@ function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
   return (
     <ul className="grid grid-cols-2 gap-x-10 gap-y-1.5">
       {factors.map((factor) => {
-        const tone = factor.passed ? "text-[#00FF66]" : "text-[#FF6B6B]";
+        const tone = factor.passed ? "text-[#33C28E]" : "text-[#E05B73]";
         return (
-          <li key={factor.key} className="rounded-sm px-2 py-1.5 font-mono text-[13px]">
+          <li key={factor.key} className="rounded-sm px-2 py-1.5 font-sans text-[13px]">
             <div className="flex items-center gap-3">
               <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                 <span className={cx("text-[13px] font-bold leading-none", tone)}>
                   {factor.passed ? "✓" : "✗"}
                 </span>
               </span>
-              <span className="min-w-0 flex-1 truncate uppercase tracking-[0.06em] text-[#C8C8C8]">
+              <span className="min-w-0 flex-1 truncate uppercase tracking-[0.06em] text-[#CCCDDA]">
                 {factor.label}
               </span>
               <span className={cx("shrink-0 text-[10px] uppercase tracking-[0.12em]", tone)}>
@@ -4987,13 +5033,13 @@ function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
                 <p
                   className={cx(
                     "text-[11px] leading-4 tabular-nums",
-                    factor.passed ? "text-[#9AD3B0]" : "text-[#D89A9A]",
+                    factor.passed ? "text-[#33C28E]" : "text-[#E05B73]",
                   )}
                 >
                   {factor.reading}
                 </p>
               ) : null}
-              <p className="text-[11px] leading-4 text-[#6A6A6A]">{explainFactor(factor.key, factor.passed)}</p>
+              <p className="text-[11px] leading-4 text-[#7F7F94]">{explainFactor(factor.key, factor.passed)}</p>
             </div>
           </li>
         );
@@ -5034,17 +5080,17 @@ function ActivityTabSelector({
                 onClick={() => onChange(tab.id)}
                 aria-pressed={active}
                 className={cx(
-                  "relative font-mono transition-colors",
+                  "relative font-sans transition-colors",
                   compact
                     ? cx(
                         "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
-                        active ? "font-semibold text-white" : "font-medium text-[#666666] active:text-[#999999]",
+                        active ? "font-semibold text-white" : "font-medium text-[#7F7F94] active:text-[#999999]",
                       )
                     : cx(
                         "border h-9 px-4 text-xs",
                         active
-                          ? "border-[#666666] bg-[#222222] text-white"
-                          : "border-[#242424] bg-[#101010] text-[#A8A8A8] hover:border-[#3A3A3A] hover:text-white",
+                          ? "border-[#7F7F94] bg-[#282830] text-white"
+                          : "border-[#161619] bg-[#111114] text-[#CCCDDA] hover:border-[#282830] hover:text-white",
                       ),
                 )}
               >
@@ -5160,16 +5206,16 @@ function SysLogsPanel({
         <ViewportReveal variant="blur" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
           <div
             className={cx(
-              compact ? "border-b border-[#1A1A1A] pb-4" : "border border-[#2A2A2A] bg-black/88 px-5 py-4",
+              compact ? "border-b border-[#161619] pb-4" : "border border-[#1E1E26] bg-[#111114] px-5 py-4",
             )}
           >
             <ViewportReveal variant="fade" delay={60} duration="fast">
-              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8A8A8A]">
+              <div className="mb-2 font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">
                 Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
               </div>
             </ViewportReveal>
             <ViewportReveal variant="left" delay={120}>
-              <p className={cx("break-words font-mono leading-5 text-[#DADADA]", readable ? "text-[13px]" : "text-[12px]")}>
+              <p className={cx("break-words font-sans leading-5 text-[#CCCDDA]", readable ? "text-[13px]" : "text-[12px]")}>
                 {agentLog.line}
               </p>
             </ViewportReveal>
@@ -5204,10 +5250,10 @@ function SysLogsPanel({
         )
       ) : (
         <ViewportReveal variant="fade" delay={80}>
-          <div className="border border-[#2A2A2A] bg-black/88">
-            <div className="border-b border-[#1A1A1A] px-5 py-5">
+          <div className="border border-[#1E1E26] bg-[#111114]">
+            <div className="border-b border-[#161619] px-5 py-5">
               <ViewportReveal variant="left" delay={120} duration="fast">
-                <h2 className="font-mono text-xl text-[#DADADA]">Decision &amp; Execution Log</h2>
+                <h2 className="font-sans text-xl text-[#CCCDDA]">Decision &amp; Execution Log</h2>
               </ViewportReveal>
             </div>
             <RecentActivity
@@ -5250,7 +5296,7 @@ function TxActivityPanel({
     <div className={cx("flex min-h-0 flex-col", fillHeight ? "h-full overflow-hidden" : "flex-1", !compact && "gap-0")}>
       {!compact ? (
         <ViewportReveal variant="right" delay={60} duration="fast" className="mb-6 max-w-3xl">
-          <p className="font-mono text-[12px] leading-5 text-[#8A8A8A]">
+          <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">
             On-chain swaps and execution events from TWAK portfolio telemetry.
           </p>
         </ViewportReveal>
@@ -5271,10 +5317,10 @@ function TxActivityPanel({
         />
       ) : (
         <ViewportReveal variant="fade" delay={100}>
-          <div className="border border-[#2A2A2A] bg-black/88">
-            <div className="border-b border-[#1A1A1A] px-5 py-5">
+          <div className="border border-[#1E1E26] bg-[#111114]">
+            <div className="border-b border-[#161619] px-5 py-5">
               <ViewportReveal variant="right" delay={140} duration="fast">
-                <h2 className="font-mono text-xl text-[#DADADA]">Recent Activity</h2>
+                <h2 className="font-sans text-xl text-[#CCCDDA]">Recent Activity</h2>
               </ViewportReveal>
             </div>
             <RecentActivity
@@ -5303,10 +5349,10 @@ function LiveClock({ className }: { className?: string }) {
   const time = now ? now.toISOString().slice(11, 19) : "--:--:--";
   return (
     <div className={cx("flex items-baseline gap-2", className)}>
-      <span className="font-mono text-[34px] font-semibold leading-none tracking-[0.10em] tabular-nums text-white">
+      <span className="font-sans text-[34px] font-semibold leading-none tracking-[0.10em] tabular-nums text-white">
         {time}
       </span>
-      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">UTC</span>
+      <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">UTC</span>
     </div>
   );
 }
@@ -5337,11 +5383,11 @@ function ActivityPanel({
   if (desktop) {
     return (
       <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
-        <div className="shrink-0 border-b border-[#1A1A1A] pb-4">
+        <div className="shrink-0 border-b border-[#161619] pb-4">
           <LiveClock className="mb-3" />
           <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
-            <h1 className="mt-2 font-mono text-[28px] font-semibold leading-tight text-white">Activity</h1>
+            <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Telemetry</div>
+            <h1 className="mt-2 font-sans text-[28px] font-semibold leading-tight text-white">Activity</h1>
           </ViewportReveal>
         </div>
 
@@ -5354,20 +5400,20 @@ function ActivityPanel({
         ) : (
           <div className="flex min-h-0 flex-1 flex-col pt-5 pb-6">
             <ViewportReveal variant="fade" delay={80} className="flex min-h-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col border border-[#2A2A2A] bg-black/88">
-                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#1A1A1A] px-5 py-4">
+              <div className="flex min-h-0 flex-1 flex-col border border-[#1E1E26] bg-[#111114]">
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#161619] px-5 py-4">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setPane("live")}
-                      className="group inline-flex items-center gap-2 border border-[#2A2A2A] bg-black/40 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#9A9A9A] transition-colors hover:border-[#3F3F3F] hover:text-white"
+                      className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#111114]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
                     >
-                      <span aria-hidden="true" className="text-[#666666] transition-colors group-hover:text-[#FFD21A]">
+                      <span aria-hidden="true" className="text-[#7F7F94] transition-colors group-hover:text-[#CCCDDA]">
                         ←
                       </span>
                       Live
                     </button>
-                    <h2 className="truncate font-mono text-[14px] uppercase tracking-[0.1em] text-[#DADADA]">
+                    <h2 className="truncate font-sans text-[14px] uppercase tracking-[0.1em] text-[#CCCDDA]">
                       {view === "txs" ? "Tx Activity" : "Decision & Execution Log"}
                     </h2>
                   </div>
@@ -5413,15 +5459,15 @@ function ActivityPanel({
         <div
           className={cx(
             "flex shrink-0 justify-between gap-4",
-            flat ? "items-end border-b border-[#1A1A1A] pb-3" : "mb-6 items-start",
+            flat ? "items-end border-b border-[#161619] pb-3" : "mb-6 items-start",
           )}
         >
           <ViewportReveal variant="blur" duration="slow" className="min-w-0">
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Telemetry</div>
+              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Telemetry</div>
               <h1
                 className={cx(
-                  "mt-2 font-mono font-semibold leading-tight text-white",
+                  "mt-2 font-sans font-semibold leading-tight text-white",
                   flat ? "text-[28px]" : "text-[32px]",
                 )}
               >
@@ -5435,7 +5481,7 @@ function ActivityPanel({
 
       {compact ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border-y border-[#2A2A2A] bg-black/58 shadow-[0_0_28px_rgba(0,0,0,0.45)]">
+          <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border-y border-[#1E1E26] bg-[#111114]/60 shadow-[0_0_28px_rgba(176,125,227,0.12)]">
             <div className="relative z-[1] shrink-0">
               <LiveScanPanel
                 latestDecision={latestDecision}
@@ -5484,7 +5530,7 @@ function ActivityPanel({
             </ViewportReveal>
           </div>
 
-          <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#1A1A1A]" />
+          <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#161619]" />
 
           <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
             {(activeView) =>
@@ -5524,10 +5570,10 @@ function DesktopDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative isolate hidden min-h-dvh flex-1 bg-black text-white lg:flex">
+    <div className="relative isolate hidden min-h-dvh flex-1 bg-[#0C0C0F] text-white lg:flex">
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black">
+      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0C0C0F]">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <SectionTransition
           section={activeSection}
@@ -5546,7 +5592,7 @@ function DesktopDashboard({
                 desktop
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} desktop />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -5609,13 +5655,13 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "border-b border-[#141416] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            "border-b border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
             compact
               ? "grid grid-cols-[1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 text-[10px]",
@@ -5626,21 +5672,21 @@ function HomePositionsSummary({
           {!compact ? <span className="text-right">Stop</span> : null}
         </div>
         {rows.length === 0 ? (
-          <div className={cx("font-mono text-[#666666]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
             No open positions in positions.json
           </div>
         ) : (
-          <div className="divide-y divide-[#141416]">
+          <div className="divide-y divide-[#161619]">
             {rows.map((row) => (
               <div
                 key={row.id}
                 className={cx(
                   compact
-                    ? "grid grid-cols-[1fr_auto] px-3 py-1.5 hover:bg-[#070707]"
-                    : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#070707]",
+                    ? "grid grid-cols-[1fr_auto] px-3 py-1.5 hover:bg-[#0C0C0F]"
+                    : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#0C0C0F]",
                 )}
               >
-                <span className={cx("truncate font-mono text-[#D0D0D0]", compact ? "text-[11px]" : "text-[13px]")}>
+                <span className={cx("truncate font-sans text-[#CCCDDA]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
@@ -5648,14 +5694,14 @@ function HomePositionsSummary({
                 </span>
                 <span
                   className={cx(
-                    "truncate text-right font-mono tabular-nums text-[#D0D0D0]",
+                    "truncate text-right font-sans tabular-nums text-[#CCCDDA]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
                   {formatUsd(row.entryValueUsd)}
                 </span>
                 {!compact ? (
-                  <span className="truncate text-right font-mono text-[13px] tabular-nums text-[#FFD21A]">
+                  <span className="truncate text-right font-sans text-[13px] tabular-nums text-[#CCCDDA]">
                     {formatPrice(row.trailingStopPrice)}
                   </span>
                 ) : null}
@@ -5666,7 +5712,7 @@ function HomePositionsSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#141416] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          "shrink-0 border-t border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
@@ -5707,15 +5753,15 @@ function HomeSignalSummary({
   const action = latestDecision?.action?.toUpperCase() ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-black/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0C0C0F]/30">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#141416] px-3 py-2">
-        <span className="font-mono text-[11px] font-semibold leading-none text-white">Signal</span>
+      <div className="flex shrink-0 items-center justify-between border-b border-[#161619] px-3 py-2">
+        <span className="font-sans text-[11px] font-semibold leading-none text-white">Signal</span>
         {action ? (
           <span
             className={cx(
-              "font-mono text-[8px] uppercase tracking-[0.1em] leading-none",
-              action === "ENTER" ? "text-[#D0D0D0]" : "text-[#FF6B6B]",
+              "font-sans text-[8px] uppercase tracking-[0.1em] leading-none",
+              action === "ENTER" ? "text-[#CCCDDA]" : "text-[#E05B73]",
             )}
           >
             {action}
@@ -5727,10 +5773,10 @@ function HomeSignalSummary({
         {symbol ? (
           <div className="flex flex-col items-center justify-center gap-1">
             <TokenIcon symbol={symbol} size={52} />
-            <span className="font-mono text-[12px] font-bold leading-none text-white">{symbol}</span>
+            <span className="font-sans text-[12px] font-bold leading-none text-white">{symbol}</span>
           </div>
         ) : (
-          <span className="font-mono text-[10px] text-[#555555]">No signal</span>
+          <span className="font-sans text-[10px] text-[#7F7F94]">No signal</span>
         )}
       </div>
 
@@ -5740,7 +5786,7 @@ function HomeSignalSummary({
             return (
               <span
                 key={i}
-                className="h-[9px] w-[9px] shrink-0 rounded-full border border-[#5A5A5A] bg-[#202020]"
+                className="h-[9px] w-[9px] shrink-0 rounded-full border border-[#7F7F94] bg-[#111114]"
                 aria-hidden="true"
               />
             );
@@ -5752,7 +5798,7 @@ function HomeSignalSummary({
               aria-label={`${factor.label}: ${factor.passed ? "pass" : "fail"}`}
               className={cx(
                 "h-[9px] w-[9px] shrink-0 rounded-full",
-                factor.passed ? "bg-[#C8C8C8]" : "bg-[#FF4444]/60",
+                factor.passed ? "bg-[#CCCDDA]" : "bg-[#E05B73]/60",
               )}
             />
           );
@@ -5783,19 +5829,19 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
         className={cx(
-          "flex shrink-0 items-center justify-between border-b border-[#141416]",
+          "flex shrink-0 items-center justify-between border-b border-[#161619]",
           compact ? "px-2 py-2" : "px-4 pb-3 pt-4",
         )}
       >
         {compact ? (
           <>
-            <span className="font-mono text-xs font-medium uppercase tracking-widest leading-none text-[#666666]">Activity</span>
-            <div className="flex items-center overflow-hidden rounded border border-[#333333]">
+            <span className="font-sans text-xs font-medium uppercase tracking-widest leading-none text-[#7F7F94]">Activity</span>
+            <div className="flex items-center overflow-hidden rounded border border-[#282830]">
               {(["sys", "txs"] as ActivityView[]).map((tab) => {
                 const active = tab === view;
                 return (
@@ -5806,8 +5852,8 @@ function HomeActivitySummary({
                     aria-pressed={active}
                     style={{ fontSize: "9px", padding: "2px 5px", lineHeight: 1 }}
                     className={cx(
-                      "font-mono uppercase tracking-wider transition-colors",
-                      active ? "bg-[#333333] text-white font-semibold" : "text-[#555555] hover:text-[#999999]",
+                      "font-sans uppercase tracking-wider transition-colors",
+                      active ? "bg-[#282830] text-white font-semibold" : "text-[#7F7F94] hover:text-[#999999]",
                     )}
                   >
                     {tab === "sys" ? "Log" : "Tx"}
@@ -5819,8 +5865,8 @@ function HomeActivitySummary({
         ) : (
           <>
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">Strategy</div>
-              <h2 className="mt-1 font-mono text-[16px] font-semibold text-white">Recent Activity</h2>
+              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Strategy</div>
+              <h2 className="mt-1 font-sans text-[16px] font-semibold text-white">Recent Activity</h2>
             </div>
             <div className="flex items-center gap-3">
               {(["sys", "txs"] as ActivityView[]).map((tab) => {
@@ -5832,8 +5878,8 @@ function HomeActivitySummary({
                     onClick={() => setView(tab)}
                     aria-pressed={active}
                     className={cx(
-                      "font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
-                      active ? "font-semibold text-white" : "font-medium text-[#555555] hover:text-[#999999]",
+                      "font-sans text-[10px] uppercase tracking-[0.1em] transition-colors",
+                      active ? "font-semibold text-white" : "font-medium text-[#7F7F94] hover:text-[#999999]",
                     )}
                   >
                     {tab === "sys" ? "Logs" : "Tx"}
@@ -5846,18 +5892,18 @@ function HomeActivitySummary({
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         {!compact ? (
-          <div className={cx(homeActivityGridClass, "border-b border-[#141416] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#757575]")}>
+          <div className={cx(homeActivityGridClass, "border-b border-[#161619] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]")}>
             <span className="text-left">Date</span>
             <span className="text-center">Token</span>
             <span className="text-center">Status</span>
           </div>
         ) : null}
         {rows.length === 0 ? (
-          <div className={cx("font-mono text-[#666666]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
             No recent activity
           </div>
         ) : (
-          <div className={cx("divide-y divide-[#141416]", compact && "flex h-full flex-col")}>
+          <div className={cx("divide-y divide-[#161619]", compact && "flex h-full flex-col")}>
             {rows.map((row) => {
               const token = homeActivityToken(row);
 
@@ -5867,7 +5913,7 @@ function HomeActivitySummary({
                 return (
                   <div
                     key={row.id}
-                    className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 hover:bg-[#070707]"
+                    className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 hover:bg-[#0C0C0F]"
                   >
                     <span className="flex items-center justify-start">
                       {token && row.explorerUrl ? (
@@ -5886,10 +5932,10 @@ function HomeActivitySummary({
                           <TokenIcon symbol={token} size={16} />
                         </span>
                       ) : (
-                        <span className="h-4 w-4 rounded-full border border-[#2A2A2A]" aria-hidden="true" />
+                        <span className="h-4 w-4 rounded-full border border-[#1E1E26]" aria-hidden="true" />
                       )}
                     </span>
-                    <span className="min-w-0 truncate text-left font-mono text-[10px] font-bold tabular-nums text-[#F2F2F2]">
+                    <span className="min-w-0 truncate text-left font-sans text-[10px] font-bold tabular-nums text-[#FFFFFF]">
                       {score}
                     </span>
                     <span className="flex items-center justify-end">
@@ -5900,8 +5946,8 @@ function HomeActivitySummary({
               }
 
               return (
-                <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#070707]")}>
-                  <span className="truncate text-left font-mono text-[13px] font-bold tabular-nums text-[#F2F2F2]">
+                <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#0C0C0F]")}>
+                  <span className="truncate text-left font-sans text-[13px] font-bold tabular-nums text-[#FFFFFF]">
                     {formatOpenedAt(row.timestamp)}
                   </span>
                   <span className="flex items-center justify-center">
@@ -5910,7 +5956,7 @@ function HomeActivitySummary({
                         <TokenIcon symbol={token} size={18} />
                       </span>
                     ) : (
-                      <span className="font-mono text-[13px] text-[#666666]">—</span>
+                      <span className="font-sans text-[13px] text-[#7F7F94]">—</span>
                     )}
                   </span>
                   <span className="flex items-center justify-center">
@@ -5923,7 +5969,7 @@ function HomeActivitySummary({
         )}
       </div>
       {!compact ? (
-        <div className="shrink-0 border-t border-[#141416] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+        <div className="shrink-0 border-t border-[#161619] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
           {(view === "sys" ? logRows : activityRows).length} total events
         </div>
       ) : null}
@@ -5934,11 +5980,15 @@ function HomeActivitySummary({
 function HomeWalletSummary({
   walletBalances,
   agentMode,
+  x402WalletAddress,
+  x402WalletUsdcBalance,
   compact = false,
   flush = false,
 }: {
   walletBalances: WalletBalanceRow[];
   agentMode: string;
+  x402WalletAddress?: string | null;
+  x402WalletUsdcBalance?: number | null;
   compact?: boolean;
   flush?: boolean;
 }) {
@@ -5952,25 +6002,25 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-black/30" : flush ? "bg-black/80" : "border border-[#1E1E1E] bg-black/80",
+        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
         className={cx(
-          "flex shrink-0 items-baseline justify-between border-b border-[#141416]",
+          "flex shrink-0 items-baseline justify-between border-b border-[#161619]",
           compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
         )}
       >
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#757575]">TWAK Wallet</div>
-          <h2 className={cx("font-mono font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">TWAK Wallet</div>
+          <h2 className={cx("font-sans font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
             Live Holdings
           </h2>
         </div>
         {paperMode ? (
           <span
             className={cx(
-              "border border-[#2A2A2A] font-mono uppercase tracking-[0.12em] text-[#757575]",
+              "border border-[#1E1E26] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
               compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
             )}
           >
@@ -5981,7 +6031,7 @@ function HomeWalletSummary({
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "grid border-b border-[#141416] font-mono uppercase tracking-[0.12em] text-[#757575]",
+            "grid border-b border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
             compact
               ? "grid-cols-[auto_1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid-cols-[1fr_1.5fr_1fr] px-4 py-2 text-[10px]",
@@ -5992,16 +6042,16 @@ function HomeWalletSummary({
           <span className="text-right">Value</span>
         </div>
         {rows.length === 0 ? (
-          <div className={cx("font-mono text-[#666666]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
             Waiting for TWAK wallet balances
           </div>
         ) : (
-          <div className="divide-y divide-[#141416]">
+          <div className="divide-y divide-[#161619]">
             {rows.map((row) => (
               <div
                 key={`${row.chain}-${row.symbol}`}
                 className={cx(
-                  "hover:bg-[#070707]",
+                  "hover:bg-[#0C0C0F]",
                   compact
                     ? "grid grid-cols-[auto_1fr_auto] px-3 py-1.5"
                     : "grid grid-cols-[1fr_1.5fr_1fr] px-4 py-2",
@@ -6009,13 +6059,13 @@ function HomeWalletSummary({
               >
                 <span
                   className={cx(
-                    "truncate font-mono uppercase text-[#8A8A8A]",
+                    "truncate font-sans uppercase text-[#7F7F94]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
                   {row.chain}
                 </span>
-                <span className={cx("truncate font-mono text-[#D0D0D0]", compact ? "text-[11px]" : "text-[13px]")}>
+                <span className={cx("truncate font-sans text-[#CCCDDA]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
@@ -6023,7 +6073,7 @@ function HomeWalletSummary({
                 </span>
                 <span
                   className={cx(
-                    "truncate text-right font-mono tabular-nums text-[#D0D0D0]",
+                    "truncate text-right font-sans tabular-nums text-[#CCCDDA]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
@@ -6036,46 +6086,45 @@ function HomeWalletSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#141416] font-mono uppercase tracking-[0.12em] text-[#666666]",
+          "shrink-0 border-t border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
         {walletBalances.length} total {walletBalances.length === 1 ? "asset" : "assets"}
       </div>
+      {x402WalletAddress ? (
+        <>
+          <div className="shrink-0 border-t border-[#161619]" />
+          <div
+            className={cx(
+              "flex shrink-0 items-baseline justify-between",
+              compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
+            )}
+          >
+            <div>
+              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+              <h2 className={cx("font-sans font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
+                Base USDC
+              </h2>
+            </div>
+            <span className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
+              {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
+            </span>
+          </div>
+          <div
+            className={cx(
+              "flex shrink-0 items-center justify-between border-b border-[#161619]",
+              compact ? "px-3 py-2" : "px-4 py-3",
+            )}
+          >
+            <span className="font-sans text-[13px] text-[#CCCDDA]">USDC</span>
+            <span className="font-sans text-[16px] font-semibold tabular-nums text-[#9E88F0]">
+              {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
+            </span>
+          </div>
+        </>
+      ) : null}
     </div>
-  );
-}
-
-function ChartModeToggle({
-  experimental,
-  onToggle,
-}: {
-  experimental: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={experimental}
-      aria-label={experimental ? "Exit experimental chart mode" : "Enter experimental chart mode"}
-      className={cx(
-        "absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors",
-        experimental
-          ? "border-[#00FF66]/40 bg-[#001A0A]/90 text-[#00FF66] backdrop-blur-sm"
-          : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm hover:text-white",
-      )}
-    >
-      <span className="relative inline-flex h-3.5 w-6 items-center rounded-full bg-[#2A2A2A]">
-        <span
-          className={cx(
-            "absolute h-2.5 w-2.5 rounded-full transition-transform",
-            experimental ? "translate-x-3 bg-[#00FF66]" : "translate-x-0.5 bg-[#666666]",
-          )}
-        />
-      </span>
-      {experimental ? "Experimental" : "Standard"}
-    </button>
   );
 }
 
@@ -6088,35 +6137,19 @@ function DesktopOverviewSection({
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
 }) {
-  const [experimentalMode, setExperimentalMode] = useState(false);
-
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col pb-6 pr-8 pt-3">
-        <div
-          className={cx(
-            "grid min-h-0 flex-1 gap-0 border border-[#1E1E1E] bg-black/80",
-            experimentalMode ? "grid-cols-1 grid-rows-[minmax(0,1fr)]" : "grid-cols-3 grid-rows-[minmax(0,1fr)_300px]",
-          )}
-        >
+      <div className="flex min-h-0 flex-1 flex-col p-0">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E26] bg-[#111114]/80">
           <ViewportReveal
             variant="fade"
             delay={200}
             duration="slow"
-            className={cx(
-              "relative h-full min-h-0 overflow-hidden",
-              !experimentalMode && "col-span-3 border-b border-[#1E1E1E]",
-            )}
+            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E26]"
           >
-            <ChartModeToggle
-              experimental={experimentalMode}
-              onToggle={() => setExperimentalMode((v) => !v)}
-            />
-            {!experimentalMode && (
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
-                <DesktopHeroMetrics view={view} />
-              </div>
-            )}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+              <DesktopHeroMetrics view={view} />
+            </div>
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             <div className="absolute inset-0">
@@ -6124,29 +6157,25 @@ function DesktopOverviewSection({
             </div>
           </ViewportReveal>
 
-          {!experimentalMode && (
-            <>
-              <ViewportReveal
-                variant="up"
-                delay={400}
-                duration="normal"
-                className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
-              >
-                <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
-              </ViewportReveal>
-              <ViewportReveal
-                variant="up"
-                delay={460}
-                duration="normal"
-                className="flex h-full min-h-0 flex-col border-r border-[#1E1E1E]"
-              >
-                <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
-              </ViewportReveal>
-              <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
-                <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} flush />
-              </ViewportReveal>
-            </>
-          )}
+          <ViewportReveal
+            variant="up"
+            delay={400}
+            duration="normal"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
+          >
+            <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
+          </ViewportReveal>
+          <ViewportReveal
+            variant="up"
+            delay={460}
+            duration="normal"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
+          >
+            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
+          </ViewportReveal>
+          <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
+            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} flush />
+          </ViewportReveal>
         </div>
       </div>
     </section>
@@ -6156,7 +6185,7 @@ function DesktopOverviewSection({
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
     <section className="px-4 pt-3">
-      <div className="grid grid-cols-4 divide-x divide-[#1A1A1A]">
+      <div className="grid grid-cols-4 divide-x divide-[#161619]">
         {view.metrics.map((metric, index) => (
           <ViewportReveal
             key={metric.label}
@@ -6165,15 +6194,15 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
             duration={metric.label.includes("Balance") ? "slow" : "normal"}
             className="min-w-0 px-6 text-center first:pl-0 last:pr-0"
           >
-            <div className="font-mono text-[7px] font-medium text-[#B8B8B8]">{metric.label}</div>
+            <div className="font-sans text-[7px] font-medium text-[#CCCDDA]">{metric.label}</div>
             <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
-              <span className="font-mono text-[12px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-              {metric.unit ? <span className="font-mono text-[7px] text-[#B8B8B8]">{metric.unit}</span> : null}
+              <span className="font-sans text-[12px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+              {metric.unit ? <span className="font-sans text-[7px] text-[#CCCDDA]">{metric.unit}</span> : null}
               {metric.delta ? (
                 <span
                   className={cx(
-                    "font-mono text-[7px] font-bold tabular-nums",
-                    metric.tone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                    "font-sans text-[7px] font-bold tabular-nums",
+                    metric.tone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
                   )}
                 >
                   ({metric.delta})
@@ -6269,7 +6298,7 @@ function OverviewTopBar({
   return (
     <header
       className={cx(
-        "sticky top-0 z-30 shrink-0 border-b border-[#1A1A1A] bg-black/70 backdrop-blur-sm",
+        "sticky top-0 z-30 shrink-0 border-b border-[#161619] bg-[#111114]/70 backdrop-blur-sm",
         enabled && phase === "in" && "home-topbar-in",
         enabled && phase === "out" && "home-topbar-out",
       )}
@@ -6284,7 +6313,7 @@ function OverviewTopBar({
         )}
         aria-label="Open No Named Yet Bot on GitHub"
       >
-        <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-[0.06em] text-white">
+        <span className="min-w-0 truncate font-sans text-[11px] font-medium tracking-[0.06em] text-white">
           AlejoReyna/NoNamedYetBot
         </span>
         <Github size={14} strokeWidth={1.75} className="shrink-0 text-white" aria-hidden="true" />
@@ -6298,10 +6327,10 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
     <section className="shrink-0 px-4 py-2">
       <div className="grid grid-cols-2 gap-x-4">
         <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-          <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Total Balance</div>
+          <div className="font-sans text-[14px] font-medium text-[#CCCDDA]">Total Balance</div>
           <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-mono text-[13px] text-[#B8B8B8]">USD</span>
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+            <span className="font-sans text-[13px] text-[#CCCDDA]">USD</span>
           </div>
         </ViewportReveal>
         <ViewportReveal
@@ -6310,14 +6339,14 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
           duration="slow"
           className="min-w-0 text-center"
         >
-          <div className="font-mono text-[14px] font-medium text-[#B8B8B8]">Window Profit/Loss</div>
+          <div className="font-sans text-[14px] font-medium text-[#CCCDDA]">Window Profit/Loss</div>
           <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-mono text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
             {view.pnlDelta ? (
               <span
                 className={cx(
-                  "font-mono text-[14px] font-bold tabular-nums",
-                  view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
+                  "font-sans text-[14px] font-bold tabular-nums",
+                  view.pnlTone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
                 )}
               >
                 ({view.pnlDelta})
@@ -6326,7 +6355,7 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
           </div>
         </ViewportReveal>
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#1A1A1A]" />
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#161619]" />
     </section>
   );
 }
@@ -6367,8 +6396,8 @@ function ChartFilterMenu({
         className={cx(
           "inline-flex h-8 w-8 items-center justify-center border transition-colors",
           open
-            ? "border-[#666666] bg-[#222222] text-white"
-            : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm",
+            ? "border-[#7F7F94] bg-[#282830] text-white"
+            : "border-[#161619] bg-[#111114]/90 text-[#CCCDDA] backdrop-blur-sm",
         )}
       >
         <Filter className="h-4 w-4" strokeWidth={2} />
@@ -6377,7 +6406,7 @@ function ChartFilterMenu({
         <div
           role="listbox"
           aria-label="Chart time range"
-          className="absolute right-0 top-[calc(100%+6px)] flex min-w-[88px] flex-col border border-[#242424] bg-[#050505] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+          className="absolute right-0 top-[calc(100%+6px)] flex min-w-[88px] flex-col border border-[#161619] bg-[#111114] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
         >
           {timeRanges.map((range) => (
             <button
@@ -6390,10 +6419,10 @@ function ChartFilterMenu({
                 setOpen(false);
               }}
               className={cx(
-                "border-b border-[#1A1A1A] px-3 py-2 text-left font-mono text-[11px] last:border-b-0",
+                "border-b border-[#161619] px-3 py-2 text-left font-sans text-[11px] last:border-b-0",
                 range === timeRange
-                  ? "bg-[#222222] text-white"
-                  : "text-[#A8A8A8] hover:bg-[#101010] hover:text-white",
+                  ? "bg-[#282830] text-white"
+                  : "text-[#CCCDDA] hover:bg-[#111114] hover:text-white",
               )}
             >
               {range}
@@ -6445,10 +6474,10 @@ function TimezoneMenu() {
         aria-haspopup="listbox"
         aria-label="Select chart time zone"
         className={cx(
-          "inline-flex h-8 items-center gap-1.5 border px-2 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors",
+          "inline-flex h-8 items-center gap-1.5 border px-2 font-sans text-[10px] uppercase tracking-[0.08em] transition-colors",
           open
-            ? "border-[#666666] bg-[#222222] text-white"
-            : "border-[#242424] bg-[#101010]/90 text-[#A8A8A8] backdrop-blur-sm hover:text-white",
+            ? "border-[#7F7F94] bg-[#282830] text-white"
+            : "border-[#161619] bg-[#111114]/90 text-[#CCCDDA] backdrop-blur-sm hover:text-white",
         )}
       >
         <Globe className="h-4 w-4" strokeWidth={2} />
@@ -6458,9 +6487,9 @@ function TimezoneMenu() {
         <div
           role="listbox"
           aria-label="Chart time zone"
-          className="absolute right-0 top-[calc(100%+6px)] flex max-h-[320px] w-[256px] flex-col overflow-y-auto border border-[#242424] bg-[#050505] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+          className="absolute right-0 top-[calc(100%+6px)] flex max-h-[320px] w-[256px] flex-col overflow-y-auto border border-[#161619] bg-[#111114] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
         >
-          <div className="sticky top-0 border-b border-[#1A1A1A] bg-[#050505] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#666666]">
+          <div className="sticky top-0 border-b border-[#161619] bg-[#111114] px-3 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
             Time zone
           </div>
           {CHART_TIME_ZONES.map((zone) => {
@@ -6476,19 +6505,19 @@ function TimezoneMenu() {
                   setOpen(false);
                 }}
                 className={cx(
-                  "flex items-center justify-between gap-3 border-b border-[#1A1A1A] px-3 py-2 text-left last:border-b-0",
-                  selected ? "bg-[#161616]" : "hover:bg-[#101010]",
+                  "flex items-center justify-between gap-3 border-b border-[#161619] px-3 py-2 text-left last:border-b-0",
+                  selected ? "bg-[#161616]" : "hover:bg-[#111114]",
                 )}
               >
                 <span className="min-w-0">
-                  <span className={cx("block truncate font-mono text-[12px]", selected ? "text-white" : "text-[#D4D4D4]")}>
+                  <span className={cx("block truncate font-sans text-[12px]", selected ? "text-white" : "text-[#D4D4D4]")}>
                     {zone.label}
                   </span>
-                  <span className="block truncate font-mono text-[10px] text-[#6E6E6E]">{zone.cities}</span>
+                  <span className="block truncate font-sans text-[10px] text-[#6E6E6E]">{zone.cities}</span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block font-mono text-[12px] tabular-nums text-[#A8A8A8]">{localTimeLabel(zone.id, now)}</span>
-                  <span className="block font-mono text-[10px] text-[#6E6E6E]">{gmtOffsetLabel(zone.id, now)}</span>
+                  <span className="block font-sans text-[12px] tabular-nums text-[#CCCDDA]">{localTimeLabel(zone.id, now)}</span>
+                  <span className="block font-sans text-[10px] text-[#6E6E6E]">{gmtOffsetLabel(zone.id, now)}</span>
                 </span>
               </button>
             );
@@ -6510,82 +6539,69 @@ function MobileOverviewSection({
   onTimeRangeChange: (range: TimeRange) => void;
   latestDecision?: StatusPayload["latestDecision"] | null;
 }) {
-  const [experimentalMode, setExperimentalMode] = useState(false);
-
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ViewportReveal
         variant="fade"
         delay={120}
         duration="normal"
-        className={cx(
-          "relative min-h-0 flex-1 bg-black/30",
-          !experimentalMode && "border-b border-[#2A2A2A]",
-        )}
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0C0C0F]/30"
       >
         <div className="absolute inset-0 flex flex-col">
-          {!experimentalMode && (
-            <div className="grid grid-cols-2 gap-x-4 px-4 pt-3 pb-2">
-              <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-                <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Total Balance</div>
-                <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                  <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-                  <span className="font-mono text-[11px] text-[#B8B8B8]">USD</span>
-                </div>
-              </ViewportReveal>
-              <ViewportReveal
-                variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-                delay={80}
-                duration="slow"
-                className="min-w-0 text-center"
-              >
-                <div className="font-mono text-[11px] font-medium text-[#B8B8B8]">Window P/L</div>
-                <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                  <span className="font-mono text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-                  {view.pnlDelta ? (
-                    <span
-                      className={cx(
-                        "font-mono text-[11px] font-bold tabular-nums",
-                        view.pnlTone === "negative" ? "text-[#FF3737]" : "text-[#00FF00]",
-                      )}
-                    >
-                      ({view.pnlDelta})
-                    </span>
-                  ) : null}
-                </div>
-              </ViewportReveal>
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-3">
+            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
+              <div className="font-sans text-[11px] font-medium text-[#CCCDDA]">Total Balance</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+                <span className="font-sans text-[11px] text-[#CCCDDA]">USD</span>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal
+              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+              delay={80}
+              duration="slow"
+              className="min-w-0 text-center"
+            >
+              <div className="font-sans text-[11px] font-medium text-[#CCCDDA]">Window P/L</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+                {view.pnlDelta ? (
+                  <span
+                    className={cx(
+                      "font-sans text-[11px] font-bold tabular-nums",
+                      view.pnlTone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
+                    )}
+                  >
+                    ({view.pnlDelta})
+                  </span>
+                ) : null}
+              </div>
+            </ViewportReveal>
+          </div>
           <div className="relative min-h-0 flex-1">
-            <ChartModeToggle
-              experimental={experimentalMode}
-              onToggle={() => setExperimentalMode((v) => !v)}
-            />
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-            <div className={cx("absolute inset-0", !experimentalMode && "p-2")}>
+            <div className="absolute inset-0 p-2">
               <PortfolioChart data={view.mobileChartData} variant="mobile" range={timeRange} />
             </div>
           </div>
         </div>
       </ViewportReveal>
-      {!experimentalMode && (
-        <ViewportReveal
-          variant="up"
-          delay={200}
-          duration="normal"
-          className="flex shrink-0 flex-col"
-        >
-          <div className="grid grid-cols-2" style={{ height: "30vh" }}>
-            <div className="col-span-1 flex flex-col border-r border-[#2A2A2A]">
-              <HomeSignalSummary latestDecision={latestDecision} />
-            </div>
-            <div className="col-span-1 flex flex-col">
-              <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} compact />
-            </div>
+      <ViewportReveal
+        variant="up"
+        delay={200}
+        duration="normal"
+        className="flex shrink-0 flex-col"
+      >
+        <div className="grid grid-cols-2" style={{ height: "30vh" }}>
+          <div className="col-span-1 flex flex-col border-r border-[#1E1E26]">
+            <HomeSignalSummary latestDecision={latestDecision} />
           </div>
-        </ViewportReveal>
-      )}
+          <div className="col-span-1 flex flex-col">
+            <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} compact />
+          </div>
+        </div>
+      </ViewportReveal>
     </section>
   );
 }
@@ -6638,7 +6654,7 @@ function MobileBottomNav({
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1A1A1A] bg-black/75 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#161619] bg-[#111114]/75 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div
@@ -6682,7 +6698,7 @@ function MobileDashboard({
   const deviceTopSectionColor = deviceTopSectionColorFor(activeSection);
 
   return (
-    <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-black text-white lg:hidden">
+    <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-[#0C0C0F] text-white lg:hidden">
       <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
@@ -6709,7 +6725,7 @@ function MobileDashboard({
                 compact
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} compact />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}

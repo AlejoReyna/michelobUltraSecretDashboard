@@ -69,8 +69,8 @@ export function entryFactorStats(decision: StatusPayload["decisions"][number]) {
     total: ENTRY_FACTOR_COUNT,
     corePassed,
     coreTotal: CORE_ENTRY_FACTOR_COUNT,
-    required: CORE_ENTRY_FACTOR_COUNT,
-    met: corePassed >= CORE_ENTRY_FACTOR_COUNT,
+    required: ENTRY_FACTOR_COUNT,
+    met: passed >= ENTRY_FACTOR_COUNT,
   };
 }
 
