@@ -21,6 +21,7 @@ export const FILES = {
   executionLog: "execution_log.jsonl",
   x402CallLog: "logs/x402_calls.jsonl",
   x402SpendLedger: "logs/x402_spend.json",
+  x402Wallet: "logs/x402_wallet.json",
   sellHistoryLog: "logs/sell_history.jsonl",
   positions: "positions.json",
   guardrails: "guardrail_state.json",
