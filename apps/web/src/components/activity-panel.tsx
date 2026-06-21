@@ -34,7 +34,7 @@ export type StatusPayload = {
     factor_metrics?: Record<string, string | null>;
     reason?: string | null;
   };
-  decisions: Array<any>;
+  decisions: Array<StatusPayload["latestDecision"] & { action?: string; factor_scores?: Record<string, unknown> }>;
   health: { agentRunning?: boolean };
 };
 export type ScanFactor = {
@@ -250,7 +250,7 @@ export default function ActivityPanel({
   latestDecision?: StatusPayload["latestDecision"];
   agentRunning?: boolean;
 }) {
-  const [pane, setPane] = useState<"live" | "past">("live");
+  const [, setPane] = useState<"live" | "past">("live");
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0C0C0F] text-[#CCCDDA] antialiased">

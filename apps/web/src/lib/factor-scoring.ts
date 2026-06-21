@@ -46,6 +46,7 @@ export function isComplianceDecision(decision: StatusPayload["decisions"][number
   return Boolean(decision.factor_scores?.daily_minimum);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function resolveStrategyMode(_decision: StatusPayload["decisions"][number]): StrategyMode {
   return "breakout";
 }

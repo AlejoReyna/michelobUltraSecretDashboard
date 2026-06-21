@@ -1,4 +1,4 @@
-import { decisionFactorSummary, resolveStrategyMode } from "@/lib/factor-scoring";
+import { decisionFactorSummary } from "@/lib/factor-scoring";
 import type { Decision, StatusPayload } from "@/lib/schemas";
 
 export type AgentLogView = {
@@ -53,7 +53,6 @@ export function resolveAgentLogLine(data: StatusPayload | null): AgentLogView {
 export function formatDecisionEvent(decision: Decision): string {
   const symbol = decision.symbol ?? "strategy";
   const reason = decision.reason ? ` — ${decision.reason}` : "";
-  const strategyMode = resolveStrategyMode(decision);
   const factors =
     decision.factor_scores && Object.keys(decision.factor_scores).length > 0
       ? ` (${decisionFactorSummary(decision)})`

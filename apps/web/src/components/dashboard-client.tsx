@@ -11,29 +11,24 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import Image from "next/image";
 import {
   Activity,
   BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Copy,
   CreditCard,
-  DollarSign,
   ExternalLink,
   Filter,
   Github,
   Globe,
   Home,
   Layers,
-  ShieldCheck,
   Terminal,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
 import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
@@ -68,7 +63,6 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
-  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
@@ -91,7 +85,6 @@ import {
   statusSchema,
   type Decision,
   type MarketDataRow,
-  type SellHistoryRow,
   type StatusPayload,
   type X402Call,
 } from "@/lib/schemas";
@@ -1119,7 +1112,6 @@ function activityTokenFromMovement(
 function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number]): string {
   const symbol = decision.symbol?.trim() || "candidate";
   const action = String(decision.action ?? "WAIT").toUpperCase();
-  const strategyMode = resolveStrategyMode(decision);
   const priced =
     decision.priced_target_count != null
       ? ` across ${decision.priced_target_count} priced targets`
@@ -1567,6 +1559,7 @@ function DesktopNavRail({
       aria-label="Dashboard navigation"
     >
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ascii-raccoon.png"
           alt="Raccoon"
@@ -1904,6 +1897,7 @@ function WalletPanel({
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
               Live Holdings
             </h1>
@@ -1978,7 +1972,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
@@ -2004,7 +2000,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
@@ -3409,49 +3407,6 @@ function positionToneClass(tone: PositionTone) {
   }[tone];
 }
 
-function positionBadgeClass(tone: PositionTone) {
-  return {
-    green: "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]",
-    yellow: "border-[#CCCDDA]/40 bg-[#0C0C0F] text-[#CCCDDA]",
-    blue: "border-[#9E88F0]/40 bg-[#0C0C0F] text-[#9E88F0]",
-    red: "border-[#E05B73]/40 bg-[#0C0C0F] text-[#E05B73]",
-    neutral: "border-[#282830] bg-[#0C0C0F] text-[#CCCDDA]",
-  }[tone];
-}
-
-function PositionSummaryBlock({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-  index,
-  scrollRoot,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone?: PositionTone;
-  index: number;
-  scrollRoot: Element | null;
-}) {
-  return (
-    <ViewportReveal variant="fade" delay={80 + index * 60} root={scrollRoot}>
-      <div className="min-w-0 bg-[#111114] px-6 py-5">
-        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">{label}</div>
-        <div
-          className={cx(
-            "mt-2 truncate font-sans text-[24px] font-semibold tabular-nums text-white xl:text-[28px]",
-            positionToneClass(tone),
-          )}
-        >
-          {value}
-        </div>
-        {detail ? <div className="mt-1 truncate font-sans text-[11px] text-[#7F7F94]">{detail}</div> : null}
-      </div>
-    </ViewportReveal>
-  );
-}
-
 function PositionMetricCell({
   label,
   value,
@@ -3477,123 +3432,6 @@ function PositionMetricCell({
       <div className="font-sans text-[10px] uppercase text-[#7F7F94]">{label}</div>
       <div className={cx("mt-1 truncate font-sans text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
     </ViewportReveal>
-  );
-}
-
-function PositionRiskCorridor({ row }: { row: PositionRow }) {
-  if (row.source === "wallet") {
-    return (
-      <div className="border-t border-[#161619] px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#CCCDDA]" aria-hidden="true" />
-          <div className="min-w-0">
-            <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Position state</div>
-            <p className="mt-1 break-words font-sans text-[12px] leading-5 text-[#CCCDDA]">
-              Entry, stop, and target are unavailable until the position state syncs.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const entry = row.entryPrice;
-  const high = row.highestPrice;
-  const stop = row.trailingStopPrice;
-  const target = row.takeProfitPrice;
-  const current = row.currentPrice;
-  const { stopDistancePct, targetUpsidePct } = positionRiskStats(row);
-
-  const valid = positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
-
-  const place = (value: number) =>
-    Math.min(100, Math.max(0, ((value - (stop as number)) / ((target as number) - (stop as number))) * 100));
-
-  return (
-    <div className="border-t border-[#161619] px-5 py-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Risk corridor</div>
-        <div className="font-sans text-[12px] tabular-nums text-[#7F7F94]">
-          {stopDistancePct !== null ? (
-            <span className="text-[#CCCDDA]">-{stopDistancePct.toFixed(1)}% stop</span>
-          ) : (
-            <span>stop N/A</span>
-          )}
-          <span className="mx-2 text-[#282830]">/</span>
-          {targetUpsidePct !== null ? (
-            <span className="text-[#9E88F0]">+{targetUpsidePct.toFixed(1)}% target</span>
-          ) : (
-            <span>target N/A</span>
-          )}
-        </div>
-      </div>
-
-      {valid ? (
-        <>
-          <div className="flex items-center gap-4">
-            <div className="font-sans text-[10px] uppercase text-[#CCCDDA]">Stop</div>
-            <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-[#282830]"
-                style={{ width: `${place(entry as number)}%` }}
-                aria-hidden="true"
-              />
-              {positivePrice(high) ? (
-                <span
-                  className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#33C28E]"
-                  style={{ left: `${place(high)}%` }}
-                  title={`High ${formatPrice(high)}`}
-                  aria-hidden="true"
-                />
-              ) : null}
-              <span
-                className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-white"
-                style={{ left: `${place(entry as number)}%` }}
-                title={`Entry ${formatPrice(entry)}`}
-                aria-hidden="true"
-              />
-              {positivePrice(current) ? (
-                <span
-                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#9E88F0] shadow-[0_0_6px_#9E88F0]"
-                  style={{ left: `${place(current)}%` }}
-                  title={`Current ${formatPrice(current)}`}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </div>
-            <div className="font-sans text-[10px] uppercase text-[#9E88F0]">Target</div>
-          </div>
-          <div className="mt-3 grid grid-cols-5 gap-3 font-sans text-[11px] tabular-nums">
-            <div className="min-w-0">
-              <div className="text-[#7F7F94]">Stop</div>
-              <div className="truncate text-[#CCCDDA]">{formatPrice(stop)}</div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#7F7F94]">Entry</div>
-              <div className="truncate text-white">{formatPrice(entry)}</div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#7F7F94]">Current</div>
-              <div className={cx("truncate", positivePrice(current) ? "text-[#9E88F0]" : "text-[#7F7F94]")}>
-                {formatPrice(current)}
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#7F7F94]">High</div>
-              <div className="truncate text-[#33C28E]">{formatPrice(high)}</div>
-            </div>
-            <div className="min-w-0 text-right">
-              <div className="text-[#7F7F94]">Target</div>
-              <div className="truncate text-[#9E88F0]">{formatPrice(target)}</div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">
-          Stop and target levels will appear here after the position state is fully synced.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -3623,35 +3461,6 @@ function findEntryDecisionForPosition(
   }
 
   return entryDecisions[0];
-}
-
-function formatDuration(minutes: number): string {
-  if (minutes < 1) return "<1m";
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function positionElapsedTime(openedAt: string | null): string {
-  if (!openedAt) return "N/A";
-  const opened = Date.parse(openedAt);
-  if (!Number.isFinite(opened)) return "N/A";
-  const minutes = (Date.now() - opened) / 60000;
-  return formatDuration(minutes);
-}
-
-function positionRemainingTime(
-  openedAt: string | null,
-  holdTimeSeconds: number | null | undefined,
-): string | null {
-  if (!openedAt || !holdTimeSeconds || !Number.isFinite(holdTimeSeconds)) return null;
-  const opened = Date.parse(openedAt);
-  if (!Number.isFinite(opened)) return null;
-  const elapsedMs = Date.now() - opened;
-  const remainingMs = holdTimeSeconds * 1000 - elapsedMs;
-  if (remainingMs <= 0) return "expiring";
-  return formatDuration(remainingMs / 60000);
 }
 
 function buildPositionsSnapshot(
@@ -3773,7 +3582,6 @@ function CopyJsonButton({ json }: { json: object }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // eslint-disable-next-line no-console
       console.warn("Failed to copy positions snapshot to clipboard.");
     }
   }, [json]);
@@ -3875,25 +3683,6 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
         <span>Entry {formatPrice(entry)}</span>
         <span>Target {formatPrice(target)}</span>
       </div>
-    </div>
-  );
-}
-
-function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decision | null }) {
-  const elapsed = positionElapsedTime(row.openedAt);
-  const remaining = positionRemainingTime(row.openedAt, decision?.hold_time_seconds);
-
-  return (
-    <div className="flex items-center gap-3 font-sans text-[10px] uppercase text-[#7F7F94]">
-      <span>Held: {elapsed}</span>
-      {remaining ? (
-        <>
-          <span className="h-1 w-1 rounded-full bg-[#282830]" aria-hidden="true" />
-          <span className={remaining === "expiring" ? "text-[#E05B73]" : "text-[#9E88F0]"}>
-            {remaining === "expiring" ? "Time stop" : `${remaining} remaining`}
-          </span>
-        </>
-      ) : null}
     </div>
   );
 }
@@ -4080,100 +3869,6 @@ function DesktopPositionCard({
   return <div>{body}</div>;
 }
 
-function PositionsInsightRail({
-  rows,
-  nearestStop,
-  nearestTarget,
-  totalPositionValue,
-  scrollRoot,
-}: {
-  rows: PositionRow[];
-  nearestStop: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
-  nearestTarget: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
-  totalPositionValue: string;
-  scrollRoot: Element | null;
-}) {
-  const trackedRows = rows.filter((row) => row.source === "tracked");
-  const walletRows = rows.filter((row) => row.source === "wallet");
-  const managedRows = rows.filter(
-    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
-  );
-
-  const railRows = [
-    { label: "Total exposure", value: totalPositionValue, tone: "neutral" as const },
-    {
-      label: "Risk coverage",
-      value: `${managedRows.length}/${rows.length}`,
-      tone: managedRows.length === rows.length ? ("green" as const) : ("yellow" as const),
-    },
-    {
-      label: "Synced positions",
-      value: String(trackedRows.length),
-      tone: trackedRows.length > 0 ? ("green" as const) : ("neutral" as const),
-    },
-    { label: "Wallet-only", value: String(walletRows.length), tone: walletRows.length > 0 ? ("yellow" as const) : ("neutral" as const) },
-  ];
-
-  return (
-    <aside className="min-w-0 border border-[#161619] bg-[#111114]/70">
-      <ViewportReveal variant="fade" delay={160} root={scrollRoot}>
-        <div className="border-b border-[#161619] px-5 py-4">
-          <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Position readout</div>
-          <div className="mt-1 font-sans text-[18px] font-semibold text-white">Exposure & state</div>
-        </div>
-      </ViewportReveal>
-
-      <div className="divide-y divide-[#161619]">
-        {railRows.map((item, index) => (
-          <ViewportReveal
-            key={item.label}
-            variant={index % 2 === 0 ? "left" : "right"}
-            delay={220 + index * 45}
-            duration="fast"
-            root={scrollRoot}
-            className="flex items-baseline justify-between gap-4 px-5 py-3"
-          >
-            <span className="font-sans text-[11px] uppercase text-[#7F7F94]">{item.label}</span>
-            <span className={cx("truncate font-sans text-[14px] tabular-nums", positionToneClass(item.tone))}>
-              {item.value}
-            </span>
-          </ViewportReveal>
-        ))}
-      </div>
-
-      <ViewportReveal variant="fade" delay={440} root={scrollRoot} className="border-t border-[#161619] px-5 py-4">
-        <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Closest levels</div>
-        <div className="mt-4 space-y-4">
-          <div>
-            <div className="flex items-baseline justify-between gap-3 font-sans">
-              <span className="text-[11px] uppercase text-[#7F7F94]">Stop</span>
-              <span className="text-[13px] tabular-nums text-[#CCCDDA]">
-                {nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : "N/A"}
-              </span>
-            </div>
-            <div className="mt-2 h-px bg-[#161619]">
-              <div className="h-px w-1/3 bg-[#CCCDDA]" aria-hidden="true" />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-baseline justify-between gap-3 font-sans">
-              <span className="text-[11px] uppercase text-[#7F7F94]">Target</span>
-              <span className="text-[13px] tabular-nums text-[#9E88F0]">
-                {nearestTarget
-                  ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
-                  : "N/A"}
-              </span>
-            </div>
-            <div className="mt-2 h-px bg-[#161619]">
-              <div className="h-px w-2/3 bg-[#9E88F0]" aria-hidden="true" />
-            </div>
-          </div>
-        </div>
-      </ViewportReveal>
-    </aside>
-  );
-}
-
 function DesktopPositionsBoard({
   rows,
   executions,
@@ -4193,45 +3888,6 @@ function DesktopPositionsBoard({
   decisions?: Decision[];
   headerAction?: ReactNode;
 }) {
-  const stats = rows.map((row) => ({ row, ...positionRiskStats(row) }));
-  const nearestStop = stats
-    .filter((item) => item.stopDistancePct !== null)
-    .sort((a, b) => (a.stopDistancePct as number) - (b.stopDistancePct as number))[0];
-  const nearestTarget = stats
-    .filter((item) => item.targetUpsidePct !== null)
-    .sort((a, b) => (a.targetUpsidePct as number) - (b.targetUpsidePct as number))[0];
-
-  const walletOnlyCount = rows.filter((row) => row.source === "wallet").length;
-  const managedCount = rows.filter(
-    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
-  ).length;
-
-  const summaryBlocks: Array<{
-    label: string;
-    value: string;
-    detail?: string;
-    tone?: PositionTone;
-  }> = [
-    { label: "Open positions", value: String(rows.length), detail: `${managedCount} with risk plan` },
-    { label: "Total exposure", value: totalPositionValue, detail: "Current token value" },
-    {
-      label: nearestStop ? "Nearest stop" : "Risk coverage",
-      value: nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : `${managedCount}/${rows.length}`,
-      detail: nearestStop ? formatPrice(nearestStop.row.trailingStopPrice) : "Stops and targets synced",
-      tone: nearestStop ? "yellow" : managedCount === rows.length ? "green" : "yellow",
-    },
-    {
-      label: nearestTarget ? "Nearest target" : "Sync status",
-      value: nearestTarget
-        ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
-        : walletOnlyCount > 0
-          ? `${walletOnlyCount} wallet-only`
-          : "N/A",
-      detail: nearestTarget ? formatPrice(nearestTarget.row.takeProfitPrice) : "Waiting for positions.json levels",
-      tone: nearestTarget ? "blue" : walletOnlyCount > 0 ? "yellow" : "neutral",
-    },
-  ];
-
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
@@ -4606,359 +4262,19 @@ function LiveScanPanel({
   );
 }
 
-function usePrefersReducedMotion() {
-  return useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined" || !window.matchMedia) {
-        return () => {};
-      }
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () =>
-      typeof window !== "undefined" && window.matchMedia
-        ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        : false,
-    () => false,
-  );
-}
-
 type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
-
-const SCAN_STEP_MS = 540;
 
 /**
  * Sequentially "analyses" each factor: a sweep beam travels the list, each row
  * flips from pending → analysing → resolved (pass/fail), one at a time. Re-runs
  * whenever `runKey` (symbol + cycle) changes so judges watch the agent think.
  */
-function LiveFactorScan({
-  factors,
-  runKey,
-  readable = false,
-}: {
-  factors: ScanFactor[];
-  runKey: string;
-  readable?: boolean;
-}) {
-  const reduceMotion = usePrefersReducedMotion();
-  const [resolved, setResolved] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    if (factors.length === 0) {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
-    } else if (reduceMotion) {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(factors.length), 0));
-    } else {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
-      for (let i = 0; i < factors.length; i += 1) {
-        const timer = window.setTimeout(
-          () => {
-            if (!cancelled) {
-              setResolved((current) => Math.max(current, i + 1));
-            }
-          },
-          SCAN_STEP_MS * (i + 1),
-        );
-        timers.push(timer);
-      }
-    }
-    return () => {
-      cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [runKey, factors.length, reduceMotion]);
-
-  const activeIndex = resolved < factors.length ? resolved : -1;
-  const scanning = activeIndex !== -1;
-  const valueText = readable ? "text-[13px]" : "text-[12px]";
-
-  return (
-    <div className="relative">
-      {scanning ? (
-        <span
-          aria-hidden="true"
-          className="scan-beam pointer-events-none absolute inset-x-0 top-0 h-6 bg-[linear-gradient(180deg,rgba(255,210,26,0)_0%,rgba(255,210,26,0.12)_50%,rgba(255,210,26,0)_100%)]"
-        />
-      ) : null}
-      <ul className="relative space-y-1">
-        {factors.map((factor, index) => {
-          const isResolved = index < resolved;
-          const isActive = index === activeIndex;
-          const tone = factor.passed ? "text-[#33C28E]" : "text-[#E05B73]";
-
-          return (
-            <li
-              key={factor.key}
-              className={cx(
-                "rounded-sm px-2 py-1.5 font-sans transition-colors duration-300",
-                valueText,
-                isActive && "scan-row-active",
-                isResolved && "scan-row-resolve",
-                !isResolved && !isActive && "opacity-35",
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                  {isResolved ? (
-                    <span className={cx("text-[13px] font-bold leading-none", tone)}>
-                      {factor.passed ? "✓" : "✗"}
-                    </span>
-                  ) : isActive ? (
-                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#CCCDDA] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
-                  ) : (
-                    <span className="inline-block h-1 w-1 rounded-full bg-[#282830]" />
-                  )}
-                </span>
-                <span
-                  className={cx(
-                    "min-w-0 flex-1 truncate uppercase tracking-[0.06em]",
-                    isResolved ? "text-[#CCCDDA]" : isActive ? "text-white" : "text-[#7F7F94]",
-                  )}
-                >
-                  {factor.label}
-                </span>
-                <span
-                  className={cx(
-                    "shrink-0 text-[10px] uppercase tracking-[0.12em]",
-                    isResolved ? tone : isActive ? "text-[#CCCDDA]" : "text-[#282830]",
-                  )}
-                >
-                  {isResolved ? (factor.passed ? "PASS" : "FAIL") : isActive ? "SCAN" : "···"}
-                </span>
-              </div>
-              {isResolved ? (
-                <div className="mt-1 pl-7">
-                  {factor.reading ? (
-                    <p
-                      className={cx(
-                        "text-[11px] leading-4 tabular-nums",
-                        factor.passed ? "text-[#33C28E]" : "text-[#E05B73]",
-                      )}
-                    >
-                      {factor.reading}
-                    </p>
-                  ) : null}
-                  <p className="text-[11px] leading-4 text-[#7F7F94]">
-                    {explainFactor(factor.key, factor.passed)}
-                  </p>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 /**
  * Redesigned desktop left column: the detected token sits up top with the
  * next-query countdown, then every signal factor is analysed live, and a verdict
  * resolves once the scan completes.
  */
-function LiveDecisionScan({
-  latestDecision,
-  decisions,
-  agentRunning,
-}: {
-  latestDecision: StatusPayload["latestDecision"];
-  decisions: StatusPayload["decisions"];
-  agentRunning: boolean;
-}) {
-  const now = useNow();
-  const reduceMotion = usePrefersReducedMotion();
-  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
-  const nextAt = useMemo(
-    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
-    [intervalMs, latestDecision?.timestamp],
-  );
-  const remainingMs = cycleCountdownMs(nextAt, now);
-  const countdownLabel =
-    remainingMs === null
-      ? "N/A"
-      : remainingMs <= 0
-        ? agentRunning
-          ? "Scanning…"
-          : "Due now"
-        : formatCycleCountdown(remainingMs);
-  const countdownDue = remainingMs !== null && remainingMs <= 0 && agentRunning;
-
-  const analysis = useMemo(
-    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
-    [latestDecision],
-  );
-  const factors: ScanFactor[] = useMemo(() => {
-    const metrics = latestDecision?.factor_metrics ?? null;
-    return (analysis?.factors ?? []).map((factor) => ({
-      ...factor,
-      reading: metrics?.[factor.key] ?? null,
-    }));
-  }, [analysis, latestDecision]);
-  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
-  const symbol = latestDecision?.symbol ?? null;
-  const runKey = `${symbol ?? "none"}-${latestDecision?.cycle_number ?? "0"}`;
-
-  // Mirror the scan timeline so the verdict only appears once factors resolve.
-  const [scanDone, setScanDone] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    if (factors.length === 0) {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
-    } else if (reduceMotion) {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(true), 0));
-    } else {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
-      timers.push(
-        window.setTimeout(
-          () => !cancelled && setScanDone(true),
-          SCAN_STEP_MS * (factors.length + 0.5),
-        ),
-      );
-    }
-    return () => {
-      cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [runKey, factors.length, reduceMotion]);
-
-  const passedCount = factors.filter((factor) => factor.passed).length;
-  const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
-  const labelClass = "font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]";
-
-  const scoreStats = latestDecision ? breakoutEntryScoreStats(latestDecision) : null;
-  const entryScoreReading =
-    latestDecision?.factor_metrics?.entry_score ??
-    (scoreStats?.score != null
-      ? `${scoreStats.score.toFixed(1)}/100 · need ${scoreStats.required}+ · floor ${scoreStats.quoteFloor}`
-      : null);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col border border-[#1E1E26] bg-[#111114]">
-      {/* Detected asset + next query */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#161619] px-5 py-4">
-        <div className="min-w-0">
-          <div className={labelClass}>Detected asset</div>
-          {symbol ? (
-            <div className="mt-2.5 flex items-center gap-3">
-              <div className="relative">
-                <TokenIcon symbol={symbol} size={44} />
-                {agentRunning ? (
-                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#CCCDDA]" />
-                ) : null}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate font-sans text-[22px] font-semibold leading-none text-white">{symbol}</div>
-                <div className="mt-1 truncate font-sans text-[11px] text-[#7F7F94]">
-                  Cycle #{latestDecision?.cycle_number ?? "N/A"}
-                  {latestDecision?.priced_target_count != null
-                    ? ` · ${latestDecision.priced_target_count} priced`
-                    : ""}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-2 font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
-          )}
-        </div>
-        <div className="flex flex-col items-end text-right">
-          <div className={labelClass}>Next query</div>
-          <div
-            className={cx(
-              "mt-1 font-sans text-[26px] font-semibold tabular-nums leading-none",
-              countdownDue ? "text-[#CCCDDA]" : "text-white",
-            )}
-          >
-            {countdownLabel}
-          </div>
-        </div>
-      </div>
-
-      {/* Live analysis header */}
-      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-2 pt-4">
-        <div className="flex items-center gap-2">
-          <span
-            className={cx(
-              "inline-block h-1.5 w-1.5 rounded-full",
-              scanDone ? "bg-[#33C28E] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#CCCDDA]",
-            )}
-          />
-          <span className={labelClass}>{scanDone ? "Signal analysis" : "Analyzing signals"}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {strategyMode ? (
-            <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]">{strategyMode}</span>
-          ) : null}
-          {factors.length > 0 ? (
-            <span className="font-sans text-[11px] tabular-nums text-[#7F7F94]">
-              <span className={passedCount > 0 ? "text-[#33C28E]" : "text-[#7F7F94]"}>{passedCount}</span>
-              <span className="text-[#282830]">/</span>
-              {factors.length}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Entry score reading */}
-      {entryScoreReading ? (
-        <div className="shrink-0 px-5 pb-1">
-          <div className="flex items-center justify-between gap-2 border-b border-[#141414] pb-2">
-            <span className={labelClass}>Entry score</span>
-            <span
-              className={cx(
-                "font-sans text-[11px] tabular-nums",
-                scoreStats?.scoreMet ? "text-[#33C28E]" : "text-[#E05B73]",
-              )}
-            >
-              {entryScoreReading}
-            </span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Factor scan */}
-      <div className="console-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-2">
-        {factors.length > 0 ? (
-          <LiveFactorScan factors={factors} runKey={runKey} readable />
-        ) : (
-          <p className="px-2 py-3 font-sans text-[12px] leading-5 text-[#7F7F94]">
-            {latestDecision?.reason?.trim()
-              ? latestDecision.reason
-              : "Signal audit will appear after the agent completes a scan cycle."}
-          </p>
-        )}
-      </div>
-
-      {/* Verdict */}
-      {latestDecision?.action ? (
-        <div className="shrink-0 border-t border-[#161619] px-5 py-4">
-          {scanDone ? (
-            <div className="scan-verdict-in">
-              <div className="flex items-center gap-2.5">
-                <StatusBadge status={latestDecision.action} tone={actionTone} />
-                <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Decision</span>
-              </div>
-              {latestDecision.reason?.trim() ? (
-                <p className="mt-2.5 break-words font-sans text-[12px] leading-5 text-[#CCCDDA]">
-                  {latestDecision.reason}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.12em] text-[#CCCDDA]">
-              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#CCCDDA]" />
-              Resolving decision…
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * Minimal Activity view: token + name on the left, the factor list on the
@@ -5679,7 +4995,6 @@ const homeActivityGridClass = "grid grid-cols-3";
 
 function HomePositionsSummary({
   positionRows,
-  totalPositionValue,
   compact = false,
   flush = false,
 }: {
@@ -6146,7 +5461,9 @@ function HomeWalletSummary({
               <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
               <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", compact ? "text-[14px]" : "text-[16px]")}>
                 <span className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/usdc-logo.png" alt="USDC" className="h-4 w-4 object-contain" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                 </span>
                 Base USDC
@@ -6359,44 +5676,6 @@ function OverviewTopBar({
         <Github size={14} strokeWidth={1.75} className="shrink-0 text-white" aria-hidden="true" />
       </a>
     </header>
-  );
-}
-
-function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
-  return (
-    <section className="shrink-0 px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-4">
-        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#CCCDDA]">Total Balance</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-sans text-[13px] text-[#CCCDDA]">USD</span>
-          </div>
-        </ViewportReveal>
-        <ViewportReveal
-          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-          delay={80}
-          duration="slow"
-          className="min-w-0 text-center"
-        >
-          <div className="font-sans text-[14px] font-medium text-[#CCCDDA]">Window Profit/Loss</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-            {view.pnlDelta ? (
-              <span
-                className={cx(
-                  "font-sans text-[14px] font-bold tabular-nums",
-                  view.pnlTone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
-                )}
-              >
-                ({view.pnlDelta})
-              </span>
-            ) : null}
-          </div>
-        </ViewportReveal>
-      </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#161619]" />
-    </section>
   );
 }
 
