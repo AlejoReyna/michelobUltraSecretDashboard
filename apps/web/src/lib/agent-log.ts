@@ -67,7 +67,7 @@ export function formatDecisionLogLine(decision: Decision): string {
 }
 
 export function decisionActionTone(action: Decision["action"]): "green" | "yellow" | "red" {
-  if (action === "HALT") {
+  if (action === "HALT" || action === "BLOCKED") {
     return "red";
   }
 

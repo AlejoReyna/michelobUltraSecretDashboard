@@ -5,6 +5,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import { loadConfig, type ExporterConfig } from "./config.js";
 import { getHealth } from "./health.js";
 import { redact } from "./redact.js";
+import { getS3LogsDownloadUrl, listS3Logs, loadS3LogsConfig, type S3LogsConfig } from "./s3-logs.js";
 import { getDecisions, getExecutions, getGuardrails, getPositions, getSellHistory, getStatus, getWallet, parseLimit } from "./telemetry.js";
 import { startTwakAutoRefresh, stopTwakAutoRefresh } from "./twak.js";
 
@@ -26,6 +27,7 @@ function sendJson(res: Response, payload: unknown, status = 200) {
 }
 
 export function createApp(config: ExporterConfig = loadConfig()) {
+  const s3LogsConfig: S3LogsConfig = loadS3LogsConfig();
   const app = express();
 
   app.disable("x-powered-by");
@@ -96,6 +98,16 @@ export function createApp(config: ExporterConfig = loadConfig()) {
 
   app.get("/guardrails", async (_req, res) => {
     sendJson(res, await getGuardrails(config.cascadeAiPath));
+  });
+
+  app.get("/s3-logs", async (req, res) => {
+    const continuationToken = typeof req.query.continuationToken === "string" ? req.query.continuationToken : undefined;
+    sendJson(res, await listS3Logs(s3LogsConfig, continuationToken, parseLimit(req.query.limit)));
+  });
+
+  app.get("/s3-logs/download", async (req, res) => {
+    const key = typeof req.query.key === "string" ? req.query.key : "";
+    sendJson(res, await getS3LogsDownloadUrl(s3LogsConfig, key));
   });
 
   app.use((_req, res) => {

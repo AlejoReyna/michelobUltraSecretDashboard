@@ -13,11 +13,6 @@ import {
 } from "@/lib/market-chat-engine";
 import type { StatusPayload } from "@/lib/schemas";
 
-const DISCLAIMER_STORAGE_KEY = "cascade-market-intel-disclaimer-accepted";
-const FADE_OUT_MS = 180;
-const DISCLAIMER_TEXT_DELAY_MS = 480;
-const DISCLAIMER_BUTTON_DELAY_MS = 960;
-
 type FadePhase = "visible" | "out" | "hidden";
 
 function formatAssistantContent(content: string) {
@@ -108,51 +103,7 @@ function IntelSectionHeader({
   );
 }
 
-function DisclaimerGate({ onAccept }: { onAccept: () => void }) {
-  const [showText, setShowText] = useState(false);
-  const [showButton, setShowButton] = useState(false);
 
-  useEffect(() => {
-    const textTimeout = window.setTimeout(() => {
-      setShowText(true);
-    }, DISCLAIMER_TEXT_DELAY_MS);
-
-    const buttonTimeout = window.setTimeout(() => {
-      setShowButton(true);
-    }, DISCLAIMER_BUTTON_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(textTimeout);
-      window.clearTimeout(buttonTimeout);
-    };
-  }, []);
-
-  return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/92 px-6 backdrop-blur-[2px]">
-      <div className="max-w-md text-center">
-        <p className="section-fade-in font-mono text-[12px] uppercase tracking-[0.16em] text-[#8A8A8A]">
-          Before you continue...
-        </p>
-        {showText ? (
-          <div className="section-fade-in mt-5 w-full rounded-sm border border-[#3A3A3A] bg-[#111111] px-4 py-4 font-mono text-[11.5px] leading-[1.6] text-[#D0D0D0]">
-            This chat reads the dashboard&apos;s current telemetry snapshot: scans, x402 payment records, entry scores, factor audits, executions, positions, and wallet state. It is read-only and can only explain the data already available to the dashboard.
-            {showButton ? (
-              <button
-                type="button"
-                onClick={onAccept}
-                className="section-fade-in mt-4 w-full rounded-sm border border-[#555555] bg-[#181818] px-4 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-colors hover:border-[#777777] hover:bg-[#222222]"
-              >
-                Proceed
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function ChatBubble({
   message,
   animate = false,
   streaming = false,
@@ -279,13 +230,11 @@ function MarketChatSurface({
   data,
   compact = false,
   desktop = false,
-  blocked = false,
   onChatStart,
 }: {
   data: StatusPayload | null;
   compact?: boolean;
   desktop?: boolean;
-  blocked?: boolean;
   onChatStart?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => readStoredChatMessages());
@@ -300,7 +249,7 @@ function MarketChatSurface({
     dataRef.current = data;
   }, [data]);
 
-  const interactionDisabled = blocked || thinking;
+  const interactionDisabled = thinking;
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -425,9 +374,7 @@ function MarketChatSurface({
     <div
       className={cx(
         "flex min-h-0 flex-1 flex-col",
-        blocked && "pointer-events-none select-none opacity-40",
       )}
-      aria-hidden={blocked}
     >
       <div
         ref={scrollRef}
@@ -470,34 +417,6 @@ function MarketChatSurface({
   );
 }
 
-function useDisclaimerAccepted() {
-  const [accepted, setAccepted] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    try {
-      const isAccepted = window.sessionStorage.getItem(DISCLAIMER_STORAGE_KEY) === "1";
-      setAccepted(isAccepted);
-    } catch {
-      setAccepted(false);
-    }
-    setReady(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
-
-  function accept() {
-    try {
-      window.sessionStorage.setItem(DISCLAIMER_STORAGE_KEY, "1");
-    } catch {
-      // Ignore storage failures — still unlock for this session.
-    }
-    setAccepted(true);
-  }
-
-  return { accepted, ready, accept };
-}
-
 export function MarketChatPanel({
   data,
   compact = false,
@@ -507,7 +426,6 @@ export function MarketChatPanel({
   compact?: boolean;
   desktop?: boolean;
 }) {
-  const { accepted, ready, accept } = useDisclaimerAccepted();
   const chatAlreadyStarted = readStoredChatMessages().length > 0;
   const { phase: greetingPhase, dismiss: dismissGreeting } = useFadePhase(
     chatAlreadyStarted ? "hidden" : "visible",
@@ -524,7 +442,6 @@ export function MarketChatPanel({
         desktop && "pt-6",
       )}
     >
-      {ready && !accepted ? <DisclaimerGate onAccept={accept} /> : null}
       <div
         className={cx(
           "shrink-0 border-b border-[#1A1A1A]",
@@ -539,7 +456,6 @@ export function MarketChatPanel({
         data={data}
         compact={compact}
         desktop={desktop}
-        blocked={!accepted}
         onChatStart={handleChatStart}
       />
     </section>
