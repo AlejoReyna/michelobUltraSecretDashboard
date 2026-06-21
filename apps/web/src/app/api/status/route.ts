@@ -3,6 +3,7 @@ import { statusSchema } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate",
