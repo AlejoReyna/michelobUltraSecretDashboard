@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Check, X, ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────
 export type ActivityView = "txs" | "sys";
@@ -42,6 +42,7 @@ export type ScanFactor = {
   label: string;
   passed: boolean;
   reading?: string | null;
+  verb?: string;
 };
 
 // ── Utilities ──────────────────────────────────────────────
@@ -97,50 +98,6 @@ function ActivityStatusIndicator({ status, tone }: { status: string; tone: "gree
   );
 }
 
-function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
-  return (
-    <ul className="space-y-3">
-      {factors.map((factor) => {
-        const pass = factor.passed;
-        return (
-          <li
-            key={factor.key}
-            className="group flex items-center gap-4 rounded-xl border border-[#161619] bg-[#111114]/40 px-4 py-3 transition-all hover:border-[#1E1E26] hover:bg-[#111114]/60"
-          >
-            {/* Left Status Icon */}
-            <div className={cx(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
-              pass ? "border-[#33C28E]/20 bg-[#33C28E]/10 text-[#33C28E]" : "border-[#E05B73]/20 bg-[#E05B73]/10 text-[#E05B73]"
-            )}>
-              {pass ? <Check size={16} strokeWidth={3} /> : <X size={16} strokeWidth={3} />}
-            </div>
-
-            {/* Content */}
-            <div className="flex min-w-0 flex-1 items-baseline gap-2">
-              <span className="truncate font-sans text-[13px] font-bold uppercase tracking-wider text-white">
-                {factor.label}
-              </span>
-              {factor.reading && (
-                <span className="truncate font-sans text-[11px] text-[#7F7F94]">
-                  {factor.reading}
-                </span>
-              )}
-            </div>
-
-            {/* Right Status Tag */}
-            <div className={cx(
-              "rounded-md border px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-tighter",
-              pass ? "border-[#33C28E]/30 bg-[#33C28E]/10 text-[#33C28E]" : "border-[#E05B73]/30 bg-[#E05B73]/10 text-[#E05B73]"
-            )}>
-              {pass ? "PASS" : "FAIL"}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function SimpleLiveScan({
   latestDecision,
   onViewPast,
@@ -150,54 +107,103 @@ function SimpleLiveScan({
 }) {
   const symbol = latestDecision?.symbol ?? "DETECTING";
   const cycle = latestDecision?.cycle_number ?? 0;
+  const cycleStr = cycle.toString().padStart(4, "0");
 
   const factors: ScanFactor[] = useMemo(() => {
     const metrics = latestDecision?.factor_metrics ?? {};
-    const labels = ["Volume Surge", "Trend Alignment", "RSI Oscillation", "Support Breakout", "Volatility Index", "Sentiment Score"];
-    return labels.map((label, i) => ({
-      key: label.toLowerCase().replace(" ", "_"),
-      label,
+    const defs = [
+      { key: "volume_breakout",        label: "VOLUME SURGE",     verb: "volume surge"     },
+      { key: "six_hour_high_break",    label: "TREND ALIGNMENT",  verb: "trend alignment"  },
+      { key: "rsi_in_range",           label: "RSI OSCILLATION",  verb: "rsi oscillation"  },
+      { key: "slippage_under_cap",     label: "SUPPORT BREAKOUT", verb: "support breakout" },
+      { key: "derivatives_risk_clear", label: "VOLATILITY INDEX", verb: "volatility index" },
+      { key: "regime_not_risk_off",    label: "SENTIMENT SCORE",  verb: "sentiment score"  },
+    ];
+    return defs.map((d, i) => ({
+      key: d.key,
+      label: d.label,
       passed: i !== 2 && i !== 4,
-      reading: metrics[label.toLowerCase().replace(" ", "_")] ?? (i === 0 ? "1.4x" : i === 2 ? "RSI 65" : "OK")
+      reading: (metrics as Record<string, string | null>)[d.key] ?? (i === 0 ? "1.4x" : i === 2 ? "RSI 65" : "OK"),
+      verb: d.verb,
     }));
   }, [latestDecision]);
 
-  const passedCount = factors.filter(f => f.passed).length;
+  const passedCount = factors.filter((f) => f.passed).length;
+  const action = passedCount >= 5 ? "ENTER" : passedCount >= 4 ? "WAIT" : "BLOCKED";
+  const actionColor = action === "ENTER" ? "text-[#33c28e]" : action === "BLOCKED" ? "text-[#e05b73]" : "text-[#cccdde]";
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex justify-end pb-12">
+    <div className="flex flex-1 flex-col font-mono">
+      {/* top-right history button */}
+      <div className="flex justify-end pb-6">
         <button
           onClick={onViewPast}
-          className="group flex items-center gap-2 border border-[#161619] bg-[#111114]/50 px-4 py-2 font-sans text-[11px] font-bold uppercase tracking-[0.2em] text-[#CCCDDA] transition-all hover:border-[#282830] hover:text-white"
+          className="flex items-center gap-2 border border-[#1e1e26] bg-[#0c0c0f] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#cccdde] transition-colors hover:border-[#282830] hover:text-white"
         >
-          View Past History <ArrowRight size={14} className="text-[#7F7F94] group-hover:text-white" />
+          <span className="text-[#b07de3]">›</span> HISTORY <span className="text-[#7f7f94]">→</span>
         </button>
       </div>
 
-      <div className="flex flex-col items-center text-center">
-        <div className="relative">
-          <div className="absolute -inset-4 rounded-full bg-white/5 blur-2xl" />
-          <TokenIcon symbol={symbol} size={110} />
-        </div>
-
-        <h2 className="mt-8 font-sans text-[32px] font-bold tracking-tight text-white">
-          {symbol}/USDT
-        </h2>
-
-        <div className="mt-2 flex items-center gap-3 font-sans text-[11px] uppercase tracking-[0.2em] text-[#7F7F94]">
-          <span>Cycle #{cycle.toString().padStart(4, '0')}</span>
-          <span className="h-1 w-1 rounded-full bg-[#1E1E26]" />
-          <span className="flex items-center gap-1">
-            <span className="text-[#33C28E]">{passedCount}</span>
-            <span className="text-[#282830]">/</span>
-            {factors.length} Checks Passed
-          </span>
-        </div>
+      {/* scan header */}
+      <div className="text-[12px] text-[#7f7f94]">
+        <span className="text-[#b07de3]">›</span> SCAN <span className="text-white font-bold">{symbol}</span> --CYCLE {cycleStr}
       </div>
 
-      <div className="mt-12">
-        <StaticFactorList factors={factors} />
+      {/* token title */}
+      <div className="mt-2">
+        <span className="text-[28px] font-bold text-white tracking-tight">{symbol}/USDT</span>
+        <span className="ml-3 text-[14px] text-[#7f7f94]">#{cycleStr}</span>
+      </div>
+
+      {/* summary */}
+      <div className="mt-1 flex items-center gap-3 text-[12px]">
+        <span className="text-[#cccdde]">{passedCount}/{factors.length} checks passed</span>
+        <span className="text-[#1e1e26]">|</span>
+        <span className={cx("font-bold", actionColor)}>{action}</span>
+      </div>
+
+      {/* divider */}
+      <div className="mt-5 border-t border-[#1e1e26]" />
+
+      {/* factor_audit header */}
+      <div className="mt-4 flex items-center justify-between text-[11px] text-[#7f7f94]">
+        <span><span className="text-[#b07de3]">›</span> FACTOR_AUDIT.EXE</span>
+        <span className="tracking-[0.16em]">--LIVE</span>
+      </div>
+
+      {/* factors */}
+      <div className="mt-3 space-y-3">
+        {factors.map((f) => {
+          const pass = f.passed;
+          return (
+            <div key={f.key} className="border-b border-[#1e1e26] pb-3 last:border-0 last:pb-0">
+              <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline gap-2">
+                  <span className={cx("text-[12px] font-bold", pass ? "text-[#33c28e]" : "text-[#e05b73]")}>
+                    {pass ? ">" : "!"}
+                  </span>
+                  <span className="text-[12px] font-bold text-white">{f.label}</span>
+                  {f.reading && (
+                    <span className={cx("text-[10px]", pass ? "text-[#33c28e]/80" : "text-[#e05b73]/80")}>
+                      {f.reading}
+                    </span>
+                  )}
+                </div>
+                <span className={cx("text-[11px] font-bold", pass ? "text-[#33c28e]" : "text-[#e05b73]")}>
+                  [{pass ? "PASS" : "FAIL"}]
+                </span>
+              </div>
+              <div className="mt-0.5 pl-4 text-[10px] text-[#7f7f94]">
+                {f.verb}: condition {pass ? "met" : "not met"}.
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* done */}
+      <div className="mt-5 text-[12px] text-[#7f7f94]">
+        <span className="text-[#b07de3]">›</span> done.
       </div>
     </div>
   );
