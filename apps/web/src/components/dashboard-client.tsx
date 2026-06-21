@@ -66,7 +66,6 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
-  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
@@ -1529,7 +1528,7 @@ function DesktopNavRail({
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
-      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#1E2026]">
+      <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/no-bg.png"
@@ -1924,7 +1923,7 @@ function WalletPanel({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
+                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
                 </h2>
@@ -1952,7 +1951,7 @@ function WalletPanel({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
+                    <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
                 </h2>
@@ -4006,9 +4005,6 @@ function ActivePositionsPanel({
 
 type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
 
-
-
-
 /** Terminal-style live scan — raw, no glass cards, no rounded icons */
 function NewSimpleLiveScan({
   latestDecision,
@@ -4882,7 +4878,7 @@ function HomeWalletSummary({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/usdc-logo.png" alt="USDC" className="h-4 w-4 object-contain" />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
+                  <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                 </span>
                 Base USDC
               </h2>
@@ -4927,7 +4923,7 @@ function DesktopOverviewSection({
             </div>
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-            <div className="absolute inset-0">
+            <div className="absolute inset-x-0 bottom-0 top-12">
               <PortfolioChart data={view.chartData} variant="desktop" range={timeRange} />
             </div>
           </ViewportReveal>
@@ -5096,7 +5092,6 @@ function OverviewTopBar({
     </header>
   );
 }
-
 
 function ChartFilterMenu({
   timeRange,

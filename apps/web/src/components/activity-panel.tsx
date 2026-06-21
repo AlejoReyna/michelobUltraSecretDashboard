@@ -34,7 +34,7 @@ export type StatusPayload = {
     factor_metrics?: Record<string, string | null>;
     reason?: string | null;
   };
-  decisions: Array<Record<string, unknown>>;
+  decisions: Array<StatusPayload["latestDecision"] & { action?: string; factor_scores?: Record<string, unknown> }>;
   health: { agentRunning?: boolean };
 };
 export type ScanFactor = {

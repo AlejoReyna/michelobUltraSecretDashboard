@@ -216,10 +216,10 @@ function buildChatMessages(
 }
 
 function kimiThinkingForModel(model: string, config: MarketIntelConfig) {
-  if (model.startsWith("kimi-k2.7-code")) {
+  if (config.kimiThinking !== "enabled" || model.startsWith("kimi-k2.7-code")) {
     return undefined;
   }
-  return { type: config.kimiThinking ?? "disabled" };
+  return { type: "enabled" as const };
 }
 
 async function createResponsesStreamingResponse(
