@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build --workspace @cascade-ai/dashboard-web",
+  "buildCommand": "npm run build --workspace apps/web",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs"
 }

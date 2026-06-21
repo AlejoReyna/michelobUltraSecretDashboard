@@ -11,7 +11,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import Image from "next/image";
 import {
   Activity,
   ArrowRight,
@@ -19,10 +18,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Copy,
   CreditCard,
-  DollarSign,
   ExternalLink,
   FileText,
   Filter,
@@ -30,13 +27,10 @@ import {
   Globe,
   Home,
   Layers,
-  ShieldCheck,
   Terminal,
   Wallet,
-  X,
   type LucideIcon,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
 import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
@@ -76,13 +70,7 @@ import {
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
-import {
-  cycleCountdownMs,
-  formatCycleCountdown,
-  inferCycleIntervalMs,
-  nextCycleAt,
-} from "@/lib/cycle-timing";
-import { breakoutEntryScoreStats, entryFactorStats, ENTRY_FACTOR_KEYS, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
+import { breakoutEntryScoreStats, entryFactorStats, ENTRY_FACTOR_KEYS, isComplianceDecision } from "@/lib/factor-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -95,7 +83,6 @@ import {
   statusSchema,
   type Decision,
   type MarketDataRow,
-  type SellHistoryRow,
   type StatusPayload,
   type X402Call,
 } from "@/lib/schemas";
@@ -206,7 +193,6 @@ type ActivityRow = {
 };
 
 const ACTIVITY_ROWS_PER_PAGE = 10;
-const ACTIVITY_ROWS_PER_PAGE_MOBILE = 7;
 const ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE = 5;
 
 type PositionRow = {
@@ -1097,7 +1083,6 @@ function activityTokenFromMovement(
 function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number]): string {
   const symbol = decision.symbol?.trim() || "candidate";
   const action = String(decision.action ?? "WAIT").toUpperCase();
-  const strategyMode = resolveStrategyMode(decision);
   const priced =
     decision.priced_target_count != null
       ? ` across ${decision.priced_target_count} priced targets`
@@ -1545,6 +1530,7 @@ function DesktopNavRail({
       aria-label="Dashboard navigation"
     >
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#1E2026]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/no-bg.png"
           alt="Logo"
@@ -1860,6 +1846,7 @@ function WalletPanel({
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
               Live Holdings
             </h1>
@@ -1934,7 +1921,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
                   </span>
                   Base USDC
@@ -1960,7 +1949,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
                   </span>
                   Base USDC
@@ -3365,49 +3356,6 @@ function positionToneClass(tone: PositionTone) {
   }[tone];
 }
 
-function positionBadgeClass(tone: PositionTone) {
-  return {
-    green: "border-[#0ECB81]/40 bg-[#0B0E11] text-[#0ECB81]",
-    yellow: "border-[#B0B3B8]/40 bg-[#0B0E11] text-[#B0B3B8]",
-    blue: "border-[#FFD666]/40 bg-[#0B0E11] text-[#FFD666]",
-    red: "border-[#F6465D]/40 bg-[#0B0E11] text-[#F6465D]",
-    neutral: "border-[#4A4F5B] bg-[#0B0E11] text-[#B0B3B8]",
-  }[tone];
-}
-
-function PositionSummaryBlock({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-  index,
-  scrollRoot,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone?: PositionTone;
-  index: number;
-  scrollRoot: Element | null;
-}) {
-  return (
-    <ViewportReveal variant="fade" delay={80 + index * 60} root={scrollRoot}>
-      <div className="min-w-0 bg-[#1E2026] px-6 py-5">
-        <div className="font-sans text-[10px] uppercase text-[#848E9C]">{label}</div>
-        <div
-          className={cx(
-            "mt-2 truncate font-sans text-[24px] font-semibold tabular-nums text-white xl:text-[28px]",
-            positionToneClass(tone),
-          )}
-        >
-          {value}
-        </div>
-        {detail ? <div className="mt-1 truncate font-sans text-[11px] text-[#848E9C]">{detail}</div> : null}
-      </div>
-    </ViewportReveal>
-  );
-}
-
 function PositionMetricCell({
   label,
   value,
@@ -3433,123 +3381,6 @@ function PositionMetricCell({
       <div className="font-sans text-[10px] uppercase text-[#848E9C]">{label}</div>
       <div className={cx("mt-1 truncate font-sans text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
     </ViewportReveal>
-  );
-}
-
-function PositionRiskCorridor({ row }: { row: PositionRow }) {
-  if (row.source === "wallet") {
-    return (
-      <div className="border-t border-[#2B2F36] px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#B0B3B8]" aria-hidden="true" />
-          <div className="min-w-0">
-            <div className="font-sans text-[10px] uppercase text-[#848E9C]">Position state</div>
-            <p className="mt-1 break-words font-sans text-[12px] leading-5 text-[#B0B3B8]">
-              Entry, stop, and target are unavailable until the position state syncs.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const entry = row.entryPrice;
-  const high = row.highestPrice;
-  const stop = row.trailingStopPrice;
-  const target = row.takeProfitPrice;
-  const current = row.currentPrice;
-  const { stopDistancePct, targetUpsidePct } = positionRiskStats(row);
-
-  const valid = positivePrice(stop) && positivePrice(target) && target > stop && positivePrice(entry);
-
-  const place = (value: number) =>
-    Math.min(100, Math.max(0, ((value - (stop as number)) / ((target as number) - (stop as number))) * 100));
-
-  return (
-    <div className="border-t border-[#2B2F36] px-5 py-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="font-sans text-[10px] uppercase text-[#848E9C]">Risk corridor</div>
-        <div className="font-sans text-[12px] tabular-nums text-[#848E9C]">
-          {stopDistancePct !== null ? (
-            <span className="text-[#B0B3B8]">-{stopDistancePct.toFixed(1)}% stop</span>
-          ) : (
-            <span>stop N/A</span>
-          )}
-          <span className="mx-2 text-[#4A4F5B]">/</span>
-          {targetUpsidePct !== null ? (
-            <span className="text-[#FFD666]">+{targetUpsidePct.toFixed(1)}% target</span>
-          ) : (
-            <span>target N/A</span>
-          )}
-        </div>
-      </div>
-
-      {valid ? (
-        <>
-          <div className="flex items-center gap-4">
-            <div className="font-sans text-[10px] uppercase text-[#B0B3B8]">Stop</div>
-            <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[#161616]">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#F0B90B] to-[#D4A009]"
-                style={{ width: `${place(entry as number)}%` }}
-                aria-hidden="true"
-              />
-              {positivePrice(high) ? (
-                <span
-                  className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-[#0ECB81]"
-                  style={{ left: `${place(high)}%` }}
-                  title={`High ${formatPrice(high)}`}
-                  aria-hidden="true"
-                />
-              ) : null}
-              <span
-                className="absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 bg-white"
-                style={{ left: `${place(entry as number)}%` }}
-                title={`Entry ${formatPrice(entry)}`}
-                aria-hidden="true"
-              />
-              {positivePrice(current) ? (
-                <span
-                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#FFD666] shadow-[0_0_6px_#FFD666]"
-                  style={{ left: `${place(current)}%` }}
-                  title={`Current ${formatPrice(current)}`}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </div>
-            <div className="font-sans text-[10px] uppercase text-[#FFD666]">Target</div>
-          </div>
-          <div className="mt-3 grid grid-cols-5 gap-3 font-sans text-[11px] tabular-nums">
-            <div className="min-w-0">
-              <div className="text-[#848E9C]">Stop</div>
-              <div className="truncate text-[#B0B3B8]">{formatPrice(stop)}</div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#848E9C]">Entry</div>
-              <div className="truncate text-white">{formatPrice(entry)}</div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#848E9C]">Current</div>
-              <div className={cx("truncate", positivePrice(current) ? "text-[#FFD666]" : "text-[#848E9C]")}>
-                {formatPrice(current)}
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[#848E9C]">High</div>
-              <div className="truncate text-[#0ECB81]">{formatPrice(high)}</div>
-            </div>
-            <div className="min-w-0 text-right">
-              <div className="text-[#848E9C]">Target</div>
-              <div className="truncate text-[#FFD666]">{formatPrice(target)}</div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <p className="font-sans text-[12px] leading-5 text-[#848E9C]">
-          Stop and target levels will appear here after the position state is fully synced.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -3579,35 +3410,6 @@ function findEntryDecisionForPosition(
   }
 
   return entryDecisions[0];
-}
-
-function formatDuration(minutes: number): string {
-  if (minutes < 1) return "<1m";
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function positionElapsedTime(openedAt: string | null): string {
-  if (!openedAt) return "N/A";
-  const opened = Date.parse(openedAt);
-  if (!Number.isFinite(opened)) return "N/A";
-  const minutes = (Date.now() - opened) / 60000;
-  return formatDuration(minutes);
-}
-
-function positionRemainingTime(
-  openedAt: string | null,
-  holdTimeSeconds: number | null | undefined,
-): string | null {
-  if (!openedAt || !holdTimeSeconds || !Number.isFinite(holdTimeSeconds)) return null;
-  const opened = Date.parse(openedAt);
-  if (!Number.isFinite(opened)) return null;
-  const elapsedMs = Date.now() - opened;
-  const remainingMs = holdTimeSeconds * 1000 - elapsedMs;
-  if (remainingMs <= 0) return "expiring";
-  return formatDuration(remainingMs / 60000);
 }
 
 function buildPositionsSnapshot(
@@ -3729,7 +3531,6 @@ function CopyJsonButton({ json }: { json: object }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // eslint-disable-next-line no-console
       console.warn("Failed to copy positions snapshot to clipboard.");
     }
   }, [json]);
@@ -3831,25 +3632,6 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
         <span>Entry {formatPrice(entry)}</span>
         <span>Target {formatPrice(target)}</span>
       </div>
-    </div>
-  );
-}
-
-function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decision | null }) {
-  const elapsed = positionElapsedTime(row.openedAt);
-  const remaining = positionRemainingTime(row.openedAt, decision?.hold_time_seconds);
-
-  return (
-    <div className="flex items-center gap-3 font-sans text-[10px] uppercase text-[#848E9C]">
-      <span>Held: {elapsed}</span>
-      {remaining ? (
-        <>
-          <span className="h-1 w-1 rounded-full bg-[#4A4F5B]" aria-hidden="true" />
-          <span className={remaining === "expiring" ? "text-[#F6465D]" : "text-[#FFD666]"}>
-            {remaining === "expiring" ? "Time stop" : `${remaining} remaining`}
-          </span>
-        </>
-      ) : null}
     </div>
   );
 }
@@ -4036,100 +3818,6 @@ function DesktopPositionCard({
   return <div>{body}</div>;
 }
 
-function PositionsInsightRail({
-  rows,
-  nearestStop,
-  nearestTarget,
-  totalPositionValue,
-  scrollRoot,
-}: {
-  rows: PositionRow[];
-  nearestStop: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
-  nearestTarget: ({ row: PositionRow } & ReturnType<typeof positionRiskStats>) | undefined;
-  totalPositionValue: string;
-  scrollRoot: Element | null;
-}) {
-  const trackedRows = rows.filter((row) => row.source === "tracked");
-  const walletRows = rows.filter((row) => row.source === "wallet");
-  const managedRows = rows.filter(
-    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
-  );
-
-  const railRows = [
-    { label: "Total exposure", value: totalPositionValue, tone: "neutral" as const },
-    {
-      label: "Risk coverage",
-      value: `${managedRows.length}/${rows.length}`,
-      tone: managedRows.length === rows.length ? ("green" as const) : ("yellow" as const),
-    },
-    {
-      label: "Synced positions",
-      value: String(trackedRows.length),
-      tone: trackedRows.length > 0 ? ("green" as const) : ("neutral" as const),
-    },
-    { label: "Wallet-only", value: String(walletRows.length), tone: walletRows.length > 0 ? ("yellow" as const) : ("neutral" as const) },
-  ];
-
-  return (
-    <aside className="min-w-0 bento-card border border-[#2B2F36] bg-[#1E2026]/70">
-      <ViewportReveal variant="fade" delay={160} root={scrollRoot}>
-        <div className="border-b border-[#2B2F36] px-5 py-4">
-          <div className="font-sans text-[10px] uppercase text-[#848E9C]">Position readout</div>
-          <div className="mt-1 font-sans text-[18px] font-semibold text-white">Exposure & state</div>
-        </div>
-      </ViewportReveal>
-
-      <div className="divide-y divide-[#2B2F36]">
-        {railRows.map((item, index) => (
-          <ViewportReveal
-            key={item.label}
-            variant={index % 2 === 0 ? "left" : "right"}
-            delay={220 + index * 45}
-            duration="fast"
-            root={scrollRoot}
-            className="flex items-baseline justify-between gap-4 px-5 py-3"
-          >
-            <span className="font-sans text-[11px] uppercase text-[#848E9C]">{item.label}</span>
-            <span className={cx("truncate font-sans text-[14px] tabular-nums", positionToneClass(item.tone))}>
-              {item.value}
-            </span>
-          </ViewportReveal>
-        ))}
-      </div>
-
-      <ViewportReveal variant="fade" delay={440} root={scrollRoot} className="border-t border-[#2B2F36] px-5 py-4">
-        <div className="font-sans text-[10px] uppercase text-[#848E9C]">Closest levels</div>
-        <div className="mt-4 space-y-4">
-          <div>
-            <div className="flex items-baseline justify-between gap-3 font-sans">
-              <span className="text-[11px] uppercase text-[#848E9C]">Stop</span>
-              <span className="text-[13px] tabular-nums text-[#B0B3B8]">
-                {nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : "N/A"}
-              </span>
-            </div>
-            <div className="mt-2 h-px bg-[#2B2F36]">
-              <div className="h-px w-1/3 bg-[#B0B3B8]" aria-hidden="true" />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-baseline justify-between gap-3 font-sans">
-              <span className="text-[11px] uppercase text-[#848E9C]">Target</span>
-              <span className="text-[13px] tabular-nums text-[#FFD666]">
-                {nearestTarget
-                  ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
-                  : "N/A"}
-              </span>
-            </div>
-            <div className="mt-2 h-px bg-[#2B2F36]">
-              <div className="h-px w-2/3 bg-[#FFD666]" aria-hidden="true" />
-            </div>
-          </div>
-        </div>
-      </ViewportReveal>
-    </aside>
-  );
-}
-
 function DesktopPositionsBoard({
   rows,
   executions,
@@ -4149,45 +3837,6 @@ function DesktopPositionsBoard({
   decisions?: Decision[];
   headerAction?: ReactNode;
 }) {
-  const stats = rows.map((row) => ({ row, ...positionRiskStats(row) }));
-  const nearestStop = stats
-    .filter((item) => item.stopDistancePct !== null)
-    .sort((a, b) => (a.stopDistancePct as number) - (b.stopDistancePct as number))[0];
-  const nearestTarget = stats
-    .filter((item) => item.targetUpsidePct !== null)
-    .sort((a, b) => (a.targetUpsidePct as number) - (b.targetUpsidePct as number))[0];
-
-  const walletOnlyCount = rows.filter((row) => row.source === "wallet").length;
-  const managedCount = rows.filter(
-    (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
-  ).length;
-
-  const summaryBlocks: Array<{
-    label: string;
-    value: string;
-    detail?: string;
-    tone?: PositionTone;
-  }> = [
-    { label: "Open positions", value: String(rows.length), detail: `${managedCount} with risk plan` },
-    { label: "Total exposure", value: totalPositionValue, detail: "Current token value" },
-    {
-      label: nearestStop ? "Nearest stop" : "Risk coverage",
-      value: nearestStop ? `${nearestStop.row.symbol} -${(nearestStop.stopDistancePct as number).toFixed(1)}%` : `${managedCount}/${rows.length}`,
-      detail: nearestStop ? formatPrice(nearestStop.row.trailingStopPrice) : "Stops and targets synced",
-      tone: nearestStop ? "yellow" : managedCount === rows.length ? "green" : "yellow",
-    },
-    {
-      label: nearestTarget ? "Nearest target" : "Sync status",
-      value: nearestTarget
-        ? `${nearestTarget.row.symbol} +${(nearestTarget.targetUpsidePct as number).toFixed(1)}%`
-        : walletOnlyCount > 0
-          ? `${walletOnlyCount} wallet-only`
-          : "N/A",
-      detail: nearestTarget ? formatPrice(nearestTarget.row.takeProfitPrice) : "Waiting for positions.json levels",
-      tone: nearestTarget ? "blue" : walletOnlyCount > 0 ? "yellow" : "neutral",
-    },
-  ];
-
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
@@ -4355,717 +4004,10 @@ function ActivePositionsPanel({
   );
 }
 
-function useNow(tickMs = 1000) {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const interval = window.setInterval(onStoreChange, tickMs);
-      return () => window.clearInterval(interval);
-    },
-    () => Date.now(),
-    () => Date.now(),
-  );
-}
-
-function LiveScanPanel({
-  latestDecision,
-  decisions,
-  agentRunning,
-  compact = false,
-  mobileFit = false,
-  mobileTabs = null,
-  readable = false,
-}: {
-  latestDecision: StatusPayload["latestDecision"];
-  decisions: StatusPayload["decisions"];
-  agentRunning: boolean;
-  compact?: boolean;
-  mobileFit?: boolean;
-  mobileTabs?: ReactNode;
-  readable?: boolean;
-}) {
-  const now = useNow();
-  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
-  const nextAt = useMemo(
-    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
-    [intervalMs, latestDecision?.timestamp],
-  );
-  const remainingMs = cycleCountdownMs(nextAt, now);
-  const countdownLabel =
-    remainingMs === null
-      ? "N/A"
-      : remainingMs <= 0
-        ? agentRunning
-          ? "Scanning…"
-          : "Due now"
-        : formatCycleCountdown(remainingMs);
-
-  const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
-  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
-  const symbol = latestDecision?.symbol ?? null;
-  const sectionGap = mobileFit ? "mt-2 border-t border-[#2B2F36] pt-2" : cx("mt-4 border-t border-[#2B2F36] pt-4", compact && "mt-3 pt-3");
-  const labelClass = mobileFit
-    ? "font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]"
-    : cx("font-sans uppercase tracking-[0.14em] text-[#848E9C]", readable ? "text-[11px]" : "text-[10px]");
-
-  return (
-    <div
-      className={cx(
-        !mobileFit && "border border-[#3A3F4B] bg-[#1E2026] bento-card",
-        mobileFit && "flex min-h-0 flex-col overflow-hidden px-3 py-3 shadow-[0_0_24px_rgba(255,255,255,0.04)]",
-        !mobileFit && compact && "px-4 py-4",
-        !mobileFit && !compact && "px-5 py-5",
-      )}
-    >
-      {mobileFit ? (
-        <div className="flex shrink-0 items-start justify-between gap-3 pb-2">
-          <div className="font-sans text-[11px] leading-none text-[#848E9C]">
-            Cycle #{latestDecision?.cycle_number ?? "N/A"}
-          </div>
-          {mobileTabs}
-        </div>
-      ) : null}
-      {mobileFit ? (
-        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#2B2F36] pb-2">
-          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-xl border border-[#2B2F36] bg-[#1E2026]/80 px-2 py-2 text-center">
-            <div className={labelClass}>Next query</div>
-            <div
-              className={cx(
-                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#B0B3B8]" : "text-white",
-              )}
-            >
-              {countdownLabel}
-            </div>
-          </div>
-          {symbol ? (
-            <>
-              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-xl border border-[#4A4F5B] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
-                <span className="pointer-events-none absolute inset-x-3 top-1 h-px bg-white/35" aria-hidden="true" />
-                <span className="pointer-events-none absolute -bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#FF173D]/20 blur-xl" aria-hidden="true" />
-                <div className="relative flex max-w-full items-center gap-2">
-                  <TokenIcon symbol={symbol} size={42} />
-                  <div className="min-w-0 text-center">
-                    <div className="truncate font-sans text-[18px] font-semibold leading-tight text-white">{symbol}</div>
-                    {latestDecision?.priced_target_count != null ? (
-                      <div className="mt-1 truncate font-sans text-[11px] leading-tight text-[#848E9C]">
-                        {latestDecision.priced_target_count} targets priced
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-xl border border-[#2B2F36] bg-[#1E2026]/80 px-2 py-2 text-center font-sans text-[10px] leading-4 text-[#848E9C]">
-                Waiting for decision…
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          <div>
-            <div className={labelClass}>Next query</div>
-            <div
-              className={cx(
-                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#B0B3B8]" : "text-white",
-              )}
-            >
-              {countdownLabel}
-            </div>
-          </div>
-
-          <div className={sectionGap}>
-            <div className={labelClass}>Detected asset</div>
-            {symbol ? (
-              <div className="mt-3 flex items-center gap-3.5">
-                <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
-                <div className="min-w-0">
-                  <div className={cx("font-sans font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
-                  <div className={cx("mt-1 font-sans text-[#848E9C]", readable ? "text-[12px]" : "text-[11px]")}>
-                    Cycle #{latestDecision?.cycle_number ?? "N/A"}
-                    {latestDecision?.priced_target_count != null
-                      ? ` · ${latestDecision.priced_target_count} targets priced`
-                      : ""}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="mt-2 font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
-            )}
-          </div>
-        </>
-      )}
-
-      <div className={mobileFit ? "flex shrink-0 flex-col gap-1 pt-1.5" : sectionGap}>
-        {!mobileFit ? (
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className={labelClass}>Signal inputs</div>
-            {strategyMode ? (
-              <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#848E9C]">{strategyMode}</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {analysis?.factors && analysis.factors.length > 0 ? (
-          <ul
-            className={cx(
-              mobileFit ? "grid grid-cols-2 justify-items-center gap-x-2 gap-y-1" : "space-y-1.5",
-            )}
-          >
-            {analysis.factors.map((factor) => (
-              <li
-                key={factor.key}
-                className={cx(
-                  "flex min-w-0 items-start font-sans text-[#848E9C]",
-                  mobileFit
-                    ? "justify-center gap-1.5 text-[11px] leading-5"
-                    : cx("gap-2 leading-5", readable ? "text-[13px]" : "text-[11px]"),
-                )}
-              >
-                <span className="mt-px shrink-0" aria-hidden="true">
-                  {factor.passed ? "✓" : "✗"}
-                </span>
-                <span className="uppercase tracking-[0.04em]">{factor.label}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p
-            className={cx(
-              "font-sans leading-5 text-[#848E9C]",
-              mobileFit ? "text-center text-[12px]" : readable ? "text-[13px]" : "text-[12px]",
-            )}
-          >
-            {latestDecision?.reason?.trim()
-              ? latestDecision.reason
-              : "Signal audit will appear after the agent completes a scan cycle."}
-          </p>
-        )}
-
-        {latestDecision?.reason ? (
-          <p
-            className={cx(
-              "break-words font-sans text-[#B0B3B8]",
-              mobileFit
-                ? "shrink-0 text-center text-[11px] font-semibold leading-5"
-                : cx("mt-3 leading-5", readable ? "text-[13px]" : "text-[11px]"),
-            )}
-          >
-            {latestDecision.reason}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function usePrefersReducedMotion() {
-  return useSyncExternalStore(
-    (onChange) => {
-      if (typeof window === "undefined" || !window.matchMedia) {
-        return () => {};
-      }
-      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mq.addEventListener("change", onChange);
-      return () => mq.removeEventListener("change", onChange);
-    },
-    () =>
-      typeof window !== "undefined" && window.matchMedia
-        ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        : false,
-    () => false,
-  );
-}
-
 type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
 
-const SCAN_STEP_MS = 540;
 
-/**
- * Sequentially "analyses" each factor: a sweep beam travels the list, each row
- * flips from pending → analysing → resolved (pass/fail), one at a time. Re-runs
- * whenever `runKey` (symbol + cycle) changes so judges watch the agent think.
- */
-function LiveFactorScan({
-  factors,
-  runKey,
-  readable = false,
-}: {
-  factors: ScanFactor[];
-  runKey: string;
-  readable?: boolean;
-}) {
-  const reduceMotion = usePrefersReducedMotion();
-  const [resolved, setResolved] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    if (factors.length === 0) {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
-    } else if (reduceMotion) {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(factors.length), 0));
-    } else {
-      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
-      for (let i = 0; i < factors.length; i += 1) {
-        const timer = window.setTimeout(
-          () => {
-            if (!cancelled) {
-              setResolved((current) => Math.max(current, i + 1));
-            }
-          },
-          SCAN_STEP_MS * (i + 1),
-        );
-        timers.push(timer);
-      }
-    }
-    return () => {
-      cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [runKey, factors.length, reduceMotion]);
-
-  const activeIndex = resolved < factors.length ? resolved : -1;
-  const scanning = activeIndex !== -1;
-  const valueText = readable ? "text-[13px]" : "text-[12px]";
-
-  return (
-    <div className="relative">
-      {scanning ? (
-        <span
-          aria-hidden="true"
-          className="scan-beam pointer-events-none absolute inset-x-0 top-0 h-6 bg-[linear-gradient(180deg,rgba(255,210,26,0)_0%,rgba(255,210,26,0.12)_50%,rgba(255,210,26,0)_100%)]"
-        />
-      ) : null}
-      <ul className="relative space-y-1">
-        {factors.map((factor, index) => {
-          const isResolved = index < resolved;
-          const isActive = index === activeIndex;
-          const tone = factor.passed ? "text-[#0ECB81]" : "text-[#F6465D]";
-
-          return (
-            <li
-              key={factor.key}
-              className={cx(
-                "rounded-sm px-2 py-1.5 font-sans transition-colors duration-300",
-                valueText,
-                isActive && "scan-row-active",
-                isResolved && "scan-row-resolve",
-                !isResolved && !isActive && "opacity-35",
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                  {isResolved ? (
-                    <span className={cx("text-[13px] font-bold leading-none", tone)}>
-                      {factor.passed ? "✓" : "✗"}
-                    </span>
-                  ) : isActive ? (
-                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#B0B3B8] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
-                  ) : (
-                    <span className="inline-block h-1 w-1 rounded-full bg-[#4A4F5B]" />
-                  )}
-                </span>
-                <span
-                  className={cx(
-                    "min-w-0 flex-1 truncate uppercase tracking-[0.06em]",
-                    isResolved ? "text-[#B0B3B8]" : isActive ? "text-white" : "text-[#848E9C]",
-                  )}
-                >
-                  {factor.label}
-                </span>
-                <span
-                  className={cx(
-                    "shrink-0 text-[10px] uppercase tracking-[0.12em]",
-                    isResolved ? tone : isActive ? "text-[#B0B3B8]" : "text-[#4A4F5B]",
-                  )}
-                >
-                  {isResolved ? (factor.passed ? "PASS" : "FAIL") : isActive ? "SCAN" : "···"}
-                </span>
-              </div>
-              {isResolved ? (
-                <div className="mt-1 pl-7">
-                  {factor.reading ? (
-                    <p
-                      className={cx(
-                        "text-[11px] leading-4 tabular-nums",
-                        factor.passed ? "text-[#0ECB81]" : "text-[#F6465D]",
-                      )}
-                    >
-                      {factor.reading}
-                    </p>
-                  ) : null}
-                  <p className="text-[11px] leading-4 text-[#848E9C]">
-                    {explainFactor(factor.key, factor.passed)}
-                  </p>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * Redesigned desktop left column: the detected token sits up top with the
- * next-query countdown, then every signal factor is analysed live, and a verdict
- * resolves once the scan completes.
- */
-function LiveDecisionScan({
-  latestDecision,
-  decisions,
-  agentRunning,
-}: {
-  latestDecision: StatusPayload["latestDecision"];
-  decisions: StatusPayload["decisions"];
-  agentRunning: boolean;
-}) {
-  const now = useNow();
-  const reduceMotion = usePrefersReducedMotion();
-  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
-  const nextAt = useMemo(
-    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
-    [intervalMs, latestDecision?.timestamp],
-  );
-  const remainingMs = cycleCountdownMs(nextAt, now);
-  const countdownLabel =
-    remainingMs === null
-      ? "N/A"
-      : remainingMs <= 0
-        ? agentRunning
-          ? "Scanning…"
-          : "Due now"
-        : formatCycleCountdown(remainingMs);
-  const countdownDue = remainingMs !== null && remainingMs <= 0 && agentRunning;
-
-  const analysis = useMemo(
-    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
-    [latestDecision],
-  );
-  const factors: ScanFactor[] = useMemo(() => {
-    const metrics = latestDecision?.factor_metrics ?? null;
-    return (analysis?.factors ?? []).map((factor) => ({
-      ...factor,
-      reading: metrics?.[factor.key] ?? null,
-    }));
-  }, [analysis, latestDecision]);
-  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
-  const symbol = latestDecision?.symbol ?? null;
-  const runKey = `${symbol ?? "none"}-${latestDecision?.cycle_number ?? "0"}`;
-
-  // Mirror the scan timeline so the verdict only appears once factors resolve.
-  const [scanDone, setScanDone] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    if (factors.length === 0) {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
-    } else if (reduceMotion) {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(true), 0));
-    } else {
-      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
-      timers.push(
-        window.setTimeout(
-          () => !cancelled && setScanDone(true),
-          SCAN_STEP_MS * (factors.length + 0.5),
-        ),
-      );
-    }
-    return () => {
-      cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [runKey, factors.length, reduceMotion]);
-
-  const passedCount = factors.filter((factor) => factor.passed).length;
-  const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
-  const labelClass = "font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]";
-
-  const scoreStats = latestDecision ? breakoutEntryScoreStats(latestDecision) : null;
-  const entryScoreReading =
-    latestDecision?.factor_metrics?.entry_score ??
-    (scoreStats?.score != null
-      ? `${scoreStats.score.toFixed(1)}/100 · need ${scoreStats.required}+ · floor ${scoreStats.quoteFloor}`
-      : null);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bento-card border border-[#3A3F4B] bg-[#1E2026]">
-      {/* Detected asset + next query */}
-      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#2B2F36] px-5 py-4">
-        <div className="min-w-0">
-          <div className={labelClass}>Detected asset</div>
-          {symbol ? (
-            <div className="mt-2.5 flex items-center gap-3">
-              <div className="relative">
-                <TokenIcon symbol={symbol} size={44} />
-                {agentRunning ? (
-                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#B0B3B8]" />
-                ) : null}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate font-sans text-[22px] font-semibold leading-none text-white">{symbol}</div>
-                <div className="mt-1 truncate font-sans text-[11px] text-[#848E9C]">
-                  Cycle #{latestDecision?.cycle_number ?? "N/A"}
-                  {latestDecision?.priced_target_count != null
-                    ? ` · ${latestDecision.priced_target_count} priced`
-                    : ""}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-2 font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
-          )}
-        </div>
-        <div className="flex flex-col items-end text-right">
-          <div className={labelClass}>Next query</div>
-          <div
-            className={cx(
-              "mt-1 font-sans text-[26px] font-semibold tabular-nums leading-none",
-              countdownDue ? "text-[#B0B3B8]" : "text-white",
-            )}
-          >
-            {countdownLabel}
-          </div>
-        </div>
-      </div>
-
-      {/* Live analysis header */}
-      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-2 pt-4">
-        <div className="flex items-center gap-2">
-          <span
-            className={cx(
-              "inline-block h-1.5 w-1.5 rounded-full",
-              scanDone ? "bg-[#0ECB81] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#B0B3B8]",
-            )}
-          />
-          <span className={labelClass}>{scanDone ? "Signal analysis" : "Analyzing signals"}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {strategyMode ? (
-            <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#848E9C]">{strategyMode}</span>
-          ) : null}
-          {factors.length > 0 ? (
-            <span className="font-sans text-[11px] tabular-nums text-[#848E9C]">
-              <span className={passedCount > 0 ? "text-[#0ECB81]" : "text-[#848E9C]"}>{passedCount}</span>
-              <span className="text-[#4A4F5B]">/</span>
-              {factors.length}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Entry score reading */}
-      {entryScoreReading ? (
-        <div className="shrink-0 px-5 pb-1">
-          <div className="flex items-center justify-between gap-2 border-b border-[#141414] pb-2">
-            <span className={labelClass}>Entry score</span>
-            <span
-              className={cx(
-                "font-sans text-[11px] tabular-nums",
-                scoreStats?.scoreMet ? "text-[#0ECB81]" : "text-[#F6465D]",
-              )}
-            >
-              {entryScoreReading}
-            </span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Factor scan */}
-      <div className="console-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-2">
-        {factors.length > 0 ? (
-          <LiveFactorScan factors={factors} runKey={runKey} readable />
-        ) : (
-          <p className="px-2 py-3 font-sans text-[12px] leading-5 text-[#848E9C]">
-            {latestDecision?.reason?.trim()
-              ? latestDecision.reason
-              : "Signal audit will appear after the agent completes a scan cycle."}
-          </p>
-        )}
-      </div>
-
-      {/* Verdict */}
-      {latestDecision?.action ? (
-        <div className="shrink-0 border-t border-[#2B2F36] px-5 py-4">
-          {scanDone ? (
-            <div className="scan-verdict-in">
-              <div className="flex items-center gap-2.5">
-                <StatusBadge status={latestDecision.action} tone={actionTone} />
-                <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Decision</span>
-              </div>
-              {latestDecision.reason?.trim() ? (
-                <p className="mt-2.5 break-words font-sans text-[12px] leading-5 text-[#B0B3B8]">
-                  {latestDecision.reason}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.12em] text-[#B0B3B8]">
-              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#B0B3B8]" />
-              Resolving decision…
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Minimal Activity view: token + name on the left, the factor list on the
- * right — laid out horizontally, no animations. A single button flips over to
- * the historical log ("past").
- */
-function SimpleLiveScan({
-  latestDecision,
-  onViewPast,
-}: {
-  latestDecision: StatusPayload["latestDecision"];
-  onViewPast: () => void;
-}) {
-  const analysis = useMemo(
-    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
-    [latestDecision],
-  );
-  const factors: ScanFactor[] = useMemo(() => {
-    const metrics = latestDecision?.factor_metrics ?? null;
-    return (analysis?.factors ?? []).map((factor) => ({
-      ...factor,
-      reading: metrics?.[factor.key] ?? null,
-    }));
-  }, [analysis, latestDecision]);
-
-  const symbol = latestDecision?.symbol ?? null;
-  const passedCount = factors.filter((factor) => factor.passed).length;
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Top bar: past toggle */}
-      <div className="flex shrink-0 justify-end pb-8">
-        <button
-          type="button"
-          onClick={onViewPast}
-          className="group inline-flex items-center gap-2 border border-[#3A3F4B] bg-[#1E2026]/50 px-3.5 py-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
-        >
-          View past
-          <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
-            →
-          </span>
-        </button>
-      </div>
-
-      {symbol ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {/* Row 1: token + name */}
-          <div className="flex shrink-0 flex-col items-center text-center">
-            <div className="relative">
-              <div className="absolute -inset-8 rounded-full bg-[#5B9CFF]/10 blur-3xl" />
-              <TokenIcon symbol={symbol} size={140} />
-            </div>
-            <div className="mt-6 font-sans text-[32px] font-bold leading-none text-white">{symbol}</div>
-            <div className="mt-2 font-sans text-[12px] uppercase tracking-[0.14em] text-[#848E9C]">
-              Cycle #{latestDecision?.cycle_number ?? "N/A"}
-              {factors.length > 0 ? (
-                <>
-                  {" · "}
-                  <span className={passedCount > 0 ? "text-[#0ECB81]" : "text-[#848E9C]"}>{passedCount}</span>
-                  <span className="text-[#444]">/</span>
-                  {factors.length}
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Row 2: factors, fit below */}
-          <div className="mt-10 min-h-0 flex-1">
-            {factors.length > 0 ? (
-              <StaticFactorList factors={factors} />
-            ) : (
-              <p className="py-3 text-center font-sans text-[12px] leading-5 text-[#848E9C]">
-                {latestDecision?.reason?.trim()
-                  ? latestDecision.reason
-                  : "Signal audit will appear after the agent completes a scan cycle."}
-              </p>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
-function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
-  return (
-    <div className="font-mono">
-      {/* Header bar */}
-      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
-        <span className="text-[#F0B90B]">❯</span>
-        <span>factor_audit.exe</span>
-        <span className="ml-auto text-[#4A4F5B]">--live</span>
-      </div>
-
-      {/* Rows */}
-      <div className="space-y-0">
-        {factors.map((factor) => {
-          const pass = factor.passed;
-          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
-          const status = pass ? "[PASS]" : "[FAIL]";
-          const bullet = pass ? ">" : "!";
-
-          return (
-            <div
-              key={factor.key}
-              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
-            >
-              {/* Prompt */}
-              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>
-                {bullet}
-              </span>
-
-              {/* Content */}
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">
-                    {factor.label}
-                  </span>
-                  {factor.reading ? (
-                    <span className={cx("text-[11px]", accentClass)}>
-                      {factor.reading}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-[11px] leading-4 text-[#848E9C]">
-                  {explainFactor(factor.key, factor.passed)}
-                </p>
-              </div>
-
-              {/* Status */}
-              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>
-                {status}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer */}
-      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
-        <span className="text-[#F0B90B]">❯</span>
-        <span>done.</span>
-      </div>
-    </div>
-  );
-}
 
 /** Terminal-style live scan — raw, no glass cards, no rounded icons */
 function NewSimpleLiveScan({
@@ -5143,171 +4085,42 @@ function NewSimpleLiveScan({
   );
 }
 
-/** Static (non-animated) pass/fail factor list. */
-function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
+/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
+function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
   return (
-    <div className="grid grid-cols-1 gap-x-12 gap-y-5 md:grid-cols-2">
-      {factors.map((factor) => {
-        const pass = factor.passed;
-        const accent = pass ? "#0ECB81" : "#F6465D";
-        return (
-          <div key={factor.key} className="flex items-start gap-3">
-            {/* Status icon */}
-            <div className={cx("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center", pass ? "text-[#0ECB81]" : "text-[#F6465D]")}>
-              {pass ? (
-                <span className="text-[13px] font-bold leading-none">✓</span>
-              ) : (
-                <span className="text-[13px] font-bold leading-none">✗</span>
-              )}
-            </div>
-
-            {/* Content */}
-            <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex items-baseline gap-2">
-                <span className="font-sans text-[13px] font-bold uppercase tracking-[0.08em] text-white">
-                  {factor.label}
-                </span>
-                {factor.reading ? (
-                  <span className="font-sans text-[11px] text-[#848E9C]">· {factor.reading}</span>
-                ) : null}
-              </div>
-              {factor.reading ? (
-                <p className="mt-0.5 font-sans text-[12px] leading-4" style={{ color: accent }}>
-                  {factor.reading}
-                </p>
-              ) : null}
-              <p className="mt-0.5 font-sans text-[12px] leading-4 text-[#848E9C]">
-                {explainFactor(factor.key, factor.passed)}
-              </p>
-            </div>
-
-            {/* Status badge */}
-            <span className="shrink-0 font-sans text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: accent }}>
-              {pass ? "PASS" : "FAIL"}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ActivityTabSelector({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: ActivityView;
-  onChange: (view: ActivityView) => void;
-  compact?: boolean;
-}) {
-  const tabs: Array<{ id: ActivityView; label: string; compactLabel: string }> = [
-    { id: "sys", label: "Sys Logs", compactLabel: "Logs" },
-    { id: "txs", label: "Tx Activity", compactLabel: "Tx" },
-  ];
-
-  return (
-    <ViewportReveal variant="fade" delay={90} duration="fast">
-      <div className={cx("flex shrink-0 items-center", compact ? "gap-4" : "gap-2")}>
-        {tabs.map((tab, index) => {
-          const active = tab.id === value;
-
+    <div className="font-mono">
+      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>factor_audit.exe</span>
+        <span className="ml-auto text-[#4A4F5B]">--live</span>
+      </div>
+      <div className="space-y-0">
+        {factors.map((factor) => {
+          const pass = factor.passed;
+          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
+          const status = pass ? "[PASS]" : "[FAIL]";
+          const bullet = pass ? ">" : "!";
           return (
-            <ViewportReveal
-              key={tab.id}
-              variant={tab.id === "txs" ? "right" : "left"}
-              delay={120 + index * 50}
-              duration="fast"
+            <div
+              key={factor.key}
+              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
             >
-              <button
-                type="button"
-                onClick={() => onChange(tab.id)}
-                aria-pressed={active}
-                className={cx(
-                  "relative font-sans transition-colors",
-                  compact
-                    ? cx(
-                        "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
-                        active ? "font-semibold text-white" : "font-medium text-[#848E9C] active:text-[#999999]",
-                      )
-                    : cx(
-                        "border h-9 px-4 text-xs",
-                        active
-                          ? "border-[#848E9C] bg-[#4A4F5B] text-white"
-                          : "border-[#2B2F36] bg-[#1E2026] text-[#B0B3B8] hover:border-[#4A4F5B] hover:text-white",
-                      ),
-                )}
-              >
-                {compact ? tab.compactLabel : tab.label}
-                {compact && active ? (
-                  <span className="absolute -bottom-3 left-0 right-0 h-px bg-white" aria-hidden="true" />
-                ) : null}
-              </button>
-            </ViewportReveal>
+              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>{bullet}</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">{factor.label}</span>
+                  {factor.reading ? <span className={cx("text-[11px]", accentClass)}>{factor.reading}</span> : null}
+                </div>
+                <p className="text-[11px] leading-4 text-[#848E9C]">{explainFactor(factor.key, factor.passed)}</p>
+              </div>
+              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>{status}</span>
+            </div>
           );
         })}
       </div>
-    </ViewportReveal>
-  );
-}
-
-function ActivityViewTransition({
-  view,
-  className,
-  children,
-}: {
-  view: ActivityView;
-  className?: string;
-  children: (activeView: ActivityView) => ReactNode;
-}) {
-  const [displayedView, setDisplayedView] = useState(view);
-  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
-  const [direction, setDirection] = useState<"to-txs" | "to-sys">("to-sys");
-  const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (view === displayedView) {
-      return;
-    }
-
-    setDirection(view === "txs" ? "to-txs" : "to-sys");
-    setPhase("out");
-
-    const swapTimeout = window.setTimeout(() => {
-      setDisplayedView(view);
-      setPhase("in");
-
-      enterIdleTimeoutRef.current = window.setTimeout(() => {
-        setPhase("idle");
-      }, 380);
-    }, 180);
-
-    return () => {
-      window.clearTimeout(swapTimeout);
-      if (enterIdleTimeoutRef.current !== undefined) {
-        window.clearTimeout(enterIdleTimeoutRef.current);
-        enterIdleTimeoutRef.current = undefined;
-      }
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [view, displayedView]);
-
-  const motionClass =
-    phase === "out"
-      ? direction === "to-txs"
-        ? "activity-view-out-sys"
-        : "activity-view-out-txs"
-      : phase === "in"
-        ? direction === "to-txs"
-          ? "activity-view-in-txs"
-          : "activity-view-in-sys"
-        : null;
-
-  return (
-    <div className={className}>
-      <div key={displayedView} className={cx("flex min-h-0 flex-1 flex-col", motionClass)}>
-        {children(displayedView)}
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>done.</span>
       </div>
     </div>
   );
@@ -5414,82 +4227,13 @@ function SysLogsPanel({
   );
 }
 
-function TxActivityPanel({
-  rows,
-  compact = false,
-  mobileSplit = false,
-  fillHeight = false,
-  readable = false,
-  rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
-}: {
-  rows: ActivityRow[];
-  compact?: boolean;
-  mobileSplit?: boolean;
-  fillHeight?: boolean;
-  readable?: boolean;
-  rowsPerPage?: number;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
-
-  useEffect(() => {
-    setScrollRoot(scrollRef.current);
-  }, []);
-
-  return (
-    <div className={cx("flex min-h-0 flex-col", fillHeight ? "h-full overflow-hidden" : "flex-1", !compact && "gap-0")}>
-      {!compact ? (
-        <ViewportReveal variant="right" delay={60} duration="fast" className="mb-6 max-w-3xl">
-          <p className="font-sans text-[12px] leading-5 text-[#848E9C]">
-            On-chain swaps and execution events from TWAK portfolio telemetry.
-          </p>
-        </ViewportReveal>
-      ) : null}
-
-      {compact ? (
-        <RecentActivity
-          rows={rows}
-          expandable
-          compact
-          dense={mobileSplit}
-          mode="txs"
-          scrollRoot={scrollRoot}
-          scrollContainerRef={scrollRef}
-          className={cx("min-h-0 flex-1", fillHeight && "h-full")}
-          readable={readable}
-          rowsPerPage={rowsPerPage}
-        />
-      ) : (
-        <ViewportReveal variant="fade" delay={100}>
-          <div className="bento-card border border-[#3A3F4B] bg-[#1E2026]">
-            <div className="border-b border-[#2B2F36] px-5 py-5">
-              <ViewportReveal variant="right" delay={140} duration="fast">
-                <h2 className="font-sans text-xl text-[#B0B3B8]">Recent Activity</h2>
-              </ViewportReveal>
-            </div>
-            <RecentActivity
-              rows={rows}
-              expandable
-              mode="txs"
-              scrollRoot={scrollRoot}
-              scrollContainerRef={scrollRef}
-            />
-          </div>
-        </ViewportReveal>
-      )}
-    </div>
-  );
-}
 
 
 function ActivityPanel({
-  activityRows,
   logRows,
   agentLog,
   latestDecision,
-  decisions,
   agentRunning,
-  compact = false,
   desktop = false,
 }: {
   activityRows: ActivityRow[];
@@ -5677,7 +4421,6 @@ const homeActivityGridClass = "grid grid-cols-3";
 
 function HomePositionsSummary({
   positionRows,
-  totalPositionValue,
   compact = false,
   flush = false,
 }: {
@@ -6136,7 +4879,9 @@ function HomeWalletSummary({
               <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
               <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", compact ? "text-[14px]" : "text-[16px]")}>
                 <span className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/usdc-logo.png" alt="USDC" className="h-4 w-4 object-contain" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#2B2F36] bg-[#0B0E11]" />
                 </span>
                 Base USDC
@@ -6352,43 +5097,6 @@ function OverviewTopBar({
   );
 }
 
-function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
-  return (
-    <section className="shrink-0 px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-4">
-        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#B0B3B8]">Total Balance</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-sans text-[13px] text-[#B0B3B8]">USD</span>
-          </div>
-        </ViewportReveal>
-        <ViewportReveal
-          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-          delay={80}
-          duration="slow"
-          className="min-w-0 text-center"
-        >
-          <div className="font-sans text-[14px] font-medium text-[#B0B3B8]">Window Profit/Loss</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-            {view.pnlDelta ? (
-              <span
-                className={cx(
-                  "font-sans text-[14px] font-bold tabular-nums",
-                  view.pnlTone === "negative" ? "text-[#F6465D]" : "text-[#0ECB81]",
-                )}
-              >
-                ({view.pnlDelta})
-              </span>
-            ) : null}
-          </div>
-        </ViewportReveal>
-      </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#2B2F36]" />
-    </section>
-  );
-}
 
 function ChartFilterMenu({
   timeRange,
