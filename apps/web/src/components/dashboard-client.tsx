@@ -5119,9 +5119,9 @@ function NewSimpleLiveScan({
       <div className="flex shrink-0 flex-col items-center py-5 text-center">
         {/* Boot lines */}
         <div className="mb-4 w-full max-w-sm space-y-0.5 text-left text-[10px] text-[#282830]">
-          <div><span className="text-[#b07de3]/40">// </span>cascade-ai · signal-engine · v3.x</div>
-          <div><span className="text-[#b07de3]/40">// </span>target_pool=149 · mode=breakout · threshold=45</div>
-          <div><span className="text-[#b07de3]/40">// </span>loading factor weights... <span className="text-[#33c28e]/50">OK</span></div>
+          <div><span className="text-[#b07de3]/40">{"// "}</span>cascade-ai · signal-engine · v3.x</div>
+          <div><span className="text-[#b07de3]/40">{"// "}</span>target_pool=149 · mode=breakout · threshold=45</div>
+          <div><span className="text-[#b07de3]/40">{"// "}</span>loading factor weights... <span className="text-[#33c28e]/50">OK</span></div>
         </div>
 
         {/* Token icon with purple glow */}
@@ -5134,7 +5134,7 @@ function NewSimpleLiveScan({
 
         {/* Symbol name */}
         <div className="mt-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-[#b07de3]/60">// target_asset</div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-[#b07de3]/60">{"// "} target_asset</div>
           <div className="mt-1 text-[28px] font-bold leading-none tracking-tight text-white">
             {symbol}<span className="text-[#7f7f94]">/USDT</span>
           </div>
@@ -6251,7 +6251,7 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
         >
           {/* terminal-style label */}
           <div className="flex items-center gap-1">
-            <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">//</span>
+            <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
             <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
               {metric.label.replace(/ /g, "_")}
             </span>

@@ -517,7 +517,7 @@ function TerminalLiveSnapshot({ decision }: { decision: ExampleDecision }) {
       {/* reason footer */}
       {decision.reason ? (
         <div className="mt-3 border-t border-[#1e1e26] pt-2 text-[10px] text-[#7f7f94]">
-          <span className="text-[#b07de3]/60">// </span>
+          <span className="text-[#b07de3]/60">{"// "}</span>
           {decision.reason.trim()}
         </div>
       ) : null}

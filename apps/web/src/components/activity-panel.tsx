@@ -42,6 +42,7 @@ export type ScanFactor = {
   label: string;
   passed: boolean;
   reading?: string | null;
+  verb?: string;
 };
 
 // ── Utilities ──────────────────────────────────────────────
@@ -193,7 +194,7 @@ function SimpleLiveScan({
                 </span>
               </div>
               <div className="mt-0.5 pl-4 text-[10px] text-[#7f7f94]">
-                {(f as any).verb}: condition {pass ? "met" : "not met"}.
+                {f.verb}: condition {pass ? "met" : "not met"}.
               </div>
             </div>
           );
