@@ -1,4 +1,4 @@
-import { decisionFactorSummary, resolveStrategyMode } from "@/lib/factor-scoring";
+import { decisionFactorSummary } from "@/lib/factor-scoring";
 import type { Decision, StatusPayload } from "@/lib/schemas";
 
 export type AgentLogView = {

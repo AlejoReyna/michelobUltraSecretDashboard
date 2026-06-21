@@ -250,7 +250,7 @@ export default function ActivityPanel({
   latestDecision?: StatusPayload["latestDecision"];
   agentRunning?: boolean;
 }) {
-  const [_pane, setPane] = useState<"live" | "past">("live");
+  const [, setPane] = useState<"live" | "past">("live");
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0C0C0F] text-[#CCCDDA] antialiased">

@@ -216,7 +216,6 @@ export function PortfolioChart({
   timeZone: timeZoneProp,
   range,
   initialBalance,
-  experimental: _experimental = true,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
