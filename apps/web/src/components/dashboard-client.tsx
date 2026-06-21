@@ -66,6 +66,7 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
+  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
