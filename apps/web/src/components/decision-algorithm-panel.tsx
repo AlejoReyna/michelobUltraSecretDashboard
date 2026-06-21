@@ -432,16 +432,110 @@ function DecisionSnapshot({
   );
 }
 
+const TERMINAL_FACTORS: { key: EntryFactorKey; label: string; verb: string }[] = [
+  { key: "volume_breakout",       label: "Volume_Surge",     verb: "volume surge"     },
+  { key: "six_hour_high_break",   label: "Trend_Alignment",  verb: "trend alignment"  },
+  { key: "rsi_in_range",          label: "RSI_Oscillation",  verb: "rsi oscillation"  },
+  { key: "slippage_under_cap",    label: "Slippage_Gate",    verb: "slippage gate"    },
+  { key: "derivatives_risk_clear",label: "Volatility_Index", verb: "volatility index" },
+  { key: "regime_not_risk_off",   label: "Macro_Context",    verb: "macro context"    },
+];
+
+function TerminalLiveSnapshot({ decision }: { decision: ExampleDecision }) {
+  const scores = decision.factor_scores ?? {};
+  const metrics = (decision.factor_metrics ?? {}) as Record<string, string>;
+  const action = String(decision.action ?? "WAIT").toUpperCase();
+  const { passed, total } = entryFactorStats(decision);
+  const symbol = decision.symbol ?? "???";
+  const cycle = String(decision.cycle_number ?? "????").padStart(4, "0");
+
+  const actionColor =
+    action === "ENTER" ? "text-[#33c28e]" :
+    action === "BLOCKED" ? "text-[#e05b73]" :
+    "text-[#cccdde]";
+
+  return (
+    <div className="border border-[#1e1e26] bg-[#0c0c0f] p-4 font-mono text-[12px] leading-relaxed">
+      {/* history + scan header */}
+      <div className="text-[#7f7f94]">
+        <span className="text-[#b07de3]">❯</span> history
+      </div>
+      <div className="text-[#7f7f94]">
+        <span className="text-[#b07de3]">❯</span> scan{symbol}--cycle {cycle}
+      </div>
+      <div className="mt-1 text-white">
+        {symbol}/USDT
+        <span className="ml-2 text-[#7f7f94]">#{cycle}</span>
+      </div>
+      <div className="mt-0.5 flex items-center gap-2">
+        <span className="text-[#cccdde]">{passed}/{total} checks passed</span>
+        <span className="text-[#1e1e26]">|</span>
+        <span className={cx("font-bold", actionColor)}>{action}</span>
+      </div>
+
+      {/* blank line */}
+      <div className="mt-3 border-t border-[#1e1e26]" />
+
+      {/* factor audit */}
+      <div className="mt-3 text-[#7f7f94]">
+        <span className="text-[#b07de3]">❯</span> factor_audit.exe --live
+      </div>
+
+      <div className="mt-2 space-y-2">
+        {TERMINAL_FACTORS.map((f) => {
+          const pass = Boolean(scores[f.key]);
+          const metricVal = metrics[f.key] ?? (pass ? "OK" : "—");
+          return (
+            <div key={f.key} className="group">
+              {/* prefix glyph */}
+              <div className={cx("text-[11px]", pass ? "text-[#33c28e]" : "text-[#e05b73]")}>
+                {pass ? ">" : "!"}
+              </div>
+              {/* label + metric */}
+              <div className="flex items-baseline justify-between">
+                <span className="text-white">{f.label}</span>
+                <span className="text-[#7f7f94] text-[10px]">{metricVal}</span>
+              </div>
+              {/* condition line */}
+              <div className="text-[#7f7f94] text-[10px]">
+                {f.verb}: condition {pass ? "met" : "not met"}.
+              </div>
+              {/* pass/fail badge */}
+              <div className={cx("text-[11px] font-bold", pass ? "text-[#33c28e]" : "text-[#e05b73]")}>
+                [{pass ? "PASS" : "FAIL"}]
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* done */}
+      <div className="mt-3 text-[#7f7f94]">
+        <span className="text-[#b07de3]">❯</span> done.
+      </div>
+
+      {/* reason footer */}
+      {decision.reason ? (
+        <div className="mt-3 border-t border-[#1e1e26] pt-2 text-[10px] text-[#7f7f94]">
+          <span className="text-[#b07de3]/60">// </span>
+          {decision.reason.trim()}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function LiveSnapshot({ decision }: { decision: StatusPayload["latestDecision"] }) {
   if (!decision) {
     return (
-      <div className="border border-[#2A2A2A] bg-[#0A0A0A] px-5 py-6 font-mono text-[12px] text-[#8A8A8A]">
-        No live decision telemetry yet. When the agent runs, the latest cycle appears here.
+      <div className="border border-[#1e1e26] bg-[#0c0c0f] p-4 font-mono text-[12px] text-[#7f7f94]">
+        <span className="text-[#b07de3]">❯</span> awaiting telemetry...
+        <span className="typewriter-cursor" aria-hidden="true" />
       </div>
     );
   }
 
-  return <DecisionSnapshot decision={decision} />;
+  return <TerminalLiveSnapshot decision={decision} />;
 }
 
 function FactorCard({ factor, index }: { factor: FactorMeta; index: number }) {
