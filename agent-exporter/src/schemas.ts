@@ -164,6 +164,15 @@ export const x402SpendLedgerSchema = z
 
 export type X402SpendLedger = z.infer<typeof x402SpendLedgerSchema>;
 
+export const x402WalletSchema = z
+  .object({
+    address: z.string().nullable().optional(),
+    usdc_balance: z.number().nullable().optional(),
+  })
+  .passthrough();
+
+export type X402Wallet = z.infer<typeof x402WalletSchema>;
+
 export const sellHistorySchema = z
   .object({
     timestamp: z.string(),
