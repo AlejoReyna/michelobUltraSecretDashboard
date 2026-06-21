@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 // ── Types ───────────────────────────────────────────────────
 export type ActivityView = "txs" | "sys";
