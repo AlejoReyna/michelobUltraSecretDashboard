@@ -40,6 +40,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
+import S3LogsPanel from "@/components/s3-logs-panel";
 import {
   ViewportReveal,
   activityCellDelay,
@@ -5002,63 +5003,71 @@ function SimpleLiveScan({
   );
 }
 
-/** NEW: Static factor list with refined grid design (2 columns) */
-function NewStaticFactorList({ factors }: { factors: ScanFactor[] }) {
+/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
+function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-      {factors.map((factor) => {
-        const pass = factor.passed;
-        const accent = pass ? "#0ECB81" : "#F6465D";
-        return (
-          <div
-            key={factor.key}
-            className="relative flex items-start gap-3 overflow-hidden rounded-lg border border-[#2B2F36] bg-[#15181D]/80 p-4 transition-colors hover:border-[#3A3F4B]"
-          >
-            {/* Accent bar */}
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-0 left-0 w-[3px]"
-              style={{ backgroundColor: accent }}
-            />
+    <div className="font-mono">
+      {/* Header bar */}
+      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>factor_audit.exe</span>
+        <span className="ml-auto text-[#4A4F5B]">--live</span>
+      </div>
 
-            {/* Status icon */}
+      {/* Rows */}
+      <div className="space-y-0">
+        {factors.map((factor) => {
+          const pass = factor.passed;
+          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
+          const status = pass ? "[PASS]" : "[FAIL]";
+          const bullet = pass ? ">" : "!";
+
+          return (
             <div
-              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
-              style={{ color: accent, backgroundColor: `${accent}1A` }}
+              key={factor.key}
+              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
             >
-              {pass ? "✓" : "✗"}
-            </div>
-
-            {/* Content */}
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="font-sans text-[13px] font-bold uppercase tracking-[0.08em] text-white">
-                {factor.label}
+              {/* Prompt */}
+              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>
+                {bullet}
               </span>
-              {factor.reading ? (
-                <p className="mt-1 font-sans text-[12px] font-semibold leading-4" style={{ color: accent }}>
-                  {factor.reading}
-                </p>
-              ) : null}
-              <p className="mt-1 font-sans text-[12px] leading-4 text-[#848E9C]">
-                {explainFactor(factor.key, factor.passed)}
-              </p>
-            </div>
 
-            {/* Status badge */}
-            <span
-              className="shrink-0 rounded-md px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-[0.1em]"
-              style={{ color: accent, backgroundColor: `${accent}1A` }}
-            >
-              {pass ? "PASS" : "FAIL"}
-            </span>
-          </div>
-        );
-      })}
+              {/* Content */}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">
+                    {factor.label}
+                  </span>
+                  {factor.reading ? (
+                    <span className={cx("text-[11px]", accentClass)}>
+                      {factor.reading}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-[11px] leading-4 text-[#848E9C]">
+                  {explainFactor(factor.key, factor.passed)}
+                </p>
+              </div>
+
+              {/* Status */}
+              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>
+                {status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>done.</span>
+      </div>
     </div>
   );
 }
 
-/** NEW: Simple live scan with refined design */
+/** Terminal-style live scan — raw, no glass cards, no rounded icons */
 function NewSimpleLiveScan({
   latestDecision,
   onViewPast,
@@ -5081,41 +5090,54 @@ function NewSimpleLiveScan({
   }, [latestDecision]);
 
   const passedCount = factors.filter(f => f.passed).length;
+  const allPassed = passedCount === factors.length;
 
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex justify-end pb-4 sm:pb-12">
+    <div className="flex flex-1 flex-col font-mono">
+      {/* Top bar */}
+      <div className="flex justify-end pb-4 sm:pb-8">
         <button
           onClick={onViewPast}
-          className="group flex items-center gap-2 border border-[#2B2F36] bg-[#1E2026]/50 px-4 py-2 font-sans text-[11px] font-bold uppercase tracking-[0.2em] text-[#B0B3B8] transition-all hover:border-[#4A4F5B] hover:text-white"
+          className="group flex items-center gap-2 border border-[#2B2F36] bg-[#0B0E11] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[#B0B3B8] transition-all hover:border-[#F0B90B] hover:text-[#F0B90B]"
         >
-          View Past History <ArrowRight size={14} className="text-[#848E9C] group-hover:text-white" />
+          <span className="text-[#F0B90B]">❯</span> history
+          <ArrowRight size={12} className="text-[#848E9C] group-hover:text-[#F0B90B]" />
         </button>
       </div>
 
-      <div className="flex flex-col items-center text-center">
-        <div className="relative">
-          <div className="absolute -inset-4 rounded-full bg-white/5 blur-2xl" />
-          <TokenIcon symbol={symbol} size={88} />
+      {/* Terminal header block */}
+      <div className="border-y border-[#2B2F36] bg-[#0B0E11]/60 px-4 py-4 sm:px-6 sm:py-5">
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+          <span className="text-[#F0B90B]">❯</span>
+          <span>scan</span>
+          <span className="text-white">{symbol}</span>
+          <span className="text-[#4A4F5B]">--cycle {cycle.toString().padStart(4, '0')}</span>
         </div>
 
-        <h2 className="mt-4 font-sans text-[28px] font-bold tracking-tight text-white sm:mt-8 sm:text-[32px]">
-          {symbol}/USDT
-        </h2>
+        <div className="mt-3 flex items-baseline gap-3">
+          <span className={cx("text-[24px] font-bold tracking-tight sm:text-[28px]", allPassed ? "text-[#0ECB81]" : "text-[#F0B90B]")}>
+            {symbol}/USDT
+          </span>
+          <span className="text-[12px] text-[#4A4F5B]">
+            #{cycle.toString().padStart(4, '0')}
+          </span>
+        </div>
 
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-sans text-[11px] uppercase tracking-[0.2em] text-[#848E9C]">
-          <span>Cycle #{cycle.toString().padStart(4, '0')}</span>
-          <span className="h-1 w-1 rounded-full bg-[#3A3F4B]" />
-          <span className="flex items-center gap-1">
-            <span className="text-[#0ECB81]">{passedCount}</span>
-            <span className="text-[#4A4F5B]">/</span>
-            {factors.length} Checks Passed
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-[#848E9C]">
+          <span className={cx("font-bold", allPassed ? "text-[#0ECB81]" : "text-[#F0B90B]")}>
+            {passedCount}/{factors.length}
+          </span>
+          <span>checks passed</span>
+          <span className="ml-2 text-[#4A4F5B]">|</span>
+          <span className={cx("font-bold", allPassed ? "text-[#0ECB81]" : "text-[#F6465D]")}>
+            {allPassed ? "READY" : "BLOCKED"}
           </span>
         </div>
       </div>
 
-      <div className="mt-6 sm:mt-12">
-        <NewStaticFactorList factors={factors} />
+      {/* Factor output */}
+      <div className="mt-4 px-2 sm:mt-6 sm:px-4">
+        <TerminalFactorList factors={factors} />
       </div>
     </div>
   );
@@ -5637,6 +5659,8 @@ function DesktopDashboard({
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} desktop />
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} desktop />
+            ) : section === "logs" ? (
+              <S3LogsPanel desktop />
             ) : (
               <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             )
@@ -6758,6 +6782,8 @@ function MobileDashboard({
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} compact />
+            ) : section === "logs" ? (
+              <S3LogsPanel compact />
             ) : (
               <MobileOverviewSection
                 view={view}

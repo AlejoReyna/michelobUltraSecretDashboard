@@ -1,6 +1,30 @@
+<div align="center">
+
 # NoNamedYet Dashboard
 
-Read-only operator console for the NoNamedYet_Bot BSC trading agent. This repository is separate from the trading bot repo and is designed to be deployed as:
+### The read-only operator console for **NoNamedYet_Bot** — a self-custody trading agent built for the [BNB Hack: AI Trading Agent Edition](https://dorahacks.io/hackathon/2162/detail).
+
+`Next.js + Vercel` · `read-only by design` · `zero key access` · `live TWAK telemetry`
+
+</div>
+
+---
+
+> **Part of the [NoNamedYet_Bot](https://github.com/AlejoReyna/no-named-yet-bot) submission** (Track 1 · competing for **Best Use of Trust Wallet Agent Kit**). The agent does the trading and self-custody signing; this dashboard is how you watch it work — safely.
+
+## Why this matters for judging
+
+A self-custody agent is only as trustworthy as its weakest surface. This dashboard is built so that **observing the agent can never compromise it**:
+
+- **It never holds keys and never signs.** No `twak swap`, no mutation endpoints — the exporter only runs an allowlist of read-only TWAK commands (see [Security Notes](#security-notes)).
+- **Keys stay on the agent host.** The browser polls a server route, which calls a token-protected EC2 exporter. Provider/API keys and the bearer token never reach the client.
+- **Telemetry is redacted at the source.** Recursive redaction strips anything resembling a password, secret, private key, token, or `.env` value before it leaves the box.
+
+That separation is the point: the trading loop's self-custody integrity is preserved end to end, and the operator still gets live wallet, decision, and guardrail visibility.
+
+## Architecture
+
+This repository deploys as two pieces:
 
 - `apps/web`: Next.js App Router dashboard for Vercel.
 - `agent-exporter`: small read-only telemetry exporter for the EC2 instance that runs the agent.
@@ -259,3 +283,20 @@ The dashboard serves mock telemetry only when `USE_MOCK_AGENT_DATA=true`. If `AG
 
 - `agent-exporter/fixtures`
 - `apps/web/fixtures`
+
+---
+
+## References & links
+
+| | |
+| --- | --- |
+| **Main agent repo** | [NoNamedYet_Bot](https://github.com/AlejoReyna/no-named-yet-bot) (the submission) |
+| **Hackathon** | [BNB Hack: AI Trading Agent Edition](https://dorahacks.io/hackathon/2162/detail) |
+| **Trust Wallet Agent Kit** | [portal.trustwallet.com](https://portal.trustwallet.com) |
+| **CoinMarketCap AI Agent Hub** | [coinmarketcap.com/api/agent](https://coinmarketcap.com/api/agent) |
+
+<div align="center">
+
+*Read-only by design — so watching the agent never costs you your keys.*
+
+</div>

@@ -15,6 +15,8 @@ import type { StatusPayload } from "@/lib/schemas";
 
 type FadePhase = "visible" | "out" | "hidden";
 
+const FADE_OUT_MS = 300;
+
 function formatAssistantContent(content: string) {
   return content.startsWith(">") ? content : `> ${content}`;
 }
@@ -104,6 +106,7 @@ function IntelSectionHeader({
 }
 
 
+function ChatBubble({
   message,
   animate = false,
   streaming = false,
