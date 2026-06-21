@@ -11,29 +11,24 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import Image from "next/image";
 import {
   Activity,
   BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Copy,
   CreditCard,
-  DollarSign,
   ExternalLink,
   Filter,
   Github,
   Globe,
   Home,
   Layers,
-  ShieldCheck,
   Terminal,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
 import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
@@ -91,7 +86,6 @@ import {
   statusSchema,
   type Decision,
   type MarketDataRow,
-  type SellHistoryRow,
   type StatusPayload,
   type X402Call,
 } from "@/lib/schemas";
@@ -1119,7 +1113,6 @@ function activityTokenFromMovement(
 function decisionAnalysisNarrative(decision: StatusPayload["decisions"][number]): string {
   const symbol = decision.symbol?.trim() || "candidate";
   const action = String(decision.action ?? "WAIT").toUpperCase();
-  const strategyMode = resolveStrategyMode(decision);
   const priced =
     decision.priced_target_count != null
       ? ` across ${decision.priced_target_count} priced targets`
@@ -1567,6 +1560,7 @@ function DesktopNavRail({
       aria-label="Dashboard navigation"
     >
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ascii-raccoon.png"
           alt="Raccoon"
@@ -1904,6 +1898,7 @@ function WalletPanel({
                 flat ? "text-[28px]" : "text-[32px]",
               )}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
               Live Holdings
             </h1>
@@ -1978,7 +1973,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
@@ -2004,7 +2001,9 @@ function WalletPanel({
                 <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/usdc-logo.png" alt="USDC" className="h-5 w-5 object-contain" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                   </span>
                   Base USDC
@@ -3409,7 +3408,7 @@ function positionToneClass(tone: PositionTone) {
   }[tone];
 }
 
-function positionBadgeClass(tone: PositionTone) {
+function _positionBadgeClass(tone: PositionTone) {
   return {
     green: "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]",
     yellow: "border-[#CCCDDA]/40 bg-[#0C0C0F] text-[#CCCDDA]",
@@ -3419,7 +3418,7 @@ function positionBadgeClass(tone: PositionTone) {
   }[tone];
 }
 
-function PositionSummaryBlock({
+function _PositionSummaryBlock({
   label,
   value,
   detail,
@@ -3480,7 +3479,7 @@ function PositionMetricCell({
   );
 }
 
-function PositionRiskCorridor({ row }: { row: PositionRow }) {
+function _PositionRiskCorridor({ row }: { row: PositionRow }) {
   if (row.source === "wallet") {
     return (
       <div className="border-t border-[#161619] px-5 py-4">
@@ -3773,7 +3772,6 @@ function CopyJsonButton({ json }: { json: object }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // eslint-disable-next-line no-console
       console.warn("Failed to copy positions snapshot to clipboard.");
     }
   }, [json]);
@@ -3879,7 +3877,7 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
   );
 }
 
-function PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decision | null }) {
+function _PositionTimeInfo({ row, decision }: { row: PositionRow; decision: Decision | null }) {
   const elapsed = positionElapsedTime(row.openedAt);
   const remaining = positionRemainingTime(row.openedAt, decision?.hold_time_seconds);
 
@@ -4080,7 +4078,7 @@ function DesktopPositionCard({
   return <div>{body}</div>;
 }
 
-function PositionsInsightRail({
+function _PositionsInsightRail({
   rows,
   nearestStop,
   nearestTarget,
@@ -4206,7 +4204,7 @@ function DesktopPositionsBoard({
     (row) => positivePrice(row.entryPrice) && positivePrice(row.trailingStopPrice) && positivePrice(row.takeProfitPrice),
   ).length;
 
-  const summaryBlocks: Array<{
+  const _summaryBlocks: Array<{
     label: string;
     value: string;
     detail?: string;
@@ -4760,7 +4758,7 @@ function LiveFactorScan({
  * next-query countdown, then every signal factor is analysed live, and a verdict
  * resolves once the scan completes.
  */
-function LiveDecisionScan({
+function _LiveDecisionScan({
   latestDecision,
   decisions,
   agentRunning,
@@ -5679,7 +5677,7 @@ const homeActivityGridClass = "grid grid-cols-3";
 
 function HomePositionsSummary({
   positionRows,
-  totalPositionValue,
+  totalPositionValue: _totalPositionValue,
   compact = false,
   flush = false,
 }: {
@@ -6146,7 +6144,9 @@ function HomeWalletSummary({
               <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
               <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", compact ? "text-[14px]" : "text-[16px]")}>
                 <span className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/usdc-logo.png" alt="USDC" className="h-4 w-4 object-contain" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/base_logo.png" alt="Base" className="absolute -bottom-0.5 -right-0.5 h-2 w-2 object-contain rounded-full border border-[#161619] bg-[#0C0C0F]" />
                 </span>
                 Base USDC
@@ -6362,7 +6362,7 @@ function OverviewTopBar({
   );
 }
 
-function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
+function _MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
     <section className="shrink-0 px-4 py-2">
       <div className="grid grid-cols-2 gap-x-4">

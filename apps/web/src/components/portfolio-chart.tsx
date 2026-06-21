@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChartTimeZone } from "@/components/chart-timezone-context";
 
 export type PortfolioChartPoint = {
@@ -216,7 +216,7 @@ export function PortfolioChart({
   timeZone: timeZoneProp,
   range,
   initialBalance,
-  experimental = true,
+  experimental: _experimental = true,
 }: {
   data: PortfolioChartPoint[];
   variant?: "desktop" | "mobile";
