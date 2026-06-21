@@ -12,6 +12,7 @@ import {
   sellHistorySchema,
   x402CallSchema,
   x402SpendLedgerSchema,
+  x402WalletSchema,
   type Decision,
   type Execution,
   type Guardrails,
@@ -20,6 +21,7 @@ import {
   type SellHistoryRow,
   type X402Call,
   type X402SpendLedger,
+  type X402Wallet,
 } from "./schemas.js";
 import { getTwakTelemetrySnapshot, requestTwakRefresh } from "./twak.js";
 import { buildWalletTelemetry } from "./wallet.js";
@@ -54,6 +56,14 @@ export async function getX402SpendLedger(sourcePath: string) {
   return readJsonFile<X402SpendLedger>(
     sourceFile(sourcePath, FILES.x402SpendLedger),
     x402SpendLedgerSchema,
+    {},
+  );
+}
+
+export async function getX402Wallet(sourcePath: string) {
+  return readJsonFile<X402Wallet>(
+    sourceFile(sourcePath, FILES.x402Wallet),
+    x402WalletSchema,
     {},
   );
 }
@@ -163,13 +173,14 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, x402Calls, x402SpendLedger, sellHistory, marketData, positions, guardrails, files] =
+  const [health, decisions, executions, x402Calls, x402SpendLedger, x402Wallet, sellHistory, marketData, positions, guardrails, files] =
     await Promise.all([
       getHealth(sourcePath),
       getDecisions(sourcePath, limit),
       getExecutions(sourcePath, limit),
       getX402Calls(sourcePath, limit),
       getX402SpendLedger(sourcePath),
+      getX402Wallet(sourcePath),
       getSellHistory(sourcePath, limit),
       getMarketData(sourcePath, limit),
       getPositions(sourcePath),
@@ -205,6 +216,8 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
           totalSpendUsdc: x402SpendLedger.data.total_spend_usdc ?? null,
           dailyBudgetUsdc: 2.0,
           totalBudgetUsdc: 15.0,
+          walletAddress: x402Wallet.data.address ?? null,
+          walletUsdcBalance: x402Wallet.data.usdc_balance ?? null,
         }
       : {
           instrumented: true,
@@ -216,6 +229,8 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
           totalSpendUsdc: x402SpendLedger.data.total_spend_usdc ?? null,
           dailyBudgetUsdc: 2.0,
           totalBudgetUsdc: 15.0,
+          walletAddress: x402Wallet.data.address ?? null,
+          walletUsdcBalance: x402Wallet.data.usdc_balance ?? null,
         },
     files,
   });

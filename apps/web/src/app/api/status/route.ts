@@ -81,6 +81,7 @@ export async function GET() {
     }
 
     const payload = parsed.data;
+
     const liveDecisions = payload.decisions.filter((decision) => decision.mode?.toLowerCase() === "live");
     const firstLive = liveDecisions[0] ?? null;
     const lastLive = liveDecisions.at(-1) ?? null;
