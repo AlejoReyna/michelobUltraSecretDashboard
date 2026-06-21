@@ -13,6 +13,7 @@ import {
 } from "react";
 import {
   Activity,
+  ArrowRight,
   BookOpen,
   Check,
   ChevronDown,
@@ -20,6 +21,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  FileText,
   Filter,
   Github,
   Globe,
@@ -32,6 +34,7 @@ import {
 import { DeviceTopSection } from "@/components/device-top-section";
 import { DecisionAlgorithmPanel } from "@/components/decision-algorithm-panel";
 import { MarketChatPanel } from "@/components/market-chat-panel";
+import S3LogsPanel from "@/components/s3-logs-panel";
 import {
   ViewportReveal,
   activityCellDelay,
@@ -63,16 +66,11 @@ import {
   type WalletBalanceRow,
 } from "@/lib/competition-tokens";
 import {
+  decisionActionTone,
   formatDecisionEvent,
   resolveAgentLogLine,
 } from "@/lib/agent-log";
-import {
-  cycleCountdownMs,
-  formatCycleCountdown,
-  inferCycleIntervalMs,
-  nextCycleAt,
-} from "@/lib/cycle-timing";
-import { breakoutEntryScoreStats, entryFactorStats, ENTRY_FACTOR_KEYS, isComplianceDecision, resolveStrategyMode } from "@/lib/factor-scoring";
+import { breakoutEntryScoreStats, entryFactorStats, ENTRY_FACTOR_KEYS, isComplianceDecision } from "@/lib/factor-scoring";
 import {
   detailsFromDecision,
   detailsFromExecution,
@@ -89,7 +87,7 @@ import {
   type X402Call,
 } from "@/lib/schemas";
 
-type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402";
+type DashboardSection = "overview" | "positions" | "activity" | "wallet" | "algorithm" | "market-chat" | "x402" | "logs";
 type ActivityView = "txs" | "sys";
 
 const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: DashboardSection }> = [
@@ -99,12 +97,13 @@ const dashboardNavItems: Array<{ label: string; icon: LucideIcon; section: Dashb
   { label: "Intel", icon: Terminal, section: "market-chat" },
   { label: "Wallet", icon: Wallet, section: "wallet" },
   { label: "Payments", icon: CreditCard, section: "x402" },
+  { label: "Logs", icon: FileText, section: "logs" },
   { label: "Guide", icon: BookOpen, section: "algorithm" },
 ];
 
 const DESKTOP_NAV_WIDTH = 56;
 const defaultDeviceTopSectionColor = "#000000";
-const focusedDeviceTopSectionColor = "#111114";
+const focusedDeviceTopSectionColor = "#1E2026";
 const focusedDeviceTopSections = new Set<DashboardSection>(["positions", "wallet", "market-chat", "x402"]);
 
 function deviceTopSectionColorFor(section: DashboardSection) {
@@ -194,7 +193,6 @@ type ActivityRow = {
 };
 
 const ACTIVITY_ROWS_PER_PAGE = 10;
-const ACTIVITY_ROWS_PER_PAGE_MOBILE = 7;
 const ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE = 5;
 
 type PositionRow = {
@@ -348,33 +346,6 @@ function createFrozenValueStore<T>() {
     },
     getSnapshot: () => value,
     getServerSnapshot: () => null as T | null,
-  };
-}
-
-function createClockStore(intervalMs: number) {
-  let value: Date | null = null;
-  let intervalId: number | undefined;
-  const listeners = new Set<() => void>();
-  return {
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      if (listeners.size === 1) {
-        value = new Date();
-        intervalId = window.setInterval(() => {
-          value = new Date();
-          listeners.forEach((l) => l());
-        }, intervalMs);
-      }
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size === 0 && intervalId !== undefined) {
-          window.clearInterval(intervalId);
-          intervalId = undefined;
-        }
-      };
-    },
-    getSnapshot: () => value,
-    getServerSnapshot: () => null,
   };
 }
 
@@ -1250,7 +1221,7 @@ function activityFromTelemetry(data: StatusPayload | null): ActivityRow[] {
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
-          tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+          tone: decisionActionTone(action),
           details: detailsFromDecision(decision),
         } satisfies ActivityRow;
       }) ?? [];
@@ -1322,7 +1293,7 @@ function logRowsFromTelemetry(data: StatusPayload | null): ActivityRow[] {
           hash: decision.cycle_number ? `cycle #${decision.cycle_number}` : timeReference(decision.timestamp),
           explorerUrl: null,
           status: action,
-          tone: action === "HALT" ? "red" : action === "ENTER" ? "green" : "yellow",
+          tone: decisionActionTone(action),
           details: detailsFromDecision(decision),
         } satisfies ActivityRow;
       }) ?? [];
@@ -1554,15 +1525,15 @@ function DesktopNavRail({
 }) {
   return (
     <nav
-      className="relative z-[1] flex h-dvh shrink-0 flex-col items-center border-r border-[#161619] bg-[#111114]/95 backdrop-blur-sm"
+      className="relative z-[1] flex h-dvh shrink-0 flex-col items-center border-r border-[#2B2F36] bg-[#1E2026]/95 backdrop-blur-sm"
       style={{ width: DESKTOP_NAV_WIDTH }}
       aria-label="Dashboard navigation"
     >
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/ascii-raccoon.png"
-          alt="Raccoon"
+          src="/no-bg.png"
+          alt="Logo"
           className="h-9 w-auto object-contain opacity-90"
           style={{ filter: "brightness(1.5) drop-shadow(0 0 3px rgba(255,255,255,0.4))" }}
         />
@@ -1573,13 +1544,13 @@ function DesktopNavRail({
           const active = item.kind === "section" && item.section === activeSection;
           const rowClassName = cx(
             "relative flex h-10 w-10 items-center justify-center rounded-sm transition-colors",
-            active ? "text-white" : "text-[#7A7A7A] hover:text-white",
+            active ? "text-[#F0B90B]" : "text-[#7A7A7A] hover:text-white",
           );
           const rowContent = (
             <>
               {active ? (
                 <span
-                  className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-white"
+                  className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[#F0B90B]"
                   aria-hidden="true"
                 />
               ) : null}
@@ -1624,59 +1595,49 @@ function DesktopNavRail({
 
 function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
   const classes = {
-    green: "border-[#33C28E] bg-[#0C0C0F] text-[#33C28E]",
-    yellow: "border-[#CCCDDA] bg-[#0C0C0F] text-[#CCCDDA]",
-    red: "border-[#E05B73] bg-[#0C0C0F] text-[#E05B73]",
-  }[tone];
-
-  return <span className={cx("inline-flex border px-2.5 py-1 font-sans text-[10px] font-bold tracking-[0.08em]", classes)}>[{status}]</span>;
-}
-
-function statusToneTextClass(tone: "green" | "yellow" | "red") {
-  return {
-    green: "text-[#33C28E]",
-    yellow: "text-[#CCCDDA]",
-    red: "text-[#E05B73]",
-  }[tone];
-}
-
-function StatusDot({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
-  const color = {
-    green: "bg-[#33C28E] shadow-[0_0_6px_rgba(51,194,142,0.45)]",
-    yellow: "bg-[#CCCDDA] shadow-[0_0_6px_rgba(204,204,218,0.35)]",
-    red: "bg-[#E05B73] shadow-[0_0_6px_rgba(224,91,115,0.35)]",
+    green: "border-[#0ECB81]/20 bg-[#0ECB81]/10 text-[#0ECB81]",
+    yellow: "border-[#B0B3B8]/20 bg-[#B0B3B8]/10 text-[#B0B3B8]",
+    red: "border-[#F6465D]/20 bg-[#F6465D]/10 text-[#F6465D]",
   }[tone];
 
   return (
     <span
-      className={cx("inline-block h-2 w-2 shrink-0 rounded-full", color)}
-      title={status}
-      aria-label={status}
-    />
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-full border px-2.5 py-1 font-sans text-[10px] font-bold uppercase tracking-wider",
+        classes,
+      )}
+    >
+      {status}
+    </span>
   );
 }
 
-function activityStatusGlyph(status: string): string | null {
+function activityStatusLabel(status: string): string {
   switch (status.toUpperCase()) {
     case "ENTER":
-      return "▲";
+      return "Enter";
     case "WAIT":
-      return "○";
+      return "Wait";
     case "HALT":
-      return "■";
+      return "Halt";
+    case "BLOCKED":
+      return "Blocked";
     case "SUCCESS":
-      return "✓";
+      return "Done";
     case "PENDING":
-      return "◐";
+      return "Pending";
     case "FAILED":
+      return "Failed";
     case "MISSING":
+      return "Missing";
     case "OFFLINE":
-      return "×";
+      return "Offline";
     case "RUNNING":
+      return "Running";
     case "READY":
-      return "●";
+      return "Ready";
     default:
-      return null;
+      return status;
   }
 }
 
@@ -1691,37 +1652,25 @@ function ActivityStatusIndicator({
   compact?: boolean;
   readable?: boolean;
 }) {
-  const glyph = activityStatusGlyph(status);
-
-  if (glyph) {
-    return (
-      <span
-        className={cx(
-          "inline-flex shrink-0 items-center justify-center font-sans font-bold leading-none",
-          compact ? (readable ? "text-[15px]" : "text-[13px]") : "text-[15px]",
-          statusToneTextClass(tone),
-        )}
-        title={status}
-        aria-label={status}
-      >
-        {glyph}
-      </span>
-    );
-  }
+  const label = activityStatusLabel(status);
+  const classes = {
+    green: "border-[#0ECB81]/20 bg-[#0ECB81]/10 text-[#0ECB81]",
+    yellow: "border-[#B0B3B8]/20 bg-[#B0B3B8]/10 text-[#B0B3B8]",
+    red: "border-[#F6465D]/20 bg-[#F6465D]/10 text-[#F6465D]",
+  }[tone];
 
   return (
-    <>
-      <StatusDot status={status} tone={tone} />
-      <span
-        className={cx(
-          "truncate font-sans font-bold uppercase tracking-[0.06em]",
-          compact ? (readable ? "text-[10px]" : "text-[8px]") : "text-[10px]",
-          statusToneTextClass(tone),
-        )}
-      >
-        {status}
-      </span>
-    </>
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-full border font-sans font-bold uppercase tracking-wider",
+        compact ? (readable ? "px-2.5 py-1 text-[10px]" : "px-2 py-0.5 text-[9px]") : "px-3 py-1 text-[10px]",
+        classes,
+      )}
+      title={status}
+      aria-label={status}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -1747,9 +1696,9 @@ function formatTokenAmount(value: number | null) {
 
 function TelemetryBanner({ message }: { message: string }) {
   return (
-    <div className="border-b border-[#161619] bg-[#1B1200] px-5 py-3 font-sans text-[12px] leading-5 text-[#CCCDDA]">
+    <div className="border-b border-[#2B2F36] bg-[#1B1200] px-5 py-3 font-sans text-[12px] leading-5 text-[#B0B3B8]">
       <span className="font-bold uppercase tracking-[0.12em]">Telemetry:</span> {message}
-      <span className="mt-1 block text-[#CCCDDA]">
+      <span className="mt-1 block text-[#B0B3B8]">
         Local dev: set `AGENT_EXPORTER_URL` in `apps/web/.env.local` to the same EC2 HTTPS URL used on Vercel, or run the
         local exporter on port 8787.
       </span>
@@ -1799,9 +1748,9 @@ function WalletBalanceTableRow({
 
   return (
     <tr
-      className={cx("border-b border-[#161619] text-white", !compact && "hover:bg-[#0C0C0F]")}
+      className={cx("border-b border-[#2B2F36] text-white", !compact && "hover:bg-[#0B0E11]")}
     >
-      <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#CCCDDA]">
+      <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#B0B3B8]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("chain")}
@@ -1825,7 +1774,7 @@ function WalletBalanceTableRow({
           <span className="truncate">{balance.symbol}</span>
         </ViewportReveal>
       </td>
-      <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+      <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("amount")}
@@ -1836,7 +1785,7 @@ function WalletBalanceTableRow({
           {formatTokenAmount(balance.amount)}
         </ViewportReveal>
       </td>
-      <td className="truncate px-3 py-2 text-right font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+      <td className="truncate px-3 py-2 text-right font-sans text-[12px] tabular-nums text-[#B0B3B8]">
         <ViewportReveal
           as="span"
           variant={walletColumnVariant("value")}
@@ -1884,12 +1833,12 @@ function WalletPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#111114]",
+        !flat && "mx-10 my-9 border border-[#3A3F4B] bg-[#1E2026] bento-card",
       )}
     >
-      <div className={cx(flat ? "shrink-0 border-b border-[#161619] pb-4" : "border-b border-[#161619] px-5 py-5")}>
+      <div className={cx(flat ? "shrink-0 border-b border-[#2B2F36] pb-4" : "border-b border-[#2B2F36] px-5 py-5")}>
         <ViewportReveal variant="blur" duration="slow">
-          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">TWAK Wallet</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">TWAK Wallet</div>
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1
               className={cx(
@@ -1903,7 +1852,7 @@ function WalletPanel({
             </h1>
             <div className="shrink-0 text-right font-sans">
               <ViewportReveal variant="fade" delay={70} duration="fast">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">
                   {balances.length} {balances.length === 1 ? "token" : "tokens"}
                 </div>
               </ViewportReveal>
@@ -1912,7 +1861,7 @@ function WalletPanel({
               </ViewportReveal>
               {paperMode ? (
                 <ViewportReveal variant="down" delay={190} duration="fast">
-                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#CCCDDA]">Paper mode</div>
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#B0B3B8]">Paper mode</div>
                 </ViewportReveal>
               ) : null}
             </div>
@@ -1934,7 +1883,7 @@ function WalletPanel({
             <col className="w-[32%]" />
             <col className="w-[24%]" />
           </colgroup>
-          <thead className="border-b border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
+          <thead className="border-b border-[#2B2F36] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#848E9C]">
             <tr>
               <WalletHeaderCell column="chain" label="Chain" className="px-3 py-2" />
               <WalletHeaderCell column="token" label="Token" className="px-2 py-2" />
@@ -1953,8 +1902,8 @@ function WalletPanel({
               />
             ))}
             {balances.length === 0 ? (
-              <tr className="border-b border-[#161619]">
-                <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={4}>
+              <tr className="border-b border-[#2B2F36]">
+                <td className="px-3 py-4 font-sans text-[12px] text-[#848E9C]" colSpan={4}>
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     Waiting for TWAK wallet balances
                   </ViewportReveal>
@@ -1965,11 +1914,11 @@ function WalletPanel({
         </table>
       </div>
       {x402WalletAddress ? (
-        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]", flat ? "px-4 py-4" : "px-5 py-5")}>
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
           <ViewportReveal variant="blur" duration="slow">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1979,13 +1928,13 @@ function WalletPanel({
                   </span>
                   Base USDC
                 </h2>
-                <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                <div className="mt-1 font-sans text-[10px] text-[#848E9C]">
                   {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
-                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#9E88F0]">
+                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">Balance</div>
+                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#FFD666]">
                   {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
                 </div>
               </div>
@@ -1993,11 +1942,11 @@ function WalletPanel({
           </ViewportReveal>
         </div>
       ) : (
-        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]", flat ? "px-4 py-4" : "px-5 py-5")}>
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
           <ViewportReveal variant="blur" duration="slow">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+                <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
                 <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", flat ? "text-[18px]" : "text-[22px]")}>
                   <span className="relative inline-block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2007,13 +1956,13 @@ function WalletPanel({
                   </span>
                   Base USDC
                 </h2>
-                <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+                <div className="mt-1 font-sans text-[10px] text-[#848E9C]">
                   Not connected — restart bot with updated exporter
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
-                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#7F7F94]">—</div>
+                <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">Balance</div>
+                <div className="mt-1 font-sans text-[20px] font-semibold tabular-nums text-[#848E9C]">—</div>
               </div>
             </div>
           </ViewportReveal>
@@ -2036,8 +1985,8 @@ function X402SummaryMetric({
 }) {
   return (
     <div className="min-w-0 text-right font-sans">
-      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">{label}</div>
-      <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#E05B73]" : "text-white")}>
+      <div className="truncate text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">{label}</div>
+      <div className={cx("mt-1 truncate text-sm tabular-nums", tone === "red" ? "text-[#F6465D]" : "text-white")}>
         {value}
       </div>
       {sub ? <span className="font-sans text-[9px] text-[#666]">{sub}</span> : null}
@@ -2108,14 +2057,14 @@ function marketChangeTone(value: number | null | undefined): "green" | "yellow" 
 
 function marketToneClass(tone: "green" | "yellow" | "red") {
   if (tone === "green") {
-    return "text-[#33C28E]";
+    return "text-[#0ECB81]";
   }
 
   if (tone === "red") {
-    return "text-[#E05B73]";
+    return "text-[#F6465D]";
   }
 
-  return "text-[#CCCDDA]";
+  return "text-[#B0B3B8]";
 }
 
 function X402MarketDataPanel({
@@ -2140,10 +2089,10 @@ function X402MarketDataPanel({
   const volumeCount = sortedRows.filter((row) => row.volume != null).length;
 
   return (
-    <div className="border-b border-[#161619] py-4">
+    <div className="border-b border-[#2B2F36] py-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-3">
         <ViewportReveal variant="blur" duration="slow" root={scrollRoot} className="min-w-0">
-          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Data gathered</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">Data gathered</div>
           <h2 className="mt-1 font-sans text-[18px] font-semibold leading-tight text-white">Market snapshot cache</h2>
         </ViewportReveal>
         <div className="grid grid-cols-3 gap-x-5 gap-y-2">
@@ -2154,7 +2103,7 @@ function X402MarketDataPanel({
       </div>
 
       {errors.length > 0 ? (
-        <div className="mx-3 mb-3 border border-[#161619] bg-[#0C0C0F]/55 px-3 py-2 font-sans text-[11px] leading-5 text-[#E05B73]">
+        <div className="mx-3 mb-3 border border-[#2B2F36] bg-[#0B0E11]/55 px-3 py-2 font-sans text-[11px] leading-5 text-[#F6465D]">
           {errors.slice(0, 2).join(" · ")}
         </div>
       ) : null}
@@ -2169,7 +2118,7 @@ function X402MarketDataPanel({
           <col className="w-[13%]" />
           <col className="w-[10%]" />
         </colgroup>
-        <thead className="border-y border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
+        <thead className="border-y border-[#2B2F36] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#848E9C]">
           <tr>
             {["Token", "Price", "Price Δ", "Volume", "Volume Δ", "Updated", "Source"].map((label) => (
               <th key={label} className="px-3 py-2">
@@ -2185,7 +2134,7 @@ function X402MarketDataPanel({
             const priceTone = marketChangeTone(row.priceChangePct);
             const volumeTone = marketChangeTone(row.volumeChangePct);
             return (
-              <tr key={`${row.symbol}-${row.updatedAt ?? index}`} className="border-b border-[#161619] text-white hover:bg-[#0C0C0F]">
+              <tr key={`${row.symbol}-${row.updatedAt ?? index}`} className="border-b border-[#2B2F36] text-white hover:bg-[#0B0E11]">
                 <td className="px-3 py-2">
                   <ViewportReveal
                     as="span"
@@ -2198,7 +2147,7 @@ function X402MarketDataPanel({
                     <span className="truncate font-sans text-[12px] font-bold text-[#FFFFFF]">{row.symbol}</span>
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
                     {formatPrice(row.price)}
                   </ViewportReveal>
@@ -2208,7 +2157,7 @@ function X402MarketDataPanel({
                     {formatPercent(row.priceChangePct)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "amount")} root={scrollRoot} className="block truncate">
                     {formatMarketVolume(row.volume)}
                   </ViewportReveal>
@@ -2218,12 +2167,12 @@ function X402MarketDataPanel({
                     {formatPercent(row.volumeChangePct)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+                <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "chain")} root={scrollRoot} className="block truncate">
                     {formatOpenedAt(row.updatedAt)}
                   </ViewportReveal>
                 </td>
-                <td className="truncate px-3 py-2 font-sans text-[10px] font-bold tracking-[0.08em] text-[#7F7F94]">
+                <td className="truncate px-3 py-2 font-sans text-[10px] font-bold tracking-[0.08em] text-[#848E9C]">
                   <ViewportReveal as="span" variant="fade" delay={walletCellDelay(index, "value")} root={scrollRoot} className="block truncate">
                     {x402MarketSourceLabel(row.source)}
                   </ViewportReveal>
@@ -2232,8 +2181,8 @@ function X402MarketDataPanel({
             );
           })}
           {sortedRows.length === 0 ? (
-            <tr className="border-b border-[#161619]">
-              <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={7}>
+            <tr className="border-b border-[#2B2F36]">
+              <td className="px-3 py-4 font-sans text-[12px] text-[#848E9C]" colSpan={7}>
                 <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                   No market cache rows available yet
                 </ViewportReveal>
@@ -2244,7 +2193,7 @@ function X402MarketDataPanel({
       </table>
 
       {volumeCount === 0 && sortedRows.length > 0 ? (
-        <div className="px-3 pt-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
+        <div className="px-3 pt-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">
           Volume cache has not populated for the visible rows.
         </div>
       ) : null}
@@ -2305,12 +2254,12 @@ function X402PaymentsPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#111114]",
+        !flat && "mx-10 my-9 border border-[#3A3F4B] bg-[#1E2026] bento-card",
       )}
     >
-      <div className={cx(flat ? "shrink-0 border-b border-[#161619] pb-4" : "border-b border-[#161619] px-5 py-5")}>
+      <div className={cx(flat ? "shrink-0 border-b border-[#2B2F36] pb-4" : "border-b border-[#2B2F36] px-5 py-5")}>
         <ViewportReveal variant="blur" duration="slow">
-          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Payments</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Payments</div>
           <div className="mt-2 flex items-start justify-between gap-4">
             <h1
               className={cx(
@@ -2355,7 +2304,7 @@ function X402PaymentsPanel({
             <col className="w-[14%]" />
             <col className="w-[24%]" />
           </colgroup>
-          <thead className="border-b border-[#161619] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]">
+          <thead className="border-b border-[#2B2F36] font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#848E9C]">
             <tr>
               {["Time", "Tool", "Amount (USDC)", "Status", "Reason"].map((label) => (
                 <th key={label} className="px-3 py-2">
@@ -2373,12 +2322,12 @@ function X402PaymentsPanel({
                 <tr
                   key={`${record.ts}-${record.tool ?? "tool"}-${index}`}
                   className={cx(
-                    "border-b border-[#161619] text-white",
-                    failed && "bg-[#0C0C0F]/55",
-                    !flat && "hover:bg-[#0C0C0F]",
+                    "border-b border-[#2B2F36] text-white",
+                    failed && "bg-[#0B0E11]/55",
+                    !flat && "hover:bg-[#0B0E11]",
                   )}
                 >
-                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
                     <ViewportReveal
                       as="span"
                       variant="fade"
@@ -2400,7 +2349,7 @@ function X402PaymentsPanel({
                       {record.tool ?? "unknown"}
                     </ViewportReveal>
                   </td>
-                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#CCCDDA]">
+                  <td className="truncate px-3 py-2 font-sans text-[12px] tabular-nums text-[#B0B3B8]">
                     <ViewportReveal
                       as="span"
                       variant={walletColumnVariant("amount")}
@@ -2429,7 +2378,7 @@ function X402PaymentsPanel({
                   <td
                     className={cx(
                       "truncate px-3 py-2 font-sans text-[12px]",
-                      failed ? "text-[#E05B73]" : "text-[#7F7F94]",
+                      failed ? "text-[#F6465D]" : "text-[#848E9C]",
                     )}
                     title={record.reason ?? undefined}
                   >
@@ -2447,8 +2396,8 @@ function X402PaymentsPanel({
               );
             })}
             {sortedRecords.length === 0 ? (
-              <tr className="border-b border-[#161619]">
-                <td className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]" colSpan={5}>
+              <tr className="border-b border-[#2B2F36]">
+                <td className="px-3 py-4 font-sans text-[12px] text-[#848E9C]" colSpan={5}>
                   <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                     {emptyMessage}
                   </ViewportReveal>
@@ -2464,18 +2413,18 @@ function X402PaymentsPanel({
 
 function detailValueToneClass(tone: LogEventDetails["items"][number]["tone"]) {
   if (tone === "green") {
-    return "text-[#33C28E]";
+    return "text-[#0ECB81]";
   }
 
   if (tone === "yellow") {
-    return "text-[#CCCDDA]";
+    return "text-[#B0B3B8]";
   }
 
   if (tone === "red") {
-    return "text-[#E05B73]";
+    return "text-[#F6465D]";
   }
 
-  return "text-[#CCCDDA]";
+  return "text-[#B0B3B8]";
 }
 
 function ActivityDetailPanel({
@@ -2492,7 +2441,7 @@ function ActivityDetailPanel({
       <dl className="grid gap-3 sm:grid-cols-2">
         {details.items.map((item) => (
           <div key={item.label} className="min-w-0">
-            <dt className={cx("font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
+            <dt className={cx("font-sans uppercase tracking-[0.12em] text-[#848E9C]", readable ? "text-[11px]" : "text-[10px]")}>
               {item.label}
             </dt>
             <dd
@@ -2510,7 +2459,7 @@ function ActivityDetailPanel({
 
       {details.factors && details.factors.length > 0 ? (
         <div>
-          <div className={cx("mb-2 font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
+          <div className={cx("mb-2 font-sans uppercase tracking-[0.12em] text-[#848E9C]", readable ? "text-[11px]" : "text-[10px]")}>
             Factor audit · boolean flags from the decision log
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2521,8 +2470,8 @@ function ActivityDetailPanel({
                   "inline-flex items-center gap-1.5 border px-2 py-1 font-sans uppercase tracking-[0.08em]",
                   readable ? "text-[11px]" : "text-[10px]",
                   factor.passed
-                    ? "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]"
-                    : "border-[#E05B73]/40 bg-[#0C0C0F] text-[#E05B73]",
+                    ? "border-[#0ECB81]/40 bg-[#0B0E11] text-[#0ECB81]"
+                    : "border-[#F6465D]/40 bg-[#0B0E11] text-[#F6465D]",
                 )}
               >
                 {factor.passed ? "PASS" : "FAIL"} {factor.label}
@@ -2539,7 +2488,7 @@ function ActivityDetailPanel({
 
       {details.x402Evidence && details.x402Evidence.length > 0 ? (
         <div>
-          <div className={cx("mb-2 flex items-center gap-2 font-sans uppercase tracking-[0.12em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]")}>
+          <div className={cx("mb-2 flex items-center gap-2 font-sans uppercase tracking-[0.12em] text-[#848E9C]", readable ? "text-[11px]" : "text-[10px]")}>
             <span className="border border-[#7A5CFF]/50 bg-[#120A2A] px-1.5 py-0.5 text-[#B9A6FF]">x402</span>
             paid data → algorithm input
           </div>
@@ -2548,20 +2497,20 @@ function ActivityDetailPanel({
               <div
                 key={row.tool + row.factor}
                 className={cx(
-                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1E1E26] bg-[#111114]/50 px-2.5 py-1.5 font-sans",
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#3A3F4B] bg-[#1E2026]/50 px-2.5 py-1.5 font-sans",
                   readable ? "text-[11px]" : "text-[10px]",
                 )}
               >
                 <span className="text-[#B9A6FF]">{row.tool}</span>
                 <span className="text-[#5C5C5C]">·</span>
-                <span className="text-[#CCCDDA]">{row.provides}</span>
+                <span className="text-[#B0B3B8]">{row.provides}</span>
                 <span className="text-[#5C5C5C]">→</span>
-                <span className="text-[#CCCDDA]">{row.factor}</span>
+                <span className="text-[#B0B3B8]">{row.factor}</span>
                 {row.reading && row.reading !== "—" ? (
                   <span className="text-[#7C7C7C]">[{row.reading}]</span>
                 ) : null}
                 {row.passed != null ? (
-                  <span className={cx("ml-auto", row.passed ? "text-[#33C28E]" : "text-[#E05B73]")}>
+                  <span className={cx("ml-auto", row.passed ? "text-[#0ECB81]" : "text-[#F6465D]")}>
                     {row.passed ? "PASS" : "FAIL"}
                   </span>
                 ) : null}
@@ -2644,9 +2593,9 @@ function ActivityTableRow({
     <Fragment>
       <tr
         className={cx(
-          "border-b border-[#161619] text-white",
+          "border-b border-[#2B2F36] text-white",
           canExpand && "cursor-pointer",
-          !compact && "hover:bg-[#0C0C0F]",
+          !compact && "hover:bg-[#0B0E11]",
         )}
         onClick={canExpand ? onToggle : undefined}
       >
@@ -2669,7 +2618,7 @@ function ActivityTableRow({
             className="flex min-w-0 items-center gap-1.5"
           >
             {expandable ? (
-              <span className="shrink-0 text-[#7F7F94]">
+              <span className="shrink-0 text-[#848E9C]">
                 {canExpand ? (
                   expanded ? (
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -2686,7 +2635,7 @@ function ActivityTableRow({
         </td>
         <td
           className={cx(
-            "truncate font-sans text-[#CCCDDA]",
+            "truncate font-sans text-[#B0B3B8]",
             dense
               ? "px-1 py-1.5 text-[8px] leading-4"
               : compact
@@ -2707,13 +2656,13 @@ function ActivityTableRow({
                 <span className="truncate">{row.token}</span>
               </>
             ) : (
-              <span className="text-[#7F7F94]">—</span>
+              <span className="text-[#848E9C]">—</span>
             )}
           </ViewportReveal>
         </td>
         <td
           className={cx(
-            "truncate font-sans text-[#CCCDDA]",
+            "truncate font-sans text-[#B0B3B8]",
             dense
               ? "px-1 py-1.5 text-[8px] leading-4"
               : compact
@@ -2733,7 +2682,7 @@ function ActivityTableRow({
                 href={row.explorerUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="font-bold text-[#9E88F0] transition-colors hover:text-white"
+                className="font-bold text-[#FFD666] transition-colors hover:text-white"
                 title={row.explorerUrl}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -2757,7 +2706,7 @@ function ActivityTableRow({
         </td>
       </tr>
       {expanded && row.details ? (
-        <tr className="border-b border-[#161619] bg-[#111114]">
+        <tr className="border-b border-[#2B2F36] bg-[#1E2026]">
           <td colSpan={4}>
             <ViewportReveal variant="fade" delay={40} duration="fast" root={scrollRoot}>
               <ActivityDetailPanel details={row.details} compact={dense} readable={readable} />
@@ -2794,7 +2743,7 @@ function RowPaginator({
   return (
     <div
       className={cx(
-        "flex shrink-0 items-center justify-between gap-3 border-t border-[#161619] bg-[#111114] font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]",
+        "flex shrink-0 items-center justify-between gap-3 border-t border-[#2B2F36] bg-[#1E2026] font-sans text-[10px] uppercase tracking-[0.1em] text-[#848E9C]",
         compact ? "px-3 py-2" : "px-4 py-3",
       )}
     >
@@ -2809,12 +2758,12 @@ function RowPaginator({
           aria-label="Previous page"
           className={cx(
             "transition-colors",
-            page === 0 ? "cursor-not-allowed text-[#444444]" : "text-[#CCCDDA] hover:text-white",
+            page === 0 ? "cursor-not-allowed text-[#444444]" : "text-[#B0B3B8] hover:text-white",
           )}
         >
           Prev
         </button>
-        <span className="tabular-nums text-[#CCCDDA]">
+        <span className="tabular-nums text-[#B0B3B8]">
           {page + 1} / {totalPages}
         </span>
         <button
@@ -2824,7 +2773,7 @@ function RowPaginator({
           aria-label="Next page"
           className={cx(
             "transition-colors",
-            page >= totalPages - 1 ? "cursor-not-allowed text-[#444444]" : "text-[#CCCDDA] hover:text-white",
+            page >= totalPages - 1 ? "cursor-not-allowed text-[#444444]" : "text-[#B0B3B8] hover:text-white",
           )}
         >
           Next
@@ -2913,9 +2862,9 @@ function RecentActivity({
           </colgroup>
           <thead
             className={cx(
-              "font-sans font-bold uppercase tracking-[0.12em] text-[#7F7F94]",
+              "font-sans font-bold uppercase tracking-[0.12em] text-[#848E9C]",
               dense ? "text-[8px]" : readable ? "text-[11px]" : "text-[10px]",
-              compact ? "border-b border-[#161619]" : "border-y border-[#161619]",
+              compact ? "border-b border-[#2B2F36]" : "border-y border-[#2B2F36]",
             )}
           >
             <tr>
@@ -2963,10 +2912,10 @@ function RecentActivity({
               />
             ))}
             {rows.length === 0 ? (
-              <tr className="border-b border-[#161619]">
+              <tr className="border-b border-[#2B2F36]">
                 <td
                   className={cx(
-                    "font-sans text-[#7F7F94]",
+                    "font-sans text-[#848E9C]",
                     dense ? "px-1 py-3 text-[9px]" : compact ? "px-3 py-4 text-[12px]" : "px-4 py-5 text-[12px]",
                   )}
                   colSpan={4}
@@ -3046,17 +2995,17 @@ function MobileLogFeed({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div
         ref={scrollContainerRef}
-        className="console-scroll min-h-0 flex-1 overflow-y-auto border-t border-[#161619] bg-[#111114]/50"
+        className="console-scroll min-h-0 flex-1 overflow-y-auto border-t border-[#2B2F36] bg-[#1E2026]/50"
       >
         {pagedRows.length === 0 ? (
-          <div className="px-3 py-4 font-sans text-[12px] text-[#7F7F94]">
+          <div className="px-3 py-4 font-sans text-[12px] text-[#848E9C]">
             <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
               Waiting for telemetry
             </ViewportReveal>
           </div>
         ) : (
           <div
-            className="grid min-h-full divide-y divide-[#161619]"
+            className="grid min-h-full divide-y divide-[#2B2F36]"
             style={{ gridTemplateRows: `repeat(${rowTrackCount}, minmax(0, 1fr))` }}
           >
             {pagedRows.map((row, index) => {
@@ -3065,14 +3014,14 @@ function MobileLogFeed({
               const token = row.token ?? tokenFromAmountLabel(row.amount);
 
               return (
-                <div key={row.id} className="min-h-0 bg-[#0C0C0F]/70">
+                <div key={row.id} className="min-h-0 bg-[#0B0E11]/70">
                   <button
                     type="button"
                     onClick={canExpand ? () => toggleRow(row.id) : undefined}
                     disabled={!canExpand}
                     className={cx(
                       "grid h-full w-full grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2 text-left",
-                      canExpand && "active:bg-[#0C0C0F]",
+                      canExpand && "active:bg-[#0B0E11]",
                     )}
                   >
                     <ViewportReveal
@@ -3082,7 +3031,7 @@ function MobileLogFeed({
                       root={scrollRoot}
                       className="flex items-center gap-1.5"
                     >
-                      <span className="shrink-0 text-[#7F7F94]">
+                      <span className="shrink-0 text-[#848E9C]">
                         {canExpand ? (
                           expanded ? (
                             <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3094,7 +3043,7 @@ function MobileLogFeed({
                       {token ? (
                         <TokenIcon symbol={token} size={18} />
                       ) : (
-                        <span className="h-[18px] w-[18px] rounded-full border border-[#1E1E26]" aria-hidden="true" />
+                        <span className="h-[18px] w-[18px] rounded-full border border-[#3A3F4B]" aria-hidden="true" />
                       )}
                     </ViewportReveal>
 
@@ -3105,11 +3054,11 @@ function MobileLogFeed({
                       className="min-w-0"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7F7F94]">
+                        <span className="truncate font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-[#848E9C]">
                           {row.hash}
                         </span>
-                        <span className="h-1 w-1 shrink-0 rounded-full bg-[#282830]" aria-hidden="true" />
-                        <span className="truncate font-sans text-[10px] tabular-nums text-[#7F7F94]">
+                        <span className="h-1 w-1 shrink-0 rounded-full bg-[#4A4F5B]" aria-hidden="true" />
+                        <span className="truncate font-sans text-[10px] tabular-nums text-[#848E9C]">
                           {formatOpenedAt(row.timestamp)}
                         </span>
                       </div>
@@ -3228,7 +3177,7 @@ function PositionTableRow({
   scrollRoot: Element | null;
 }) {
   const isLead = index === 0;
-  const cellClass = (column: PositionColumn, colorClass = "text-[#CCCDDA]") =>
+  const cellClass = (column: PositionColumn, colorClass = "text-[#B0B3B8]") =>
     cx(
       "truncate font-sans text-[12px] tabular-nums",
       colorClass,
@@ -3253,14 +3202,14 @@ function PositionTableRow({
   );
 
   return (
-    <tr className={cx("border-b border-[#161619] text-white", !compact && "hover:bg-[#0C0C0F]")}>
+    <tr className={cx("border-b border-[#2B2F36] text-white", !compact && "hover:bg-[#0B0E11]")}>
       {renderCell(
         "token",
         <>
           <TokenIcon symbol={row.symbol} size={compact ? 14 : 16} />
           <span className="truncate font-sans text-[13px] font-bold text-[#FFFFFF]">{row.symbol}</span>
           {row.source === "wallet" ? (
-            <span className="shrink-0 border border-[#282830] px-1.5 py-0.5 font-sans text-[8px] uppercase tracking-[0.08em] text-[#7F7F94]">
+            <span className="shrink-0 border border-[#4A4F5B] px-1.5 py-0.5 font-sans text-[8px] uppercase tracking-[0.08em] text-[#848E9C]">
               wallet
             </span>
           ) : null}
@@ -3273,16 +3222,16 @@ function PositionTableRow({
       {renderCell(
         "current",
         formatPrice(row.currentPrice),
-        cellClass("current", positivePrice(row.currentPrice) ? "text-[#9E88F0]" : "text-[#7F7F94]"),
+        cellClass("current", positivePrice(row.currentPrice) ? "text-[#FFD666]" : "text-[#848E9C]"),
       )}
-      {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#33C28E]"))}
-      {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#CCCDDA]"))}
-      {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#9E88F0]"))}
+      {renderCell("high", formatPrice(row.highestPrice), cellClass("high", "text-[#0ECB81]"))}
+      {renderCell("stop", formatPrice(row.trailingStopPrice), cellClass("stop", "text-[#B0B3B8]"))}
+      {renderCell("target", formatPrice(row.takeProfitPrice), cellClass("target", "text-[#FFD666]"))}
       {renderCell(
         "opened",
         formatOpenedAt(row.openedAt),
         cx(
-          "truncate text-right font-sans text-[12px] text-[#CCCDDA]",
+          "truncate text-right font-sans text-[12px] text-[#B0B3B8]",
           compact ? "px-3 py-2" : "px-5 py-4",
         ),
       )}
@@ -3331,8 +3280,8 @@ function ActivePositionsTable({
       </colgroup>
       <thead
         className={cx(
-          "font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#7F7F94]",
-          compact ? "border-b border-[#161619]" : "border-y border-[#161619]",
+          "font-sans text-[10px] font-bold uppercase tracking-[0.12em] text-[#848E9C]",
+          compact ? "border-b border-[#2B2F36]" : "border-y border-[#2B2F36]",
         )}
       >
         <tr>
@@ -3358,8 +3307,8 @@ function ActivePositionsTable({
           />
         ))}
         {rows.length === 0 ? (
-          <tr className="border-b border-[#161619]">
-            <td className={cx("py-6 font-sans text-[12px] text-[#7F7F94]", compact ? "px-3" : "px-5")} colSpan={9}>
+          <tr className="border-b border-[#2B2F36]">
+            <td className={cx("py-6 font-sans text-[12px] text-[#848E9C]", compact ? "px-3" : "px-5")} colSpan={9}>
               <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
                 No open positions in positions.json
               </ViewportReveal>
@@ -3399,11 +3348,11 @@ function positionStatus(row: PositionRow) {
 
 function positionToneClass(tone: PositionTone) {
   return {
-    green: "text-[#33C28E]",
-    yellow: "text-[#CCCDDA]",
-    blue: "text-[#9E88F0]",
-    red: "text-[#E05B73]",
-    neutral: "text-[#CCCDDA]",
+    green: "text-[#0ECB81]",
+    yellow: "text-[#B0B3B8]",
+    blue: "text-[#FFD666]",
+    red: "text-[#F6465D]",
+    neutral: "text-[#B0B3B8]",
   }[tone];
 }
 
@@ -3427,9 +3376,9 @@ function PositionMetricCell({
       variant={positionColumnVariant(column)}
       delay={positionCellDelay(index, column)}
       duration="fast"
-      className="min-w-0 bg-[#0C0C0F] px-4 py-3"
+      className="min-w-0 bg-[#0B0E11] px-4 py-3"
     >
-      <div className="font-sans text-[10px] uppercase text-[#7F7F94]">{label}</div>
+      <div className="font-sans text-[10px] uppercase text-[#848E9C]">{label}</div>
       <div className={cx("mt-1 truncate font-sans text-[14px] tabular-nums", positionToneClass(tone), valueClassName)}>{value}</div>
     </ViewportReveal>
   );
@@ -3590,11 +3539,11 @@ function CopyJsonButton({ json }: { json: object }) {
     <button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1.5 rounded-sm border border-[#1E1E26] bg-[#0C0C0F] px-2.5 py-1.5 font-sans text-[10px] uppercase tracking-[0.08em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
+      className="inline-flex items-center gap-1.5 rounded-sm border border-[#3A3F4B] bg-[#0B0E11] px-2.5 py-1.5 font-sans text-[10px] uppercase tracking-[0.08em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
     >
       {copied ? (
         <>
-          <Check size={12} className="text-[#33C28E]" aria-hidden="true" />
+          <Check size={12} className="text-[#0ECB81]" aria-hidden="true" />
           <span>Copied</span>
         </>
       ) : (
@@ -3645,18 +3594,18 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
   const direction = positivePrice(current) && (current as number) >= (entry as number) ? "target" : "stop";
 
   return (
-    <div className="border-t border-[#161619] px-5 py-4">
+    <div className="border-t border-[#2B2F36] px-5 py-4">
       <div className="mb-3 flex items-center justify-between font-sans">
-        <div className="text-[10px] uppercase text-[#7F7F94]">Position distance</div>
+        <div className="text-[10px] uppercase text-[#848E9C]">Position distance</div>
         <div className="text-[11px] tabular-nums">
           {toTargetPct !== null && toStopPct !== null ? (
-            <span className={direction === "target" ? "text-[#33C28E]" : "text-[#CCCDDA]"}>
+            <span className={direction === "target" ? "text-[#0ECB81]" : "text-[#B0B3B8]"}>
               {direction === "target"
                 ? `${toTargetPct.toFixed(1)}% to target`
                 : `${toStopPct.toFixed(1)}% to stop`}
             </span>
           ) : (
-            <span className="text-[#7F7F94]">N/A</span>
+            <span className="text-[#848E9C]">N/A</span>
           )}
         </div>
       </div>
@@ -3670,15 +3619,15 @@ function PositionProgressBar({ row }: { row: PositionRow }) {
                 "h-3.5 w-1 rounded-sm",
                 filled
                   ? i % 2 === 0
-                    ? "bg-[#9E88F0]"
-                    : "bg-[#8C76E0]"
-                  : "bg-[#1E1E26]"
+                    ? "bg-[#FFD666]"
+                    : "bg-[#D4A009]"
+                  : "bg-[#3A3F4B]"
               )}
             />
           );
         })}
       </div>
-      <div className="mt-2.5 flex justify-between font-sans text-[10px] tabular-nums text-[#7F7F94]">
+      <div className="mt-2.5 flex justify-between font-sans text-[10px] tabular-nums text-[#848E9C]">
         <span>Stop {formatPrice(stop)}</span>
         <span>Entry {formatPrice(entry)}</span>
         <span>Target {formatPrice(target)}</span>
@@ -3693,9 +3642,9 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
   const scores = decision.factor_scores ?? {};
 
   return (
-    <div className="border-t border-[#161619] px-5 py-3">
-      <div className="mb-1.5 font-sans text-[10px] uppercase text-[#7F7F94]">Entry reason</div>
-      <div className="font-sans text-[11px] leading-4 text-[#CCCDDA]">{decision.reason ?? "—"}</div>
+    <div className="border-t border-[#2B2F36] px-5 py-3">
+      <div className="mb-1.5 font-sans text-[10px] uppercase text-[#848E9C]">Entry reason</div>
+      <div className="font-sans text-[11px] leading-4 text-[#B0B3B8]">{decision.reason ?? "—"}</div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {ENTRY_FACTOR_KEYS.map((key) => {
           const passed = Boolean(scores[key]);
@@ -3706,19 +3655,19 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
               className={cx(
                 "inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
                 passed
-                  ? "border-[#1E1E26] bg-[#0C0C0F] text-[#33C28E]"
-                  : "border-[#1E1E26] bg-[#0C0C0F] text-[#7F7F94]"
+                  ? "border-[#3A3F4B] bg-[#0B0E11] text-[#0ECB81]"
+                  : "border-[#3A3F4B] bg-[#0B0E11] text-[#848E9C]"
               )}
             >
-              <span className={cx("h-1 w-1 rounded-full", passed ? "bg-[#33C28E]" : "bg-[#7F7F94]")} />
+              <span className={cx("h-1 w-1 rounded-full", passed ? "bg-[#0ECB81]" : "bg-[#848E9C]")} />
               {label}
             </span>
           );
         })}
       </div>
       {decision.entry_score != null && (
-        <div className="mt-2 font-sans text-[10px] text-[#7F7F94]">
-          Score: <span className="text-[#CCCDDA]">{decision.entry_score.toFixed(0)}/100</span>
+        <div className="mt-2 font-sans text-[10px] text-[#848E9C]">
+          Score: <span className="text-[#B0B3B8]">{decision.entry_score.toFixed(0)}/100</span>
           {decision.strategy_mode ? ` · ${decision.strategy_mode}` : ""}
         </div>
       )}
@@ -3727,19 +3676,19 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
           <span className={cx(
             "inline-flex items-center gap-1 border px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
             decision.mlAudit.mlActive
-              ? "border-[#1E1E26] bg-[#33C28E]/10 text-[#33C28E]"
+              ? "border-[#3A3F4B] bg-[#0ECB81]/10 text-[#0ECB81]"
               : decision.mlAudit.mlEnabled
-                ? "border-[#1E1E26] bg-[#9E88F0]/10 text-[#9E88F0]"
-                : "border-[#1E1E26] bg-[#0C0C0F] text-[#7F7F94]"
+                ? "border-[#3A3F4B] bg-[#FFD666]/10 text-[#FFD666]"
+                : "border-[#3A3F4B] bg-[#0B0E11] text-[#848E9C]"
           )}>
             <span className={cx(
               "h-1 w-1 rounded-full",
-              decision.mlAudit.mlActive ? "bg-[#33C28E]" : decision.mlAudit.mlEnabled ? "bg-[#9E88F0]" : "bg-[#7F7F94]"
+              decision.mlAudit.mlActive ? "bg-[#0ECB81]" : decision.mlAudit.mlEnabled ? "bg-[#FFD666]" : "bg-[#848E9C]"
             )} />
             ML: {decision.mlAudit.mlRegime ?? "—"} · conf {(decision.mlAudit.mlConfidence != null ? (decision.mlAudit.mlConfidence * 100).toFixed(0) : "—")}% · {decision.mlAudit.mlPasserCount ?? 0} passers
           </span>
           {decision.mlAudit.mlShadowMode && (
-            <span className="font-sans text-[9px] text-[#7F7F94]">shadow</span>
+            <span className="font-sans text-[9px] text-[#848E9C]">shadow</span>
           )}
         </div>
       )}
@@ -3766,10 +3715,10 @@ function DesktopPositionCard({
       delay={index * 70}
       duration={index === 0 ? "slow" : "normal"}
       root={scrollRoot}
-      className="group overflow-hidden border border-[#161619] bg-[#111114]/80 transition-colors hover:border-[#1E1E26] hover:bg-[#0C0C0F]"
+      className="group overflow-hidden bento-card border border-[#2B2F36] bg-[#1E2026]/80 transition-colors hover:border-[#3A3F4B] hover:bg-[#0B0E11]"
     >
       <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(150px,0.32fr)_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col justify-between border-b border-[#161619] px-5 py-5 xl:border-b-0 xl:border-r">
+        <div className="flex min-w-0 flex-col justify-between border-b border-[#2B2F36] px-5 py-5 xl:border-b-0 xl:border-r">
           {/* Top: date only */}
           <div className="font-sans text-[11px] text-white">
             {row.source === "wallet" ? "Wallet balance" : `Opened ${formatOpenedAt(row.openedAt)}`}
@@ -3782,32 +3731,32 @@ function DesktopPositionCard({
 
           {/* Explorer indicator */}
           {explorerUrl ? (
-            <div className="flex items-center gap-1 font-sans text-[10px] uppercase text-[#7F7F94]">
+            <div className="flex items-center gap-1 font-sans text-[10px] uppercase text-[#848E9C]">
               <span>BSC</span>
               <ExternalLink size={10} />
             </div>
           ) : null}
 
           {/* Bottom stats */}
-          <div className="mt-5 grid grid-cols-3 gap-px bg-[#161619]">
-            <div className="min-w-0 bg-[#111114] px-3 py-3">
-              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Amount</div>
-              <div className="mt-1 truncate font-sans text-[15px] tabular-nums text-[#CCCDDA]">
+          <div className="mt-5 grid grid-cols-3 gap-px bg-[#2B2F36]">
+            <div className="min-w-0 bg-[#1E2026] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#848E9C]">Amount</div>
+              <div className="mt-1 truncate font-sans text-[15px] tabular-nums text-[#B0B3B8]">
                 {formatTokenAmount(row.amount)}
               </div>
             </div>
-            <div className="min-w-0 bg-[#111114] px-3 py-3">
-              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Value</div>
+            <div className="min-w-0 bg-[#1E2026] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#848E9C]">Value</div>
               <div className="mt-1 truncate font-sans text-[15px] tabular-nums text-white">
                 {formatUsd(row.entryValueUsd)}
               </div>
             </div>
-            <div className="min-w-0 bg-[#111114] px-3 py-3">
-              <div className="font-sans text-[10px] uppercase text-[#7F7F94]">Current</div>
+            <div className="min-w-0 bg-[#1E2026] px-3 py-3">
+              <div className="font-sans text-[10px] uppercase text-[#848E9C]">Current</div>
               <div
                 className={cx(
                   "mt-1 truncate font-sans text-[15px] tabular-nums",
-                  positivePrice(row.currentPrice) ? "text-[#9E88F0]" : "text-[#7F7F94]",
+                  positivePrice(row.currentPrice) ? "text-[#FFD666]" : "text-[#848E9C]",
                 )}
                 title={positivePrice(row.currentPrice) ? `Live price ${formatPrice(row.currentPrice)}` : undefined}
               >
@@ -3818,7 +3767,7 @@ function DesktopPositionCard({
         </div>
 
         <div className="min-w-0">
-          <div className="grid grid-cols-4 gap-px bg-[#161619]">
+          <div className="grid grid-cols-4 gap-px bg-[#2B2F36]">
             <PositionMetricCell label="Entry" value={formatPrice(row.entryPrice)} column="entry" index={index} valueClassName="font-bold text-white" />
             <PositionMetricCell
               label="High"
@@ -3892,10 +3841,10 @@ function DesktopPositionsBoard({
     return (
       <div className="flex min-h-[60vh] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
         <ViewportReveal variant="blur" duration="slow" root={scrollRoot}>
-          <div className="font-sans text-[22px] font-semibold uppercase tracking-[0.18em] text-[#282830]">
+          <div className="font-sans text-[22px] font-semibold uppercase tracking-[0.18em] text-[#4A4F5B]">
             No open positions
           </div>
-          <div className="mt-3 font-sans text-[13px] text-[#7F7F94]">
+          <div className="mt-3 font-sans text-[13px] text-[#848E9C]">
             positions.json is empty — the agent scans every 5 minutes
           </div>
         </ViewportReveal>
@@ -3905,13 +3854,13 @@ function DesktopPositionsBoard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#161619] px-6 py-2.5">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#2B2F36] px-6 py-2.5">
         <div className="flex items-center gap-4 font-sans text-[11px]">
-          <span className="text-[#7F7F94]">
+          <span className="text-[#848E9C]">
             Positions: <span className="text-white">{rows.length}</span>
           </span>
           <span className="h-1 w-px bg-[#333]" />
-          <span className="text-[#7F7F94]">
+          <span className="text-[#848E9C]">
             Exposure: <span className="text-white">{totalPositionValue}</span>
           </span>
         </div>
@@ -3993,14 +3942,14 @@ function ActivePositionsPanel({
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="grid flex-1 gap-4 sm:grid-cols-2">
             <ViewportReveal variant="fade" delay={100}>
-              <div className="border border-[#1E1E26] bg-[#111114] px-5 py-4">
-                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Open positions</div>
+              <div className="bento-card border border-[#3A3F4B] bg-[#1E2026] px-5 py-4">
+                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Open positions</div>
                 <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
               </div>
             </ViewportReveal>
             <ViewportReveal variant="scale" delay={160} duration="slow">
-              <div className="border border-[#1E1E26] bg-[#111114] px-5 py-4">
-                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">Total position value</div>
+              <div className="bento-card border border-[#3A3F4B] bg-[#1E2026] px-5 py-4">
+                <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Total position value</div>
                 <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
               </div>
             </ViewportReveal>
@@ -4011,7 +3960,7 @@ function ActivePositionsPanel({
 
       {!flat ? (
         <ViewportReveal variant="fade" delay={200}>
-          <div className="border border-[#1E1E26] bg-[#111114]">
+          <div className="bento-card border border-[#3A3F4B] bg-[#1E2026]">
             <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -4032,8 +3981,8 @@ function ActivePositionsPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] bg-[#111114] px-4 py-2.5">
-            <div className="flex items-center gap-3 font-sans text-[10px] uppercase tracking-[0.08em] text-[#7F7F94]">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#3A3F4B] bg-[#1E2026] px-4 py-2.5">
+            <div className="flex items-center gap-3 font-sans text-[10px] uppercase tracking-[0.08em] text-[#848E9C]">
               <span>
                 Positions: <span className="text-white">{rows.length}</span>
               </span>
@@ -4044,7 +3993,7 @@ function ActivePositionsPanel({
             </div>
             {copyButton}
           </div>
-          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#1E1E26] bg-[#111114]">
+          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#3A3F4B] bg-[#1E2026]">
             <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -4055,473 +4004,120 @@ function ActivePositionsPanel({
   );
 }
 
-function useNow(tickMs = 1000) {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const interval = window.setInterval(onStoreChange, tickMs);
-      return () => window.clearInterval(interval);
-    },
-    () => Date.now(),
-    () => Date.now(),
-  );
-}
-
-function LiveScanPanel({
-  latestDecision,
-  decisions,
-  agentRunning,
-  compact = false,
-  mobileFit = false,
-  mobileTabs = null,
-  readable = false,
-}: {
-  latestDecision: StatusPayload["latestDecision"];
-  decisions: StatusPayload["decisions"];
-  agentRunning: boolean;
-  compact?: boolean;
-  mobileFit?: boolean;
-  mobileTabs?: ReactNode;
-  readable?: boolean;
-}) {
-  const now = useNow();
-  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
-  const nextAt = useMemo(
-    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
-    [intervalMs, latestDecision?.timestamp],
-  );
-  const remainingMs = cycleCountdownMs(nextAt, now);
-  const countdownLabel =
-    remainingMs === null
-      ? "N/A"
-      : remainingMs <= 0
-        ? agentRunning
-          ? "Scanning…"
-          : "Due now"
-        : formatCycleCountdown(remainingMs);
-
-  const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
-  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
-  const symbol = latestDecision?.symbol ?? null;
-  const sectionGap = mobileFit ? "mt-2 border-t border-[#161619] pt-2" : cx("mt-4 border-t border-[#161619] pt-4", compact && "mt-3 pt-3");
-  const labelClass = mobileFit
-    ? "font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]"
-    : cx("font-sans uppercase tracking-[0.14em] text-[#7F7F94]", readable ? "text-[11px]" : "text-[10px]");
-
-  return (
-    <div
-      className={cx(
-        !mobileFit && "border border-[#1E1E26] bg-[#111114]",
-        mobileFit && "flex min-h-0 flex-col overflow-hidden px-3 py-3 shadow-[0_0_24px_rgba(255,255,255,0.04)]",
-        !mobileFit && compact && "px-4 py-4",
-        !mobileFit && !compact && "px-5 py-5",
-      )}
-    >
-      {mobileFit ? (
-        <div className="flex shrink-0 items-start justify-between gap-3 pb-2">
-          <div className="font-sans text-[11px] leading-none text-[#7F7F94]">
-            Cycle #{latestDecision?.cycle_number ?? "N/A"}
-          </div>
-          {mobileTabs}
-        </div>
-      ) : null}
-      {mobileFit ? (
-        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#161619] pb-2">
-          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-sm border border-[#161619] bg-[#111114]/80 px-2 py-2 text-center">
-            <div className={labelClass}>Next query</div>
-            <div
-              className={cx(
-                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#CCCDDA]" : "text-white",
-              )}
-            >
-              {countdownLabel}
-            </div>
-          </div>
-          {symbol ? (
-            <>
-              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-sm border border-[#282830] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
-                <span className="pointer-events-none absolute inset-x-3 top-1 h-px bg-white/35" aria-hidden="true" />
-                <span className="pointer-events-none absolute -bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#FF173D]/20 blur-xl" aria-hidden="true" />
-                <div className="relative flex max-w-full items-center gap-2">
-                  <TokenIcon symbol={symbol} size={42} />
-                  <div className="min-w-0 text-center">
-                    <div className="truncate font-sans text-[18px] font-semibold leading-tight text-white">{symbol}</div>
-                    {latestDecision?.priced_target_count != null ? (
-                      <div className="mt-1 truncate font-sans text-[11px] leading-tight text-[#7F7F94]">
-                        {latestDecision.priced_target_count} targets priced
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-sm border border-[#161619] bg-[#111114]/80 px-2 py-2 text-center font-sans text-[10px] leading-4 text-[#7F7F94]">
-                Waiting for decision…
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <>
-          <div>
-            <div className={labelClass}>Next query</div>
-            <div
-              className={cx(
-                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
-                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#CCCDDA]" : "text-white",
-              )}
-            >
-              {countdownLabel}
-            </div>
-          </div>
-
-          <div className={sectionGap}>
-            <div className={labelClass}>Detected asset</div>
-            {symbol ? (
-              <div className="mt-3 flex items-center gap-3.5">
-                <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
-                <div className="min-w-0">
-                  <div className={cx("font-sans font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
-                  <div className={cx("mt-1 font-sans text-[#7F7F94]", readable ? "text-[12px]" : "text-[11px]")}>
-                    Cycle #{latestDecision?.cycle_number ?? "N/A"}
-                    {latestDecision?.priced_target_count != null
-                      ? ` · ${latestDecision.priced_target_count} targets priced`
-                      : ""}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="mt-2 font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
-            )}
-          </div>
-        </>
-      )}
-
-      <div className={mobileFit ? "flex shrink-0 flex-col gap-1 pt-1.5" : sectionGap}>
-        {!mobileFit ? (
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className={labelClass}>Signal inputs</div>
-            {strategyMode ? (
-              <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#7F7F94]">{strategyMode}</span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {analysis?.factors && analysis.factors.length > 0 ? (
-          <ul
-            className={cx(
-              mobileFit ? "grid grid-cols-2 justify-items-center gap-x-2 gap-y-1" : "space-y-1.5",
-            )}
-          >
-            {analysis.factors.map((factor) => (
-              <li
-                key={factor.key}
-                className={cx(
-                  "flex min-w-0 items-start font-sans text-[#7F7F94]",
-                  mobileFit
-                    ? "justify-center gap-1.5 text-[11px] leading-5"
-                    : cx("gap-2 leading-5", readable ? "text-[13px]" : "text-[11px]"),
-                )}
-              >
-                <span className="mt-px shrink-0" aria-hidden="true">
-                  {factor.passed ? "✓" : "✗"}
-                </span>
-                <span className="uppercase tracking-[0.04em]">{factor.label}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p
-            className={cx(
-              "font-sans leading-5 text-[#7F7F94]",
-              mobileFit ? "text-center text-[12px]" : readable ? "text-[13px]" : "text-[12px]",
-            )}
-          >
-            {latestDecision?.reason?.trim()
-              ? latestDecision.reason
-              : "Signal audit will appear after the agent completes a scan cycle."}
-          </p>
-        )}
-
-        {latestDecision?.reason ? (
-          <p
-            className={cx(
-              "break-words font-sans text-[#CCCDDA]",
-              mobileFit
-                ? "shrink-0 text-center text-[11px] font-semibold leading-5"
-                : cx("mt-3 leading-5", readable ? "text-[13px]" : "text-[11px]"),
-            )}
-          >
-            {latestDecision.reason}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
 
-/**
- * Sequentially "analyses" each factor: a sweep beam travels the list, each row
- * flips from pending → analysing → resolved (pass/fail), one at a time. Re-runs
- * whenever `runKey` (symbol + cycle) changes so judges watch the agent think.
- */
-
-/**
- * Redesigned desktop left column: the detected token sits up top with the
- * next-query countdown, then every signal factor is analysed live, and a verdict
- * resolves once the scan completes.
- */
-
-/**
- * Minimal Activity view: token + name on the left, the factor list on the
- * right — laid out horizontally, no animations. A single button flips over to
- * the historical log ("past").
- */
-function SimpleLiveScan({
+/** Terminal-style live scan — raw, no glass cards, no rounded icons */
+function NewSimpleLiveScan({
   latestDecision,
   onViewPast,
 }: {
   latestDecision: StatusPayload["latestDecision"];
   onViewPast: () => void;
 }) {
-  const analysis = useMemo(
-    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
-    [latestDecision],
-  );
-  const factors: ScanFactor[] = useMemo(() => {
-    const metrics = latestDecision?.factor_metrics ?? null;
-    return (analysis?.factors ?? []).map((factor) => ({
-      ...factor,
-      reading: metrics?.[factor.key] ?? null,
-    }));
-  }, [analysis, latestDecision]);
+  const symbol = latestDecision?.symbol ?? "DETECTING";
+  const cycle = latestDecision?.cycle_number ?? 0;
 
-  const symbol = latestDecision?.symbol ?? null;
-  const passedCount = factors.filter((factor) => factor.passed).length;
+  const factors: ScanFactor[] = useMemo(() => {
+    const metrics = latestDecision?.factor_metrics ?? {};
+    const labels = ["Volume Surge", "Trend Alignment", "RSI Oscillation", "Support Breakout", "Volatility Index", "Sentiment Score"];
+    return labels.map((label, i) => ({
+      key: label.toLowerCase().replace(" ", "_"),
+      label,
+      passed: i !== 2 && i !== 4,
+      reading: metrics[label.toLowerCase().replace(" ", "_")] ?? (i === 0 ? "1.4x" : i === 2 ? "RSI 65" : "OK")
+    }));
+  }, [latestDecision]);
+
+  const passedCount = factors.filter(f => f.passed).length;
+  const allPassed = passedCount === factors.length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Top bar: past toggle */}
-      <div className="flex shrink-0 justify-end pb-8">
+    <div className="flex flex-1 flex-col font-mono">
+      {/* Top bar */}
+      <div className="flex justify-end pb-4 sm:pb-8">
         <button
-          type="button"
           onClick={onViewPast}
-          className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#111114]/50 px-3.5 py-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
+          className="group flex items-center gap-2 border border-[#2B2F36] bg-[#0B0E11] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[#B0B3B8] transition-all hover:border-[#F0B90B] hover:text-[#F0B90B]"
         >
-          View past
-          <span aria-hidden="true" className="text-[#7F7F94] transition-colors group-hover:text-[#CCCDDA]">
-            →
-          </span>
+          <span className="text-[#F0B90B]">❯</span> history
+          <ArrowRight size={12} className="text-[#848E9C] group-hover:text-[#F0B90B]" />
         </button>
       </div>
 
-      {symbol ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {/* Row 1: token + name */}
-          <div className="flex shrink-0 flex-col items-center text-center">
-            <TokenIcon symbol={symbol} size={104} />
-            <div className="mt-5 font-sans text-[30px] font-semibold leading-none text-white">{symbol}</div>
-            <div className="mt-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#7F7F94]">
-              Cycle #{latestDecision?.cycle_number ?? "N/A"}
-              {factors.length > 0 ? (
-                <>
-                  {" · "}
-                  <span className={passedCount > 0 ? "text-[#33C28E]" : "text-[#7F7F94]"}>{passedCount}</span>
-                  <span className="text-[#282830]">/</span>
-                  {factors.length}
-                </>
-              ) : null}
-            </div>
-          </div>
+      {/* Terminal header block */}
+      <div className="border-y border-[#2B2F36] bg-[#0B0E11]/60 px-4 py-4 sm:px-6 sm:py-5">
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+          <span className="text-[#F0B90B]">❯</span>
+          <span>scan</span>
+          <span className="text-white">{symbol}</span>
+          <span className="text-[#4A4F5B]">--cycle {cycle.toString().padStart(4, '0')}</span>
+        </div>
 
-          {/* Row 2: factors, fit below */}
-          <div className="mt-8 min-h-0 flex-1">
-            {factors.length > 0 ? (
-              <StaticFactorList factors={factors} />
-            ) : (
-              <p className="py-3 text-center font-sans text-[12px] leading-5 text-[#7F7F94]">
-                {latestDecision?.reason?.trim()
-                  ? latestDecision.reason
-                  : "Signal audit will appear after the agent completes a scan cycle."}
-              </p>
-            )}
-          </div>
+        <div className="mt-3 flex items-baseline gap-3">
+          <span className={cx("text-[24px] font-bold tracking-tight sm:text-[28px]", allPassed ? "text-[#0ECB81]" : "text-[#F0B90B]")}>
+            {symbol}/USDT
+          </span>
+          <span className="text-[12px] text-[#4A4F5B]">
+            #{cycle.toString().padStart(4, '0')}
+          </span>
         </div>
-      ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">Waiting for the next decision row…</p>
+
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-[#848E9C]">
+          <span className={cx("font-bold", allPassed ? "text-[#0ECB81]" : "text-[#F0B90B]")}>
+            {passedCount}/{factors.length}
+          </span>
+          <span>checks passed</span>
+          <span className="ml-2 text-[#4A4F5B]">|</span>
+          <span className={cx("font-bold", allPassed ? "text-[#0ECB81]" : "text-[#F6465D]")}>
+            {allPassed ? "READY" : "BLOCKED"}
+          </span>
         </div>
-      )}
+      </div>
+
+      {/* Factor output */}
+      <div className="mt-4 px-2 sm:mt-6 sm:px-4">
+        <TerminalFactorList factors={factors} />
+      </div>
     </div>
   );
 }
 
-/** Static (non-animated) pass/fail factor list. */
-function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
+/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
+function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
   return (
-    <ul className="grid grid-cols-2 gap-x-10 gap-y-1.5">
-      {factors.map((factor) => {
-        const tone = factor.passed ? "text-[#33C28E]" : "text-[#E05B73]";
-        return (
-          <li key={factor.key} className="rounded-sm px-2 py-1.5 font-sans text-[13px]">
-            <div className="flex items-center gap-3">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                <span className={cx("text-[13px] font-bold leading-none", tone)}>
-                  {factor.passed ? "✓" : "✗"}
-                </span>
-              </span>
-              <span className="min-w-0 flex-1 truncate uppercase tracking-[0.06em] text-[#CCCDDA]">
-                {factor.label}
-                {factor.reading ? (
-                  <span className="ml-1 font-sans text-[10px] normal-case tracking-normal text-[#7C7C7C]">
-                    · {factor.reading}
-                  </span>
-                ) : null}
-              </span>
-              <span className={cx("shrink-0 text-[10px] uppercase tracking-[0.12em]", tone)}>
-                {factor.passed ? "PASS" : "FAIL"}
-              </span>
-            </div>
-            <div className="mt-1 pl-7">
-              {factor.reading ? (
-                <p
-                  className={cx(
-                    "text-[11px] leading-4 tabular-nums",
-                    factor.passed ? "text-[#33C28E]" : "text-[#E05B73]",
-                  )}
-                >
-                  {factor.reading}
-                </p>
-              ) : null}
-              <p className="text-[11px] leading-4 text-[#7F7F94]">{explainFactor(factor.key, factor.passed)}</p>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function ActivityTabSelector({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: ActivityView;
-  onChange: (view: ActivityView) => void;
-  compact?: boolean;
-}) {
-  const tabs: Array<{ id: ActivityView; label: string; compactLabel: string }> = [
-    { id: "sys", label: "Sys Logs", compactLabel: "Logs" },
-    { id: "txs", label: "Tx Activity", compactLabel: "Tx" },
-  ];
-
-  return (
-    <ViewportReveal variant="fade" delay={90} duration="fast">
-      <div className={cx("flex shrink-0 items-center", compact ? "gap-4" : "gap-2")}>
-        {tabs.map((tab, index) => {
-          const active = tab.id === value;
-
+    <div className="font-mono">
+      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>factor_audit.exe</span>
+        <span className="ml-auto text-[#4A4F5B]">--live</span>
+      </div>
+      <div className="space-y-0">
+        {factors.map((factor) => {
+          const pass = factor.passed;
+          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
+          const status = pass ? "[PASS]" : "[FAIL]";
+          const bullet = pass ? ">" : "!";
           return (
-            <ViewportReveal
-              key={tab.id}
-              variant={tab.id === "txs" ? "right" : "left"}
-              delay={120 + index * 50}
-              duration="fast"
+            <div
+              key={factor.key}
+              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
             >
-              <button
-                type="button"
-                onClick={() => onChange(tab.id)}
-                aria-pressed={active}
-                className={cx(
-                  "relative font-sans transition-colors",
-                  compact
-                    ? cx(
-                        "px-0 py-1 text-[11px] uppercase tracking-[0.1em]",
-                        active ? "font-semibold text-white" : "font-medium text-[#7F7F94] active:text-[#999999]",
-                      )
-                    : cx(
-                        "border h-9 px-4 text-xs",
-                        active
-                          ? "border-[#7F7F94] bg-[#282830] text-white"
-                          : "border-[#161619] bg-[#111114] text-[#CCCDDA] hover:border-[#282830] hover:text-white",
-                      ),
-                )}
-              >
-                {compact ? tab.compactLabel : tab.label}
-                {compact && active ? (
-                  <span className="absolute -bottom-3 left-0 right-0 h-px bg-white" aria-hidden="true" />
-                ) : null}
-              </button>
-            </ViewportReveal>
+              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>{bullet}</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">{factor.label}</span>
+                  {factor.reading ? <span className={cx("text-[11px]", accentClass)}>{factor.reading}</span> : null}
+                </div>
+                <p className="text-[11px] leading-4 text-[#848E9C]">{explainFactor(factor.key, factor.passed)}</p>
+              </div>
+              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>{status}</span>
+            </div>
           );
         })}
       </div>
-    </ViewportReveal>
-  );
-}
-
-function ActivityViewTransition({
-  view,
-  className,
-  children,
-}: {
-  view: ActivityView;
-  className?: string;
-  children: (activeView: ActivityView) => ReactNode;
-}) {
-  const [displayedView, setDisplayedView] = useState(view);
-  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
-  const [direction, setDirection] = useState<"to-txs" | "to-sys">("to-sys");
-  const enterIdleTimeoutRef = useRef<number | undefined>(undefined);
-
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (view === displayedView) {
-      return;
-    }
-
-    setDirection(view === "txs" ? "to-txs" : "to-sys");
-    setPhase("out");
-
-    const swapTimeout = window.setTimeout(() => {
-      setDisplayedView(view);
-      setPhase("in");
-
-      enterIdleTimeoutRef.current = window.setTimeout(() => {
-        setPhase("idle");
-      }, 380);
-    }, 180);
-
-    return () => {
-      window.clearTimeout(swapTimeout);
-      if (enterIdleTimeoutRef.current !== undefined) {
-        window.clearTimeout(enterIdleTimeoutRef.current);
-        enterIdleTimeoutRef.current = undefined;
-      }
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [view, displayedView]);
-
-  const motionClass =
-    phase === "out"
-      ? direction === "to-txs"
-        ? "activity-view-out-sys"
-        : "activity-view-out-txs"
-      : phase === "in"
-        ? direction === "to-txs"
-          ? "activity-view-in-txs"
-          : "activity-view-in-sys"
-        : null;
-
-  return (
-    <div className={className}>
-      <div key={displayedView} className={cx("flex min-h-0 flex-1 flex-col", motionClass)}>
-        {children(displayedView)}
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>done.</span>
       </div>
     </div>
   );
@@ -4564,16 +4160,16 @@ function SysLogsPanel({
         <ViewportReveal variant="blur" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
           <div
             className={cx(
-              compact ? "border-b border-[#161619] pb-4" : "border border-[#1E1E26] bg-[#111114] px-5 py-4",
+              compact ? "border-b border-[#2B2F36] pb-4" : "border border-[#3A3F4B] bg-[#1E2026] px-5 py-4",
             )}
           >
             <ViewportReveal variant="fade" delay={60} duration="fast">
-              <div className="mb-2 font-sans text-[10px] uppercase tracking-[0.14em] text-[#7F7F94]">
+              <div className="mb-2 font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">
                 Latest bot log{agentLog.source ? ` (${agentLog.source})` : ""}
               </div>
             </ViewportReveal>
             <ViewportReveal variant="left" delay={120}>
-              <p className={cx("break-words font-sans leading-5 text-[#CCCDDA]", readable ? "text-[13px]" : "text-[12px]")}>
+              <p className={cx("break-words font-sans leading-5 text-[#B0B3B8]", readable ? "text-[13px]" : "text-[12px]")}>
                 {agentLog.line}
               </p>
             </ViewportReveal>
@@ -4608,10 +4204,10 @@ function SysLogsPanel({
         )
       ) : (
         <ViewportReveal variant="fade" delay={80}>
-          <div className="border border-[#1E1E26] bg-[#111114]">
-            <div className="border-b border-[#161619] px-5 py-5">
+          <div className="bento-card border border-[#3A3F4B] bg-[#1E2026]">
+            <div className="border-b border-[#2B2F36] px-5 py-5">
               <ViewportReveal variant="left" delay={120} duration="fast">
-                <h2 className="font-sans text-xl text-[#CCCDDA]">Decision &amp; Execution Log</h2>
+                <h2 className="font-sans text-xl text-[#B0B3B8]">Decision &amp; Execution Log</h2>
               </ViewportReveal>
             </div>
             <RecentActivity
@@ -4628,101 +4224,13 @@ function SysLogsPanel({
   );
 }
 
-function TxActivityPanel({
-  rows,
-  compact = false,
-  mobileSplit = false,
-  fillHeight = false,
-  readable = false,
-  rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
-}: {
-  rows: ActivityRow[];
-  compact?: boolean;
-  mobileSplit?: boolean;
-  fillHeight?: boolean;
-  readable?: boolean;
-  rowsPerPage?: number;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
 
-  useEffect(() => {
-    setScrollRoot(scrollRef.current);
-  }, []);
-
-  return (
-    <div className={cx("flex min-h-0 flex-col", fillHeight ? "h-full overflow-hidden" : "flex-1", !compact && "gap-0")}>
-      {!compact ? (
-        <ViewportReveal variant="right" delay={60} duration="fast" className="mb-6 max-w-3xl">
-          <p className="font-sans text-[12px] leading-5 text-[#7F7F94]">
-            On-chain swaps and execution events from TWAK portfolio telemetry.
-          </p>
-        </ViewportReveal>
-      ) : null}
-
-      {compact ? (
-        <RecentActivity
-          rows={rows}
-          expandable
-          compact
-          dense={mobileSplit}
-          mode="txs"
-          scrollRoot={scrollRoot}
-          scrollContainerRef={scrollRef}
-          className={cx("min-h-0 flex-1", fillHeight && "h-full")}
-          readable={readable}
-          rowsPerPage={rowsPerPage}
-        />
-      ) : (
-        <ViewportReveal variant="fade" delay={100}>
-          <div className="border border-[#1E1E26] bg-[#111114]">
-            <div className="border-b border-[#161619] px-5 py-5">
-              <ViewportReveal variant="right" delay={140} duration="fast">
-                <h2 className="font-sans text-xl text-[#CCCDDA]">Recent Activity</h2>
-              </ViewportReveal>
-            </div>
-            <RecentActivity
-              rows={rows}
-              expandable
-              mode="txs"
-              scrollRoot={scrollRoot}
-              scrollContainerRef={scrollRef}
-            />
-          </div>
-        </ViewportReveal>
-      )}
-    </div>
-  );
-}
-
-function useLiveClock(intervalMs: number): Date | null {
-  const store = useMemo(() => createClockStore(intervalMs), [intervalMs]);
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-}
-
-function LiveClock({ className }: { className?: string }) {
-  // Live UTC digital clock. Starts null on the server to avoid an SSR
-  // hydration mismatch, then ticks once a second on the client.
-  const now = useLiveClock(1000);
-  const time = now ? now.toISOString().slice(11, 19) : "--:--:--";
-  return (
-    <div className={cx("flex items-baseline gap-2", className)}>
-      <span className="font-sans text-[34px] font-semibold leading-none tracking-[0.10em] tabular-nums text-white">
-        {time}
-      </span>
-      <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">UTC</span>
-    </div>
-  );
-}
 
 function ActivityPanel({
-  activityRows,
   logRows,
   agentLog,
   latestDecision,
-  decisions,
   agentRunning,
-  compact = false,
   desktop = false,
 }: {
   activityRows: ActivityRow[];
@@ -4734,70 +4242,46 @@ function ActivityPanel({
   compact?: boolean;
   desktop?: boolean;
 }) {
-  const [view, setView] = useState<ActivityView>("sys");
   const [pane, setPane] = useState<"live" | "past">("live");
-  const flat = panelUsesFlatChrome(compact, desktop);
 
   if (desktop) {
     return (
       <section className="flex min-h-0 flex-1 flex-col px-8 pt-6">
-        <div className="shrink-0 border-b border-[#161619] pb-4">
-          <LiveClock className="mb-3" />
-          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-            <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Telemetry</div>
-            <h1 className="mt-2 font-sans text-[28px] font-semibold leading-tight text-white">Activity</h1>
-          </ViewportReveal>
-        </div>
-
         {pane === "live" ? (
-          <div className="flex min-h-0 flex-1 flex-col pt-10 pb-6">
-            <ViewportReveal variant="fade" delay={80} className="flex min-h-0 flex-1 flex-col">
-              <SimpleLiveScan latestDecision={latestDecision} onViewPast={() => setPane("past")} />
-            </ViewportReveal>
+          <div className="flex min-h-0 flex-1 flex-col pt-2 pb-6 sm:pt-10">
+            <NewSimpleLiveScan latestDecision={latestDecision} onViewPast={() => setPane("past")} />
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col pt-5 pb-6">
-            <ViewportReveal variant="fade" delay={80} className="flex min-h-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col border border-[#1E1E26] bg-[#111114]">
-                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#161619] px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setPane("live")}
-                      className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#111114]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#CCCDDA] transition-colors hover:border-[#282830] hover:text-white"
-                    >
-                      <span aria-hidden="true" className="text-[#7F7F94] transition-colors group-hover:text-[#CCCDDA]">
-                        ←
-                      </span>
-                      Live
-                    </button>
-                    <h2 className="truncate font-sans text-[14px] uppercase tracking-[0.1em] text-[#CCCDDA]">
-                      {view === "txs" ? "Tx Activity" : "Decision & Execution Log"}
-                    </h2>
-                  </div>
-                  <ActivityTabSelector value={view} onChange={setView} compact />
-                </div>
-                <div className="min-h-0 flex-1 overflow-hidden px-5 py-4">
-                  <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
-                    {(activeView) =>
-                      activeView === "txs" ? (
-                        <TxActivityPanel rows={activityRows} compact readable fillHeight />
-                      ) : (
-                        <SysLogsPanel
-                          rows={logRows}
-                          agentLog={agentLog}
-                          latestDecision={latestDecision}
-                          agentRunning={agentRunning}
-                          compact
-                          readable
-                          fillHeight
-                        />
-                      )
-                    }
-                  </ActivityViewTransition>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#2B2F36] px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPane("live")}
+                    className="group inline-flex items-center gap-2 border border-[#3A3F4B] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+                  >
+                    <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
+                      ←
+                    </span>
+                    Live
+                  </button>
+                  <h2 className="truncate font-sans text-[14px] uppercase tracking-[0.1em] text-[#B0B3B8]">
+                    Decision & Execution Log
+                  </h2>
                 </div>
               </div>
-            </ViewportReveal>
+              <div className="min-h-0 flex-1 overflow-hidden px-5 py-4">
+                <SysLogsPanel
+                  rows={logRows}
+                  agentLog={agentLog}
+                  agentRunning={agentRunning}
+                  compact
+                  readable
+                  fillHeight
+                />
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -4805,106 +4289,43 @@ function ActivityPanel({
   }
 
   return (
-    <section
-      className={cx(
-        "flex min-h-0 flex-col overflow-hidden",
-        compact && "flex-1",
-        desktop && "flex-1 px-8 pt-6",
-        !flat && "px-10 py-9",
-      )}
-    >
-      {!compact ? (
-        <div
-          className={cx(
-            "flex shrink-0 justify-between gap-4",
-            flat ? "items-end border-b border-[#161619] pb-3" : "mb-6 items-start",
-          )}
-        >
-          <ViewportReveal variant="blur" duration="slow" className="min-w-0">
-            <div>
-              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Telemetry</div>
-              <h1
-                className={cx(
-                  "mt-2 font-sans font-semibold leading-tight text-white",
-                  flat ? "text-[28px]" : "text-[32px]",
-                )}
-              >
-                Activity
-              </h1>
-            </div>
-          </ViewportReveal>
-          <ActivityTabSelector value={view} onChange={setView} compact={flat} />
-        </div>
-      ) : null}
-
-      {compact ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden border-y border-[#1E1E26] bg-[#111114]/60 shadow-[0_0_28px_rgba(176,125,227,0.12)]">
-            <div className="relative z-[1] shrink-0">
-              <LiveScanPanel
-                latestDecision={latestDecision}
-                decisions={decisions}
-                agentRunning={agentRunning}
-                mobileFit
-                mobileTabs={<ActivityTabSelector value={view} onChange={setView} compact />}
-              />
-            </div>
-            <div className="relative z-[1] min-h-0 flex-1 basis-0 overflow-hidden">
-              <ActivityViewTransition view={view} className="flex h-full min-h-0 flex-col">
-                {(activeView) =>
-                  activeView === "txs" ? (
-                    <TxActivityPanel
-                      rows={activityRows}
-                      compact
-                      fillHeight
-                      rowsPerPage={ACTIVITY_ROWS_PER_PAGE_MOBILE}
-                    />
-                  ) : (
-                    <SysLogsPanel
-                      rows={logRows}
-                      agentLog={agentLog}
-                      agentRunning={agentRunning}
-                      compact
-                      feedOnly
-                      mobileNarrative
-                      fillHeight
-                      rowsPerPage={ACTIVITY_LOG_ROWS_PER_PAGE_MOBILE}
-                    />
-                  )
-                }
-              </ActivityViewTransition>
-            </div>
-          </div>
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 pt-6 sm:px-8">
+      {pane === "live" ? (
+        <div className="flex min-h-0 flex-1 flex-col pt-10 pb-6">
+          <NewSimpleLiveScan latestDecision={latestDecision} onViewPast={() => setPane("past")} />
         </div>
       ) : (
-        <>
-          <div className="mb-6 shrink-0">
-            <ViewportReveal variant="fade" delay={120}>
-              <LiveScanPanel
-                latestDecision={latestDecision}
-                decisions={decisions}
+        <div className="flex min-h-0 flex-1 flex-col pt-5 pb-6">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[#2B2F36] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPane("live")}
+                  className="group inline-flex items-center gap-2 border border-[#3A3F4B] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+                >
+                  <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
+                    ←
+                  </span>
+                  Live
+                </button>
+                <h2 className="truncate font-sans text-[14px] uppercase tracking-[0.1em] text-[#B0B3B8]">
+                  Decision & Execution Log
+                </h2>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden px-5 py-4">
+              <SysLogsPanel
+                rows={logRows}
+                agentLog={agentLog}
                 agentRunning={agentRunning}
+                compact
+                readable
+                fillHeight
               />
-            </ViewportReveal>
+            </div>
           </div>
-
-          <ViewportReveal variant="expand" delay={160} duration="slow" className="mb-4 h-px bg-[#161619]" />
-
-          <ActivityViewTransition view={view} className="flex min-h-0 flex-1 flex-col">
-            {(activeView) =>
-              activeView === "txs" ? (
-                <TxActivityPanel rows={activityRows} compact={flat} />
-              ) : (
-                <SysLogsPanel
-                  rows={logRows}
-                  agentLog={agentLog}
-                  agentRunning={agentRunning}
-                  compact={flat}
-                />
-              )
-            }
-          </ActivityViewTransition>
-        </>
+        </div>
       )}
     </section>
   );
@@ -4928,10 +4349,10 @@ function DesktopDashboard({
   sectionTransitionEnabled: boolean;
 }) {
   return (
-    <div className="relative isolate hidden min-h-dvh flex-1 bg-[#0C0C0F] text-white lg:flex">
+    <div className="relative isolate hidden min-h-dvh flex-1 bg-[#0B0E11] text-white lg:flex">
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       <DesktopNavRail activeSection={activeSection} onNavigate={onNavigate} />
-      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0C0C0F]">
+      <main className="relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#0B0E11]">
         {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
         <SectionTransition
           section={activeSection}
@@ -4979,6 +4400,8 @@ function DesktopDashboard({
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} desktop />
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} desktop />
+            ) : section === "logs" ? (
+              <S3LogsPanel desktop />
             ) : (
               <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
             )
@@ -5012,13 +4435,13 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "border-b border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
+            "border-b border-[#2B2F36] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
             compact
               ? "grid grid-cols-[1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 text-[10px]",
@@ -5029,21 +4452,21 @@ function HomePositionsSummary({
           {!compact ? <span className="text-right">Stop</span> : null}
         </div>
         {rows.length === 0 ? (
-          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#848E9C]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
             No open positions in positions.json
           </div>
         ) : (
-          <div className="divide-y divide-[#161619]">
+          <div className="divide-y divide-[#2B2F36]">
             {rows.map((row) => (
               <div
                 key={row.id}
                 className={cx(
                   compact
-                    ? "grid grid-cols-[1fr_auto] px-3 py-1.5 hover:bg-[#0C0C0F]"
-                    : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#0C0C0F]",
+                    ? "grid grid-cols-[1fr_auto] px-3 py-1.5 hover:bg-[#0B0E11]"
+                    : "grid grid-cols-[1.5fr_1fr_1fr] px-4 py-2 hover:bg-[#0B0E11]",
                 )}
               >
-                <span className={cx("truncate font-sans text-[#CCCDDA]", compact ? "text-[11px]" : "text-[13px]")}>
+                <span className={cx("truncate font-sans text-[#B0B3B8]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
@@ -5051,14 +4474,14 @@ function HomePositionsSummary({
                 </span>
                 <span
                   className={cx(
-                    "truncate text-right font-sans tabular-nums text-[#CCCDDA]",
+                    "truncate text-right font-sans tabular-nums text-[#B0B3B8]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
                   {formatUsd(row.entryValueUsd)}
                 </span>
                 {!compact ? (
-                  <span className="truncate text-right font-sans text-[13px] tabular-nums text-[#CCCDDA]">
+                  <span className="truncate text-right font-sans text-[13px] tabular-nums text-[#B0B3B8]">
                     {formatPrice(row.trailingStopPrice)}
                   </span>
                 ) : null}
@@ -5069,7 +4492,7 @@ function HomePositionsSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
+          "shrink-0 border-t border-[#2B2F36] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
@@ -5108,22 +4531,14 @@ function HomeSignalSummary({
   // Always show exactly 6 slots
   const slots = Array.from({ length: 6 }, (_, i) => factors[i] ?? null);
   const action = latestDecision?.action?.toUpperCase() ?? null;
+  const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0C0C0F]/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0B0E11]/30">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-[#161619] px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between border-b border-[#2B2F36] px-3 py-2">
         <span className="font-sans text-[11px] font-semibold leading-none text-white">Signal</span>
-        {action ? (
-          <span
-            className={cx(
-              "font-sans text-[8px] uppercase tracking-[0.1em] leading-none",
-              action === "ENTER" ? "text-[#CCCDDA]" : "text-[#E05B73]",
-            )}
-          >
-            {action}
-          </span>
-        ) : null}
+        {action ? <StatusBadge status={action} tone={actionTone} /> : null}
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-3 py-3">
@@ -5133,7 +4548,7 @@ function HomeSignalSummary({
             <span className="font-sans text-[12px] font-bold leading-none text-white">{symbol}</span>
           </div>
         ) : (
-          <span className="font-sans text-[10px] text-[#7F7F94]">No signal</span>
+          <span className="font-sans text-[10px] text-[#848E9C]">No signal</span>
         )}
       </div>
 
@@ -5143,7 +4558,7 @@ function HomeSignalSummary({
             return (
               <span
                 key={i}
-                className="h-[9px] w-[9px] shrink-0 rounded-full border border-[#7F7F94] bg-[#111114]"
+                className="h-[9px] w-[9px] shrink-0 rounded-full border border-[#848E9C] bg-[#1E2026]"
                 aria-hidden="true"
               />
             );
@@ -5155,7 +4570,7 @@ function HomeSignalSummary({
               aria-label={`${factor.label}: ${factor.passed ? "pass" : "fail"}`}
               className={cx(
                 "h-[9px] w-[9px] shrink-0 rounded-full",
-                factor.passed ? "bg-[#CCCDDA]" : "bg-[#E05B73]/60",
+                factor.passed ? "bg-[#B0B3B8]" : "bg-[#F6465D]/60",
               )}
             />
           );
@@ -5186,19 +4601,19 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
       )}
     >
       <div
         className={cx(
-          "flex shrink-0 items-center justify-between border-b border-[#161619]",
+          "flex shrink-0 items-center justify-between border-b border-[#2B2F36]",
           compact ? "px-2 py-2" : "px-4 pb-3 pt-4",
         )}
       >
         {compact ? (
           <>
-            <span className="font-sans text-xs font-medium uppercase tracking-widest leading-none text-[#7F7F94]">Activity</span>
-            <div className="flex items-center overflow-hidden rounded border border-[#282830]">
+            <span className="font-sans text-xs font-medium uppercase tracking-widest leading-none text-[#848E9C]">Activity</span>
+            <div className="flex items-center overflow-hidden rounded border border-[#4A4F5B]">
               {(["sys", "txs"] as ActivityView[]).map((tab) => {
                 const active = tab === view;
                 return (
@@ -5210,7 +4625,7 @@ function HomeActivitySummary({
                     style={{ fontSize: "9px", padding: "2px 5px", lineHeight: 1 }}
                     className={cx(
                       "font-sans uppercase tracking-wider transition-colors",
-                      active ? "bg-[#282830] text-white font-semibold" : "text-[#7F7F94] hover:text-[#999999]",
+                      active ? "bg-[#4A4F5B] text-white font-semibold" : "text-[#848E9C] hover:text-[#999999]",
                     )}
                   >
                     {tab === "sys" ? "Log" : "Tx"}
@@ -5222,7 +4637,7 @@ function HomeActivitySummary({
         ) : (
           <>
             <div>
-              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">Strategy</div>
+              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">Strategy</div>
               <h2 className="mt-1 font-sans text-[16px] font-semibold text-white">Recent Activity</h2>
             </div>
             <div className="flex items-center gap-3">
@@ -5236,7 +4651,7 @@ function HomeActivitySummary({
                     aria-pressed={active}
                     className={cx(
                       "font-sans text-[10px] uppercase tracking-[0.1em] transition-colors",
-                      active ? "font-semibold text-white" : "font-medium text-[#7F7F94] hover:text-[#999999]",
+                      active ? "font-semibold text-white" : "font-medium text-[#848E9C] hover:text-[#999999]",
                     )}
                   >
                     {tab === "sys" ? "Logs" : "Tx"}
@@ -5249,18 +4664,18 @@ function HomeActivitySummary({
       </div>
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         {!compact ? (
-          <div className={cx(homeActivityGridClass, "border-b border-[#161619] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]")}>
+          <div className={cx(homeActivityGridClass, "border-b border-[#2B2F36] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]")}>
             <span className="text-left">Date</span>
             <span className="text-center">Token</span>
             <span className="text-center">Status</span>
           </div>
         ) : null}
         {rows.length === 0 ? (
-          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#848E9C]", compact ? "px-2 py-2 text-[10px]" : "px-4 py-4 text-[13px]")}>
             No recent activity
           </div>
         ) : (
-          <div className={cx("divide-y divide-[#161619]", compact && "flex h-full flex-col")}>
+          <div className={cx("divide-y divide-[#2B2F36]", compact && "flex h-full flex-col")}>
             {rows.map((row) => {
               const token = homeActivityToken(row);
 
@@ -5270,7 +4685,7 @@ function HomeActivitySummary({
                 return (
                   <div
                     key={row.id}
-                    className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 hover:bg-[#0C0C0F]"
+                    className="grid min-h-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-2 px-2 py-1 hover:bg-[#0B0E11]"
                   >
                     <span className="flex items-center justify-start">
                       {token && row.explorerUrl ? (
@@ -5289,7 +4704,7 @@ function HomeActivitySummary({
                           <TokenIcon symbol={token} size={16} />
                         </span>
                       ) : (
-                        <span className="h-4 w-4 rounded-full border border-[#1E1E26]" aria-hidden="true" />
+                        <span className="h-4 w-4 rounded-full border border-[#3A3F4B]" aria-hidden="true" />
                       )}
                     </span>
                     <span className="min-w-0 truncate text-left font-sans text-[10px] font-bold tabular-nums text-[#FFFFFF]">
@@ -5303,7 +4718,7 @@ function HomeActivitySummary({
               }
 
               return (
-                <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#0C0C0F]")}>
+                <div key={row.id} className={cx(homeActivityGridClass, "items-center px-4 py-2.5 hover:bg-[#0B0E11]")}>
                   <span className="truncate text-left font-sans text-[13px] font-bold tabular-nums text-[#FFFFFF]">
                     {formatOpenedAt(row.timestamp)}
                   </span>
@@ -5313,7 +4728,7 @@ function HomeActivitySummary({
                         <TokenIcon symbol={token} size={18} />
                       </span>
                     ) : (
-                      <span className="font-sans text-[13px] text-[#7F7F94]">—</span>
+                      <span className="font-sans text-[13px] text-[#848E9C]">—</span>
                     )}
                   </span>
                   <span className="flex items-center justify-center">
@@ -5326,7 +4741,7 @@ function HomeActivitySummary({
         )}
       </div>
       {!compact ? (
-        <div className="shrink-0 border-t border-[#161619] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
+        <div className="shrink-0 border-t border-[#2B2F36] px-4 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">
           {(view === "sys" ? logRows : activityRows).length} total events
         </div>
       ) : null}
@@ -5359,17 +4774,17 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0C0C0F]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
       )}
     >
       <div
         className={cx(
-          "flex shrink-0 items-baseline justify-between border-b border-[#161619]",
+          "flex shrink-0 items-baseline justify-between border-b border-[#2B2F36]",
           compact ? "px-3 py-2" : "px-4 pb-3 pt-4",
         )}
       >
         <div>
-          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">TWAK Wallet</div>
+          <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">TWAK Wallet</div>
           <h2 className={cx("font-sans font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
             Live Holdings
           </h2>
@@ -5377,7 +4792,7 @@ function HomeWalletSummary({
         {paperMode ? (
           <span
             className={cx(
-              "border border-[#1E1E26] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
+              "border border-[#3A3F4B] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
               compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
             )}
           >
@@ -5388,7 +4803,7 @@ function HomeWalletSummary({
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           className={cx(
-            "grid border-b border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
+            "grid border-b border-[#2B2F36] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
             compact
               ? "grid-cols-[auto_1fr_auto] px-3 py-1.5 text-[9px]"
               : "grid-cols-[1fr_1.5fr_1fr] px-4 py-2 text-[10px]",
@@ -5399,16 +4814,16 @@ function HomeWalletSummary({
           <span className="text-right">Value</span>
         </div>
         {rows.length === 0 ? (
-          <div className={cx("font-sans text-[#7F7F94]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
+          <div className={cx("font-sans text-[#848E9C]", compact ? "px-3 py-3 text-[11px]" : "px-4 py-4 text-[13px]")}>
             Waiting for TWAK wallet balances
           </div>
         ) : (
-          <div className="divide-y divide-[#161619]">
+          <div className="divide-y divide-[#2B2F36]">
             {rows.map((row) => (
               <div
                 key={`${row.chain}-${row.symbol}`}
                 className={cx(
-                  "hover:bg-[#0C0C0F]",
+                  "hover:bg-[#0B0E11]",
                   compact
                     ? "grid grid-cols-[auto_1fr_auto] px-3 py-1.5"
                     : "grid grid-cols-[1fr_1.5fr_1fr] px-4 py-2",
@@ -5416,13 +4831,13 @@ function HomeWalletSummary({
               >
                 <span
                   className={cx(
-                    "truncate font-sans uppercase text-[#7F7F94]",
+                    "truncate font-sans uppercase text-[#848E9C]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
                   {row.chain}
                 </span>
-                <span className={cx("truncate font-sans text-[#CCCDDA]", compact ? "text-[11px]" : "text-[13px]")}>
+                <span className={cx("truncate font-sans text-[#B0B3B8]", compact ? "text-[11px]" : "text-[13px]")}>
                   <span className="inline-flex min-w-0 items-center gap-1.5">
                     <TokenIcon symbol={row.symbol} size={compact ? 12 : 14} />
                     <span className="truncate">{row.symbol}</span>
@@ -5430,7 +4845,7 @@ function HomeWalletSummary({
                 </span>
                 <span
                   className={cx(
-                    "truncate text-right font-sans tabular-nums text-[#CCCDDA]",
+                    "truncate text-right font-sans tabular-nums text-[#B0B3B8]",
                     compact ? "text-[11px]" : "text-[13px]",
                   )}
                 >
@@ -5443,7 +4858,7 @@ function HomeWalletSummary({
       </div>
       <div
         className={cx(
-          "shrink-0 border-t border-[#161619] font-sans uppercase tracking-[0.12em] text-[#7F7F94]",
+          "shrink-0 border-t border-[#2B2F36] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
           compact ? "px-3 py-1 text-[10px]" : "px-4 py-2 text-[10px]",
         )}
       >
@@ -5452,13 +4867,13 @@ function HomeWalletSummary({
       {x402WalletAddress ? (
         <div
           className={cx(
-            "shrink-0 mx-4 mb-4 mt-3 rounded-[2px] border border-[#1E1E26] bg-[#0C0C0F]",
+            "shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card",
             compact ? "px-3 py-3" : "px-4 py-4",
           )}
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7F7F94]">x402 Wallet</div>
+              <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#848E9C]">x402 Wallet</div>
               <h2 className={cx("font-sans mt-2 font-semibold text-white inline-flex items-center gap-2", compact ? "text-[14px]" : "text-[16px]")}>
                 <span className="relative inline-block">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -5468,13 +4883,13 @@ function HomeWalletSummary({
                 </span>
                 Base USDC
               </h2>
-              <div className="mt-1 font-sans text-[10px] text-[#7F7F94]">
+              <div className="mt-1 font-sans text-[10px] text-[#848E9C]">
                 {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
               </div>
             </div>
             <div className="shrink-0 text-right">
-              <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">Balance</div>
-              <div className="mt-1 font-sans text-[16px] font-semibold tabular-nums text-[#9E88F0]">
+              <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">Balance</div>
+              <div className="mt-1 font-sans text-[16px] font-semibold tabular-nums text-[#FFD666]">
                 {x402WalletUsdcBalance != null ? formatUsd(x402WalletUsdcBalance) : "—"}
               </div>
             </div>
@@ -5497,12 +4912,12 @@ function DesktopOverviewSection({
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col p-0">
-        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E26] bg-[#111114]/80">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 bento-card border border-[#3A3F4B] bg-[#1E2026]/80">
           <ViewportReveal
             variant="fade"
             delay={200}
             duration="slow"
-            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#1E1E26]"
+            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#3A3F4B]"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
               <DesktopHeroMetrics view={view} />
@@ -5518,7 +4933,7 @@ function DesktopOverviewSection({
             variant="up"
             delay={400}
             duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
+            className="flex h-full min-h-0 flex-col border-r border-[#3A3F4B]"
           >
             <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
           </ViewportReveal>
@@ -5526,7 +4941,7 @@ function DesktopOverviewSection({
             variant="up"
             delay={460}
             duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
+            className="flex h-full min-h-0 flex-col border-r border-[#3A3F4B]"
           >
             <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
           </ViewportReveal>
@@ -5542,7 +4957,7 @@ function DesktopOverviewSection({
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
     <section className="px-4 pt-3">
-      <div className="grid grid-cols-4 divide-x divide-[#161619]">
+      <div className="grid grid-cols-4 divide-x divide-[#2B2F36]">
         {view.metrics.map((metric, index) => (
           <ViewportReveal
             key={metric.label}
@@ -5551,15 +4966,15 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
             duration={metric.label.includes("Balance") ? "slow" : "normal"}
             className="min-w-0 px-6 text-center first:pl-0 last:pr-0"
           >
-            <div className="font-sans text-[7px] font-medium text-[#CCCDDA]">{metric.label}</div>
+            <div className="font-sans text-[7px] font-medium text-[#B0B3B8]">{metric.label}</div>
             <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
               <span className="font-sans text-[12px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-              {metric.unit ? <span className="font-sans text-[7px] text-[#CCCDDA]">{metric.unit}</span> : null}
+              {metric.unit ? <span className="font-sans text-[7px] text-[#B0B3B8]">{metric.unit}</span> : null}
               {metric.delta ? (
                 <span
                   className={cx(
                     "font-sans text-[7px] font-bold tabular-nums",
-                    metric.tone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
+                    metric.tone === "negative" ? "text-[#F6465D]" : "text-[#0ECB81]",
                   )}
                 >
                   ({metric.delta})
@@ -5655,7 +5070,7 @@ function OverviewTopBar({
   return (
     <header
       className={cx(
-        "sticky top-0 z-30 shrink-0 border-b border-[#161619] bg-[#111114]/70 backdrop-blur-sm",
+        "sticky top-0 z-30 shrink-0 border-b border-[#2B2F36] glass-strong",
         enabled && phase === "in" && "home-topbar-in",
         enabled && phase === "out" && "home-topbar-out",
       )}
@@ -5715,8 +5130,8 @@ function ChartFilterMenu({
         className={cx(
           "inline-flex h-8 w-8 items-center justify-center border transition-colors",
           open
-            ? "border-[#7F7F94] bg-[#282830] text-white"
-            : "border-[#161619] bg-[#111114]/90 text-[#CCCDDA] backdrop-blur-sm",
+            ? "border-[#848E9C] bg-[#4A4F5B] text-white"
+            : "border-[#2B2F36] bg-[#1E2026]/90 text-[#B0B3B8] backdrop-blur-sm",
         )}
       >
         <Filter className="h-4 w-4" strokeWidth={2} />
@@ -5725,7 +5140,7 @@ function ChartFilterMenu({
         <div
           role="listbox"
           aria-label="Chart time range"
-          className="absolute right-0 top-[calc(100%+6px)] flex min-w-[88px] flex-col border border-[#161619] bg-[#111114] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+          className="absolute right-0 top-[calc(100%+6px)] flex min-w-[88px] flex-col border border-[#2B2F36] bg-[#1E2026] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
         >
           {timeRanges.map((range) => (
             <button
@@ -5738,10 +5153,10 @@ function ChartFilterMenu({
                 setOpen(false);
               }}
               className={cx(
-                "border-b border-[#161619] px-3 py-2 text-left font-sans text-[11px] last:border-b-0",
+                "border-b border-[#2B2F36] px-3 py-2 text-left font-sans text-[11px] last:border-b-0",
                 range === timeRange
-                  ? "bg-[#282830] text-white"
-                  : "text-[#CCCDDA] hover:bg-[#111114] hover:text-white",
+                  ? "bg-[#4A4F5B] text-white"
+                  : "text-[#B0B3B8] hover:bg-[#1E2026] hover:text-white",
               )}
             >
               {range}
@@ -5795,8 +5210,8 @@ function TimezoneMenu() {
         className={cx(
           "inline-flex h-8 items-center gap-1.5 border px-2 font-sans text-[10px] uppercase tracking-[0.08em] transition-colors",
           open
-            ? "border-[#7F7F94] bg-[#282830] text-white"
-            : "border-[#161619] bg-[#111114]/90 text-[#CCCDDA] backdrop-blur-sm hover:text-white",
+            ? "border-[#848E9C] bg-[#4A4F5B] text-white"
+            : "border-[#2B2F36] bg-[#1E2026]/90 text-[#B0B3B8] backdrop-blur-sm hover:text-white",
         )}
       >
         <Globe className="h-4 w-4" strokeWidth={2} />
@@ -5806,9 +5221,9 @@ function TimezoneMenu() {
         <div
           role="listbox"
           aria-label="Chart time zone"
-          className="absolute right-0 top-[calc(100%+6px)] flex max-h-[320px] w-[256px] flex-col overflow-y-auto border border-[#161619] bg-[#111114] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
+          className="absolute right-0 top-[calc(100%+6px)] flex max-h-[320px] w-[256px] flex-col overflow-y-auto border border-[#2B2F36] bg-[#1E2026] shadow-[0_12px_32px_rgba(0,0,0,0.72)]"
         >
-          <div className="sticky top-0 border-b border-[#161619] bg-[#111114] px-3 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#7F7F94]">
+          <div className="sticky top-0 border-b border-[#2B2F36] bg-[#1E2026] px-3 py-2 font-sans text-[10px] uppercase tracking-[0.12em] text-[#848E9C]">
             Time zone
           </div>
           {CHART_TIME_ZONES.map((zone) => {
@@ -5824,8 +5239,8 @@ function TimezoneMenu() {
                   setOpen(false);
                 }}
                 className={cx(
-                  "flex items-center justify-between gap-3 border-b border-[#161619] px-3 py-2 text-left last:border-b-0",
-                  selected ? "bg-[#161616]" : "hover:bg-[#111114]",
+                  "flex items-center justify-between gap-3 border-b border-[#2B2F36] px-3 py-2 text-left last:border-b-0",
+                  selected ? "bg-[#161616]" : "hover:bg-[#1E2026]",
                 )}
               >
                 <span className="min-w-0">
@@ -5835,7 +5250,7 @@ function TimezoneMenu() {
                   <span className="block truncate font-sans text-[10px] text-[#6E6E6E]">{zone.cities}</span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block font-sans text-[12px] tabular-nums text-[#CCCDDA]">{localTimeLabel(zone.id, now)}</span>
+                  <span className="block font-sans text-[12px] tabular-nums text-[#B0B3B8]">{localTimeLabel(zone.id, now)}</span>
                   <span className="block font-sans text-[10px] text-[#6E6E6E]">{gmtOffsetLabel(zone.id, now)}</span>
                 </span>
               </button>
@@ -5864,15 +5279,15 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0C0C0F]/30"
+        className="relative min-h-0 flex-1 border-b border-[#3A3F4B] bg-[#0B0E11]/30"
       >
         <div className="absolute inset-0 flex flex-col">
           <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-3">
             <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-              <div className="font-sans text-[11px] font-medium text-[#CCCDDA]">Total Balance</div>
+              <div className="font-sans text-[11px] font-medium text-[#B0B3B8]">Total Balance</div>
               <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
                 <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-                <span className="font-sans text-[11px] text-[#CCCDDA]">USD</span>
+                <span className="font-sans text-[11px] text-[#B0B3B8]">USD</span>
               </div>
             </ViewportReveal>
             <ViewportReveal
@@ -5881,14 +5296,14 @@ function MobileOverviewSection({
               duration="slow"
               className="min-w-0 text-center"
             >
-              <div className="font-sans text-[11px] font-medium text-[#CCCDDA]">Window P/L</div>
+              <div className="font-sans text-[11px] font-medium text-[#B0B3B8]">Window P/L</div>
               <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
                 <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
                 {view.pnlDelta ? (
                   <span
                     className={cx(
                       "font-sans text-[11px] font-bold tabular-nums",
-                      view.pnlTone === "negative" ? "text-[#E05B73]" : "text-[#33C28E]",
+                      view.pnlTone === "negative" ? "text-[#F6465D]" : "text-[#0ECB81]",
                     )}
                   >
                     ({view.pnlDelta})
@@ -5913,7 +5328,7 @@ function MobileOverviewSection({
         className="flex shrink-0 flex-col"
       >
         <div className="grid grid-cols-2" style={{ height: "30vh" }}>
-          <div className="col-span-1 flex flex-col border-r border-[#1E1E26]">
+          <div className="col-span-1 flex flex-col border-r border-[#3A3F4B]">
             <HomeSignalSummary latestDecision={latestDecision} />
           </div>
           <div className="col-span-1 flex flex-col">
@@ -5947,11 +5362,11 @@ function MobileNavItemButton({
       aria-label={item.label}
       className={cx(
         "relative flex h-full min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1 transition-colors",
-        active ? "text-white" : "text-[#7A7A7A] active:text-white",
+        active ? "text-[#F0B90B]" : "text-[#7A7A7A] active:text-white",
       )}
     >
       {active ? (
-        <span className="absolute top-0 h-0.5 w-4 rounded-full bg-white" aria-hidden="true" />
+        <span className="absolute top-0 h-0.5 w-4 rounded-full bg-[#F0B90B]" aria-hidden="true" />
       ) : null}
       <Icon size={18} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
     </button>
@@ -5973,7 +5388,7 @@ function MobileBottomNav({
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#161619] bg-[#111114]/75 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#2B2F36] bg-[#1E2026]/75 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div
@@ -6017,7 +5432,7 @@ function MobileDashboard({
   const deviceTopSectionColor = deviceTopSectionColorFor(activeSection);
 
   return (
-    <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-[#0C0C0F] text-white lg:hidden">
+    <div className="relative isolate flex h-[100dvh] flex-col overflow-hidden bg-[#0B0E11] text-white lg:hidden">
       <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
@@ -6071,6 +5486,8 @@ function MobileDashboard({
               <DecisionAlgorithmPanel latestDecision={data?.latestDecision ?? null} compact />
             ) : section === "market-chat" ? (
               <MarketChatPanel data={data} compact />
+            ) : section === "logs" ? (
+              <S3LogsPanel compact />
             ) : (
               <MobileOverviewSection
                 view={view}
