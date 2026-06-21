@@ -2520,7 +2520,7 @@ function ActivityDetailPanel({
               <span
                 key={factor.key}
                 className={cx(
-                  "inline-flex border px-2 py-1 font-sans uppercase tracking-[0.08em]",
+                  "inline-flex items-center gap-1.5 border px-2 py-1 font-sans uppercase tracking-[0.08em]",
                   readable ? "text-[11px]" : "text-[10px]",
                   factor.passed
                     ? "border-[#33C28E]/40 bg-[#0C0C0F] text-[#33C28E]"
@@ -2528,6 +2528,11 @@ function ActivityDetailPanel({
                 )}
               >
                 {factor.passed ? "PASS" : "FAIL"} {factor.label}
+                {factor.reading ? (
+                  <span className="font-sans text-[9px] normal-case tracking-normal text-[#7C7C7C]">
+                    ({factor.reading})
+                  </span>
+                ) : null}
               </span>
             ))}
           </div>
@@ -5055,6 +5060,11 @@ function StaticFactorList({ factors }: { factors: ScanFactor[] }) {
               </span>
               <span className="min-w-0 flex-1 truncate uppercase tracking-[0.06em] text-[#CCCDDA]">
                 {factor.label}
+                {factor.reading ? (
+                  <span className="ml-1 font-sans text-[10px] normal-case tracking-normal text-[#7C7C7C]">
+                    · {factor.reading}
+                  </span>
+                ) : null}
               </span>
               <span className={cx("shrink-0 text-[10px] uppercase tracking-[0.12em]", tone)}>
                 {factor.passed ? "PASS" : "FAIL"}

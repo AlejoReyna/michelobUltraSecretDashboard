@@ -17,6 +17,7 @@ export type FactorScoreDetail = {
   key: string;
   label: string;
   passed: boolean;
+  reading?: string;
 };
 
 /**
@@ -180,11 +181,13 @@ function formatReasonCode(value: string | null | undefined) {
 
 function factorDetails(
   scores: StatusPayload["decisions"][number]["factor_scores"],
+  metrics: Record<string, string> | null | undefined,
 ): FactorScoreDetail[] {
   return ENTRY_FACTOR_KEYS.map((key) => ({
     key,
     label: FACTOR_LABELS[key] ?? key.replaceAll("_", " "),
     passed: Boolean(scores?.[key]),
+    reading: metrics?.[key] ?? undefined,
   }));
 }
 
@@ -324,7 +327,7 @@ export function detailsFromDecision(decision: StatusPayload["decisions"][number]
       },
       { label: "Reason", value: decision.reason?.trim() || "—" },
     ].filter((item): item is ActivityDetail => item != null),
-    factors: compliance ? [] : factorDetails(decision.factor_scores),
+    factors: compliance ? [] : factorDetails(decision.factor_scores, decision.factor_metrics),
     x402Evidence: x402Evidence(decision),
   };
 }
