@@ -1833,7 +1833,7 @@ function WalletPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#3A3F4B] bg-[#1E2026] bento-card",
+        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#1E2026] bento-card",
       )}
     >
       <div className={cx(flat ? "shrink-0 border-b border-[#2B2F36] pb-4" : "border-b border-[#2B2F36] px-5 py-5")}>
@@ -1914,7 +1914,7 @@ function WalletPanel({
         </table>
       </div>
       {x402WalletAddress ? (
-        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#1E1E26] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
           <ViewportReveal variant="blur" duration="slow">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -1942,7 +1942,7 @@ function WalletPanel({
           </ViewportReveal>
         </div>
       ) : (
-        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
+        <div className={cx("shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#1E1E26] bg-[#0B0E11] bento-card", flat ? "px-4 py-4" : "px-5 py-5")}>
           <ViewportReveal variant="blur" duration="slow">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -2254,7 +2254,7 @@ function X402PaymentsPanel({
         "flex min-h-0 flex-col",
         compact && "flex-1 px-4 pt-4",
         desktop && "flex-1 px-8 pt-6",
-        !flat && "mx-10 my-9 border border-[#3A3F4B] bg-[#1E2026] bento-card",
+        !flat && "mx-10 my-9 border border-[#1E1E26] bg-[#1E2026] bento-card",
       )}
     >
       <div className={cx(flat ? "shrink-0 border-b border-[#2B2F36] pb-4" : "border-b border-[#2B2F36] px-5 py-5")}>
@@ -2497,7 +2497,7 @@ function ActivityDetailPanel({
               <div
                 key={row.tool + row.factor}
                 className={cx(
-                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#3A3F4B] bg-[#1E2026]/50 px-2.5 py-1.5 font-sans",
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 border border-[#1E1E26] bg-[#1E2026]/50 px-2.5 py-1.5 font-sans",
                   readable ? "text-[11px]" : "text-[10px]",
                 )}
               >
@@ -3043,7 +3043,7 @@ function MobileLogFeed({
                       {token ? (
                         <TokenIcon symbol={token} size={18} />
                       ) : (
-                        <span className="h-[18px] w-[18px] rounded-full border border-[#3A3F4B]" aria-hidden="true" />
+                        <span className="h-[18px] w-[18px] rounded-full border border-[#1E1E26]" aria-hidden="true" />
                       )}
                     </ViewportReveal>
 
@@ -3539,7 +3539,7 @@ function CopyJsonButton({ json }: { json: object }) {
     <button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1.5 rounded-sm border border-[#3A3F4B] bg-[#0B0E11] px-2.5 py-1.5 font-sans text-[10px] uppercase tracking-[0.08em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+      className="inline-flex items-center gap-1.5 rounded-sm border border-[#1E1E26] bg-[#0B0E11] px-2.5 py-1.5 font-sans text-[10px] uppercase tracking-[0.08em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
     >
       {copied ? (
         <>
@@ -3655,8 +3655,8 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
               className={cx(
                 "inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
                 passed
-                  ? "border-[#3A3F4B] bg-[#0B0E11] text-[#0ECB81]"
-                  : "border-[#3A3F4B] bg-[#0B0E11] text-[#848E9C]"
+                  ? "border-[#1E1E26] bg-[#0B0E11] text-[#0ECB81]"
+                  : "border-[#1E1E26] bg-[#0B0E11] text-[#848E9C]"
               )}
             >
               <span className={cx("h-1 w-1 rounded-full", passed ? "bg-[#0ECB81]" : "bg-[#848E9C]")} />
@@ -3676,10 +3676,10 @@ function PositionEntryReason({ decision }: { decision: Decision | null }) {
           <span className={cx(
             "inline-flex items-center gap-1 border px-1.5 py-0.5 font-sans text-[9px] uppercase tracking-[0.06em]",
             decision.mlAudit.mlActive
-              ? "border-[#3A3F4B] bg-[#0ECB81]/10 text-[#0ECB81]"
+              ? "border-[#1E1E26] bg-[#0ECB81]/10 text-[#0ECB81]"
               : decision.mlAudit.mlEnabled
-                ? "border-[#3A3F4B] bg-[#FFD666]/10 text-[#FFD666]"
-                : "border-[#3A3F4B] bg-[#0B0E11] text-[#848E9C]"
+                ? "border-[#1E1E26] bg-[#FFD666]/10 text-[#FFD666]"
+                : "border-[#1E1E26] bg-[#0B0E11] text-[#848E9C]"
           )}>
             <span className={cx(
               "h-1 w-1 rounded-full",
@@ -3715,7 +3715,7 @@ function DesktopPositionCard({
       delay={index * 70}
       duration={index === 0 ? "slow" : "normal"}
       root={scrollRoot}
-      className="group overflow-hidden bento-card border border-[#2B2F36] bg-[#1E2026]/80 transition-colors hover:border-[#3A3F4B] hover:bg-[#0B0E11]"
+      className="group overflow-hidden bento-card border border-[#2B2F36] bg-[#1E2026]/80 transition-colors hover:border-[#1E1E26] hover:bg-[#0B0E11]"
     >
       <div className="grid min-h-[220px] grid-cols-1 xl:grid-cols-[minmax(150px,0.32fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col justify-between border-b border-[#2B2F36] px-5 py-5 xl:border-b-0 xl:border-r">
@@ -3942,13 +3942,13 @@ function ActivePositionsPanel({
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="grid flex-1 gap-4 sm:grid-cols-2">
             <ViewportReveal variant="fade" delay={100}>
-              <div className="bento-card border border-[#3A3F4B] bg-[#1E2026] px-5 py-4">
+              <div className="bento-card border border-[#1E1E26] bg-[#1E2026] px-5 py-4">
                 <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Open positions</div>
                 <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{rows.length}</div>
               </div>
             </ViewportReveal>
             <ViewportReveal variant="scale" delay={160} duration="slow">
-              <div className="bento-card border border-[#3A3F4B] bg-[#1E2026] px-5 py-4">
+              <div className="bento-card border border-[#1E1E26] bg-[#1E2026] px-5 py-4">
                 <div className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Total position value</div>
                 <div className="mt-2 font-sans text-[28px] font-semibold tabular-nums text-white">{totalPositionValue}</div>
               </div>
@@ -3960,7 +3960,7 @@ function ActivePositionsPanel({
 
       {!flat ? (
         <ViewportReveal variant="fade" delay={200}>
-          <div className="bento-card border border-[#3A3F4B] bg-[#1E2026]">
+          <div className="bento-card border border-[#1E1E26] bg-[#1E2026]">
             <div ref={scrollRef} className="console-scroll max-h-[min(70vh,720px)] overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -3981,7 +3981,7 @@ function ActivePositionsPanel({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-[#3A3F4B] bg-[#1E2026] px-4 py-2.5">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] bg-[#1E2026] px-4 py-2.5">
             <div className="flex items-center gap-3 font-sans text-[10px] uppercase tracking-[0.08em] text-[#848E9C]">
               <span>
                 Positions: <span className="text-white">{rows.length}</span>
@@ -3993,7 +3993,7 @@ function ActivePositionsPanel({
             </div>
             {copyButton}
           </div>
-          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#3A3F4B] bg-[#1E2026]">
+          <div className="mt-0 flex min-h-0 flex-1 flex-col border border-t-0 border-[#1E1E26] bg-[#1E2026]">
             <div ref={scrollRef} className="console-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
               <ActivePositionsTable rows={rows} compact={tableCompact} scrollRoot={scrollRoot} />
             </div>
@@ -4005,6 +4005,716 @@ function ActivePositionsPanel({
 }
 
 type ScanFactor = { key: string; label: string; passed: boolean; reading?: string | null };
+
+function useNow(tickMs = 1000) {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const interval = window.setInterval(onStoreChange, tickMs);
+      return () => window.clearInterval(interval);
+    },
+    () => Date.now(),
+    () => Date.now(),
+  );
+}
+
+function LiveScanPanel({
+  latestDecision,
+  decisions,
+  agentRunning,
+  compact = false,
+  mobileFit = false,
+  mobileTabs = null,
+  readable = false,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  decisions: StatusPayload["decisions"];
+  agentRunning: boolean;
+  compact?: boolean;
+  mobileFit?: boolean;
+  mobileTabs?: ReactNode;
+  readable?: boolean;
+}) {
+  const now = useNow();
+  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
+  const nextAt = useMemo(
+    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
+    [intervalMs, latestDecision?.timestamp],
+  );
+  const remainingMs = cycleCountdownMs(nextAt, now);
+  const countdownLabel =
+    remainingMs === null
+      ? "N/A"
+      : remainingMs <= 0
+        ? agentRunning
+          ? "Scanning…"
+          : "Due now"
+        : formatCycleCountdown(remainingMs);
+
+  const analysis = latestDecision ? detailsFromDecision(latestDecision) : null;
+  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
+  const symbol = latestDecision?.symbol ?? null;
+  const sectionGap = mobileFit ? "mt-2 border-t border-[#2B2F36] pt-2" : cx("mt-4 border-t border-[#2B2F36] pt-4", compact && "mt-3 pt-3");
+  const labelClass = mobileFit
+    ? "font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]"
+    : cx("font-sans uppercase tracking-[0.14em] text-[#848E9C]", readable ? "text-[11px]" : "text-[10px]");
+
+  return (
+    <div
+      className={cx(
+        !mobileFit && "border border-[#1E1E26] bg-[#1E2026] bento-card",
+        mobileFit && "flex min-h-0 flex-col overflow-hidden px-3 py-3 shadow-[0_0_24px_rgba(255,255,255,0.04)]",
+        !mobileFit && compact && "px-4 py-4",
+        !mobileFit && !compact && "px-5 py-5",
+      )}
+    >
+      {mobileFit ? (
+        <div className="flex shrink-0 items-start justify-between gap-3 pb-2">
+          <div className="font-sans text-[11px] leading-none text-[#848E9C]">
+            Cycle #{latestDecision?.cycle_number ?? "N/A"}
+          </div>
+          {mobileTabs}
+        </div>
+      ) : null}
+      {mobileFit ? (
+        <div className="flex shrink-0 items-stretch gap-2 border-b border-[#2B2F36] pb-2">
+          <div className="flex min-w-0 flex-1 basis-0 flex-col items-center justify-center rounded-xl border border-[#2B2F36] bg-[#1E2026]/80 px-2 py-2 text-center">
+            <div className={labelClass}>Next query</div>
+            <div
+              className={cx(
+                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#B0B3B8]" : "text-white",
+              )}
+            >
+              {countdownLabel}
+            </div>
+          </div>
+          {symbol ? (
+            <>
+              <div className="relative flex min-w-0 flex-1 basis-0 items-center justify-center overflow-hidden rounded-xl border border-[#4A4F5B] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.14),rgba(255,255,255,0.03)_42%,rgba(0,0,0,0)_72%)] px-2 py-2 shadow-[inset_0_0_18px_rgba(255,255,255,0.06)]">
+                <span className="pointer-events-none absolute inset-x-3 top-1 h-px bg-white/35" aria-hidden="true" />
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 h-16 w-16 -translate-x-1/2 rounded-full bg-[#FF173D]/20 blur-xl" aria-hidden="true" />
+                <div className="relative flex max-w-full items-center gap-2">
+                  <TokenIcon symbol={symbol} size={42} />
+                  <div className="min-w-0 text-center">
+                    <div className="truncate font-sans text-[18px] font-semibold leading-tight text-white">{symbol}</div>
+                    {latestDecision?.priced_target_count != null ? (
+                      <div className="mt-1 truncate font-sans text-[11px] leading-tight text-[#848E9C]">
+                        {latestDecision.priced_target_count} targets priced
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="flex min-w-0 flex-1 basis-0 items-center justify-center rounded-xl border border-[#2B2F36] bg-[#1E2026]/80 px-2 py-2 text-center font-sans text-[10px] leading-4 text-[#848E9C]">
+                Waiting for decision…
+              </p>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div>
+            <div className={labelClass}>Next query</div>
+            <div
+              className={cx(
+                "mt-1 font-sans text-[24px] font-semibold tabular-nums leading-none",
+                remainingMs !== null && remainingMs <= 0 && agentRunning ? "text-[#B0B3B8]" : "text-white",
+              )}
+            >
+              {countdownLabel}
+            </div>
+          </div>
+
+          <div className={sectionGap}>
+            <div className={labelClass}>Detected asset</div>
+            {symbol ? (
+              <div className="mt-3 flex items-center gap-3.5">
+                <TokenIcon symbol={symbol} size={compact ? 40 : 48} />
+                <div className="min-w-0">
+                  <div className={cx("font-sans font-semibold leading-none text-white", readable ? "text-[20px]" : "text-[18px]")}>{symbol}</div>
+                  <div className={cx("mt-1 font-sans text-[#848E9C]", readable ? "text-[12px]" : "text-[11px]")}>
+                    Cycle #{latestDecision?.cycle_number ?? "N/A"}
+                    {latestDecision?.priced_target_count != null
+                      ? ` · ${latestDecision.priced_target_count} targets priced`
+                      : ""}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className={mobileFit ? "flex shrink-0 flex-col gap-1 pt-1.5" : sectionGap}>
+        {!mobileFit ? (
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className={labelClass}>Signal inputs</div>
+            {strategyMode ? (
+              <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#848E9C]">{strategyMode}</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {analysis?.factors && analysis.factors.length > 0 ? (
+          <ul
+            className={cx(
+              mobileFit ? "grid grid-cols-2 justify-items-center gap-x-2 gap-y-1" : "space-y-1.5",
+            )}
+          >
+            {analysis.factors.map((factor) => (
+              <li
+                key={factor.key}
+                className={cx(
+                  "flex min-w-0 items-start font-sans text-[#848E9C]",
+                  mobileFit
+                    ? "justify-center gap-1.5 text-[11px] leading-5"
+                    : cx("gap-2 leading-5", readable ? "text-[13px]" : "text-[11px]"),
+                )}
+              >
+                <span className="mt-px shrink-0" aria-hidden="true">
+                  {factor.passed ? "✓" : "✗"}
+                </span>
+                <span className="uppercase tracking-[0.04em]">{factor.label}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p
+            className={cx(
+              "font-sans leading-5 text-[#848E9C]",
+              mobileFit ? "text-center text-[12px]" : readable ? "text-[13px]" : "text-[12px]",
+            )}
+          >
+            {latestDecision?.reason?.trim()
+              ? latestDecision.reason
+              : "Signal audit will appear after the agent completes a scan cycle."}
+          </p>
+        )}
+
+        {latestDecision?.reason ? (
+          <p
+            className={cx(
+              "break-words font-sans text-[#B0B3B8]",
+              mobileFit
+                ? "shrink-0 text-center text-[11px] font-semibold leading-5"
+                : cx("mt-3 leading-5", readable ? "text-[13px]" : "text-[11px]"),
+            )}
+          >
+            {latestDecision.reason}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window === "undefined" || !window.matchMedia) {
+        return () => {};
+      }
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () =>
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        : false,
+    () => false,
+  );
+}
+
+const SCAN_STEP_MS = 540;
+
+/**
+ * Sequentially "analyses" each factor: a sweep beam travels the list, each row
+ * flips from pending → analysing → resolved (pass/fail), one at a time. Re-runs
+ * whenever `runKey` (symbol + cycle) changes so judges watch the agent think.
+ */
+function LiveFactorScan({
+  factors,
+  runKey,
+  readable = false,
+}: {
+  factors: ScanFactor[];
+  runKey: string;
+  readable?: boolean;
+}) {
+  const reduceMotion = usePrefersReducedMotion();
+  const [resolved, setResolved] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    if (factors.length === 0) {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
+    } else if (reduceMotion) {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(factors.length), 0));
+    } else {
+      timers.push(window.setTimeout(() => !cancelled && setResolved(0), 0));
+      for (let i = 0; i < factors.length; i += 1) {
+        const timer = window.setTimeout(
+          () => {
+            if (!cancelled) {
+              setResolved((current) => Math.max(current, i + 1));
+            }
+          },
+          SCAN_STEP_MS * (i + 1),
+        );
+        timers.push(timer);
+      }
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [runKey, factors.length, reduceMotion]);
+
+  const activeIndex = resolved < factors.length ? resolved : -1;
+  const scanning = activeIndex !== -1;
+  const valueText = readable ? "text-[13px]" : "text-[12px]";
+
+  return (
+    <div className="relative">
+      {scanning ? (
+        <span
+          aria-hidden="true"
+          className="scan-beam pointer-events-none absolute inset-x-0 top-0 h-6 bg-[linear-gradient(180deg,rgba(255,210,26,0)_0%,rgba(255,210,26,0.12)_50%,rgba(255,210,26,0)_100%)]"
+        />
+      ) : null}
+      <ul className="relative space-y-1">
+        {factors.map((factor, index) => {
+          const isResolved = index < resolved;
+          const isActive = index === activeIndex;
+          const tone = factor.passed ? "text-[#0ECB81]" : "text-[#F6465D]";
+
+          return (
+            <li
+              key={factor.key}
+              className={cx(
+                "rounded-sm px-2 py-1.5 font-sans transition-colors duration-300",
+                valueText,
+                isActive && "scan-row-active",
+                isResolved && "scan-row-resolve",
+                !isResolved && !isActive && "opacity-35",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                  {isResolved ? (
+                    <span className={cx("text-[13px] font-bold leading-none", tone)}>
+                      {factor.passed ? "✓" : "✗"}
+                    </span>
+                  ) : isActive ? (
+                    <span className="scan-pulse inline-block h-2 w-2 rounded-full bg-[#B0B3B8] shadow-[0_0_8px_rgba(255,210,26,0.7)]" />
+                  ) : (
+                    <span className="inline-block h-1 w-1 rounded-full bg-[#4A4F5B]" />
+                  )}
+                </span>
+                <span
+                  className={cx(
+                    "min-w-0 flex-1 truncate uppercase tracking-[0.06em]",
+                    isResolved ? "text-[#B0B3B8]" : isActive ? "text-white" : "text-[#848E9C]",
+                  )}
+                >
+                  {factor.label}
+                </span>
+                <span
+                  className={cx(
+                    "shrink-0 text-[10px] uppercase tracking-[0.12em]",
+                    isResolved ? tone : isActive ? "text-[#B0B3B8]" : "text-[#4A4F5B]",
+                  )}
+                >
+                  {isResolved ? (factor.passed ? "PASS" : "FAIL") : isActive ? "SCAN" : "···"}
+                </span>
+              </div>
+              {isResolved ? (
+                <div className="mt-1 pl-7">
+                  {factor.reading ? (
+                    <p
+                      className={cx(
+                        "text-[11px] leading-4 tabular-nums",
+                        factor.passed ? "text-[#0ECB81]" : "text-[#F6465D]",
+                      )}
+                    >
+                      {factor.reading}
+                    </p>
+                  ) : null}
+                  <p className="text-[11px] leading-4 text-[#848E9C]">
+                    {explainFactor(factor.key, factor.passed)}
+                  </p>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Redesigned desktop left column: the detected token sits up top with the
+ * next-query countdown, then every signal factor is analysed live, and a verdict
+ * resolves once the scan completes.
+ */
+function LiveDecisionScan({
+  latestDecision,
+  decisions,
+  agentRunning,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  decisions: StatusPayload["decisions"];
+  agentRunning: boolean;
+}) {
+  const now = useNow();
+  const reduceMotion = usePrefersReducedMotion();
+  const intervalMs = useMemo(() => inferCycleIntervalMs(decisions), [decisions]);
+  const nextAt = useMemo(
+    () => nextCycleAt(latestDecision?.timestamp, intervalMs),
+    [intervalMs, latestDecision?.timestamp],
+  );
+  const remainingMs = cycleCountdownMs(nextAt, now);
+  const countdownLabel =
+    remainingMs === null
+      ? "N/A"
+      : remainingMs <= 0
+        ? agentRunning
+          ? "Scanning…"
+          : "Due now"
+        : formatCycleCountdown(remainingMs);
+  const countdownDue = remainingMs !== null && remainingMs <= 0 && agentRunning;
+
+  const analysis = useMemo(
+    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
+    [latestDecision],
+  );
+  const factors: ScanFactor[] = useMemo(() => {
+    const metrics = latestDecision?.factor_metrics ?? null;
+    return (analysis?.factors ?? []).map((factor) => ({
+      ...factor,
+      reading: metrics?.[factor.key] ?? null,
+    }));
+  }, [analysis, latestDecision]);
+  const strategyMode = latestDecision ? resolveStrategyMode(latestDecision) : null;
+  const symbol = latestDecision?.symbol ?? null;
+  const runKey = `${symbol ?? "none"}-${latestDecision?.cycle_number ?? "0"}`;
+
+  // Mirror the scan timeline so the verdict only appears once factors resolve.
+  const [scanDone, setScanDone] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    if (factors.length === 0) {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
+    } else if (reduceMotion) {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(true), 0));
+    } else {
+      timers.push(window.setTimeout(() => !cancelled && setScanDone(false), 0));
+      timers.push(
+        window.setTimeout(
+          () => !cancelled && setScanDone(true),
+          SCAN_STEP_MS * (factors.length + 0.5),
+        ),
+      );
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [runKey, factors.length, reduceMotion]);
+
+  const passedCount = factors.filter((factor) => factor.passed).length;
+  const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
+  const labelClass = "font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]";
+
+  const scoreStats = latestDecision ? breakoutEntryScoreStats(latestDecision) : null;
+  const entryScoreReading =
+    latestDecision?.factor_metrics?.entry_score ??
+    (scoreStats?.score != null
+      ? `${scoreStats.score.toFixed(1)}/100 · need ${scoreStats.required}+ · floor ${scoreStats.quoteFloor}`
+      : null);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bento-card border border-[#1E1E26] bg-[#1E2026]">
+      {/* Detected asset + next query */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-4 border-b border-[#2B2F36] px-5 py-4">
+        <div className="min-w-0">
+          <div className={labelClass}>Detected asset</div>
+          {symbol ? (
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="relative">
+                <TokenIcon symbol={symbol} size={44} />
+                {agentRunning ? (
+                  <span className="scan-pulse absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black bg-[#B0B3B8]" />
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate font-sans text-[22px] font-semibold leading-none text-white">{symbol}</div>
+                <div className="mt-1 truncate font-sans text-[11px] text-[#848E9C]">
+                  Cycle #{latestDecision?.cycle_number ?? "N/A"}
+                  {latestDecision?.priced_target_count != null
+                    ? ` · ${latestDecision.priced_target_count} priced`
+                    : ""}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
+          )}
+        </div>
+        <div className="flex flex-col items-end text-right">
+          <div className={labelClass}>Next query</div>
+          <div
+            className={cx(
+              "mt-1 font-sans text-[26px] font-semibold tabular-nums leading-none",
+              countdownDue ? "text-[#B0B3B8]" : "text-white",
+            )}
+          >
+            {countdownLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* Live analysis header */}
+      <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-2 pt-4">
+        <div className="flex items-center gap-2">
+          <span
+            className={cx(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              scanDone ? "bg-[#0ECB81] shadow-[0_0_6px_rgba(0,255,102,0.5)]" : "scan-pulse bg-[#B0B3B8]",
+            )}
+          />
+          <span className={labelClass}>{scanDone ? "Signal analysis" : "Analyzing signals"}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {strategyMode ? (
+            <span className="font-sans text-[10px] uppercase tracking-[0.1em] text-[#848E9C]">{strategyMode}</span>
+          ) : null}
+          {factors.length > 0 ? (
+            <span className="font-sans text-[11px] tabular-nums text-[#848E9C]">
+              <span className={passedCount > 0 ? "text-[#0ECB81]" : "text-[#848E9C]"}>{passedCount}</span>
+              <span className="text-[#4A4F5B]">/</span>
+              {factors.length}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Entry score reading */}
+      {entryScoreReading ? (
+        <div className="shrink-0 px-5 pb-1">
+          <div className="flex items-center justify-between gap-2 border-b border-[#141414] pb-2">
+            <span className={labelClass}>Entry score</span>
+            <span
+              className={cx(
+                "font-sans text-[11px] tabular-nums",
+                scoreStats?.scoreMet ? "text-[#0ECB81]" : "text-[#F6465D]",
+              )}
+            >
+              {entryScoreReading}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Factor scan */}
+      <div className="console-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+        {factors.length > 0 ? (
+          <LiveFactorScan factors={factors} runKey={runKey} readable />
+        ) : (
+          <p className="px-2 py-3 font-sans text-[12px] leading-5 text-[#848E9C]">
+            {latestDecision?.reason?.trim()
+              ? latestDecision.reason
+              : "Signal audit will appear after the agent completes a scan cycle."}
+          </p>
+        )}
+      </div>
+
+      {/* Verdict */}
+      {latestDecision?.action ? (
+        <div className="shrink-0 border-t border-[#2B2F36] px-5 py-4">
+          {scanDone ? (
+            <div className="scan-verdict-in">
+              <div className="flex items-center gap-2.5">
+                <StatusBadge status={latestDecision.action} tone={actionTone} />
+                <span className="font-sans text-[10px] uppercase tracking-[0.14em] text-[#848E9C]">Decision</span>
+              </div>
+              {latestDecision.reason?.trim() ? (
+                <p className="mt-2.5 break-words font-sans text-[12px] leading-5 text-[#B0B3B8]">
+                  {latestDecision.reason}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.12em] text-[#B0B3B8]">
+              <span className="scan-pulse inline-block h-1.5 w-1.5 rounded-full bg-[#B0B3B8]" />
+              Resolving decision…
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Minimal Activity view: token + name on the left, the factor list on the
+ * right — laid out horizontally, no animations. A single button flips over to
+ * the historical log ("past").
+ */
+function SimpleLiveScan({
+  latestDecision,
+  onViewPast,
+}: {
+  latestDecision: StatusPayload["latestDecision"];
+  onViewPast: () => void;
+}) {
+  const analysis = useMemo(
+    () => (latestDecision ? detailsFromDecision(latestDecision) : null),
+    [latestDecision],
+  );
+  const factors: ScanFactor[] = useMemo(() => {
+    const metrics = latestDecision?.factor_metrics ?? null;
+    return (analysis?.factors ?? []).map((factor) => ({
+      ...factor,
+      reading: metrics?.[factor.key] ?? null,
+    }));
+  }, [analysis, latestDecision]);
+
+  const symbol = latestDecision?.symbol ?? null;
+  const passedCount = factors.filter((factor) => factor.passed).length;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Top bar: past toggle */}
+      <div className="flex shrink-0 justify-end pb-8">
+        <button
+          type="button"
+          onClick={onViewPast}
+          className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#1E2026]/50 px-3.5 py-2 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+        >
+          View past
+          <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
+            →
+          </span>
+        </button>
+      </div>
+
+      {symbol ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Row 1: token + name */}
+          <div className="flex shrink-0 flex-col items-center text-center">
+            <div className="relative">
+              <div className="absolute -inset-8 rounded-full bg-[#5B9CFF]/10 blur-3xl" />
+              <TokenIcon symbol={symbol} size={140} />
+            </div>
+            <div className="mt-6 font-sans text-[32px] font-bold leading-none text-white">{symbol}</div>
+            <div className="mt-2 font-sans text-[12px] uppercase tracking-[0.14em] text-[#848E9C]">
+              Cycle #{latestDecision?.cycle_number ?? "N/A"}
+              {factors.length > 0 ? (
+                <>
+                  {" · "}
+                  <span className={passedCount > 0 ? "text-[#0ECB81]" : "text-[#848E9C]"}>{passedCount}</span>
+                  <span className="text-[#444]">/</span>
+                  {factors.length}
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Row 2: factors, fit below */}
+          <div className="mt-10 min-h-0 flex-1">
+            {factors.length > 0 ? (
+              <StaticFactorList factors={factors} />
+            ) : (
+              <p className="py-3 text-center font-sans text-[12px] leading-5 text-[#848E9C]">
+                {latestDecision?.reason?.trim()
+                  ? latestDecision.reason
+                  : "Signal audit will appear after the agent completes a scan cycle."}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="font-sans text-[12px] leading-5 text-[#848E9C]">Waiting for the next decision row…</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
+function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
+  return (
+    <div className="font-mono">
+      {/* Header bar */}
+      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>factor_audit.exe</span>
+        <span className="ml-auto text-[#4A4F5B]">--live</span>
+      </div>
+
+      {/* Rows */}
+      <div className="space-y-0">
+        {factors.map((factor) => {
+          const pass = factor.passed;
+          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
+          const status = pass ? "[PASS]" : "[FAIL]";
+          const bullet = pass ? ">" : "!";
+
+          return (
+            <div
+              key={factor.key}
+              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
+            >
+              {/* Prompt */}
+              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>
+                {bullet}
+              </span>
+
+              {/* Content */}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">
+                    {factor.label}
+                  </span>
+                  {factor.reading ? (
+                    <span className={cx("text-[11px]", accentClass)}>
+                      {factor.reading}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-[11px] leading-4 text-[#848E9C]">
+                  {explainFactor(factor.key, factor.passed)}
+                </p>
+              </div>
+
+              {/* Status */}
+              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>
+                {status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
+        <span className="text-[#F0B90B]">❯</span>
+        <span>done.</span>
+      </div>
+    </div>
+  );
+}
 
 /** Terminal-style live scan — raw, no glass cards, no rounded icons */
 function NewSimpleLiveScan({
@@ -4082,47 +4792,6 @@ function NewSimpleLiveScan({
   );
 }
 
-/** Terminal-style factor list — raw hacker aesthetic, no vibecoding cards */
-function TerminalFactorList({ factors }: { factors: ScanFactor[] }) {
-  return (
-    <div className="font-mono">
-      <div className="mb-3 flex items-center gap-3 border-b border-[#2B2F36] pb-2 text-[10px] uppercase tracking-[0.15em] text-[#848E9C]">
-        <span className="text-[#F0B90B]">❯</span>
-        <span>factor_audit.exe</span>
-        <span className="ml-auto text-[#4A4F5B]">--live</span>
-      </div>
-      <div className="space-y-0">
-        {factors.map((factor) => {
-          const pass = factor.passed;
-          const accentClass = pass ? "text-[#0ECB81]" : "text-[#F6465D]";
-          const status = pass ? "[PASS]" : "[FAIL]";
-          const bullet = pass ? ">" : "!";
-          return (
-            <div
-              key={factor.key}
-              className="group flex items-start gap-3 border-b border-[#2B2F36]/60 py-2.5 transition-colors hover:bg-[#1E2026]/40"
-            >
-              <span className={cx("mt-px shrink-0 text-[12px]", accentClass)}>{bullet}</span>
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-bold uppercase tracking-wide text-white">{factor.label}</span>
-                  {factor.reading ? <span className={cx("text-[11px]", accentClass)}>{factor.reading}</span> : null}
-                </div>
-                <p className="text-[11px] leading-4 text-[#848E9C]">{explainFactor(factor.key, factor.passed)}</p>
-              </div>
-              <span className={cx("mt-px shrink-0 text-[11px] font-bold tracking-wider", accentClass)}>{status}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex items-center gap-2 text-[10px] text-[#4A4F5B]">
-        <span className="text-[#F0B90B]">❯</span>
-        <span>done.</span>
-      </div>
-    </div>
-  );
-}
-
 function SysLogsPanel({
   rows,
   agentLog,
@@ -4160,7 +4829,7 @@ function SysLogsPanel({
         <ViewportReveal variant="blur" duration="slow" className={cx(compact ? "mb-4 shrink-0" : "mb-6")}>
           <div
             className={cx(
-              compact ? "border-b border-[#2B2F36] pb-4" : "border border-[#3A3F4B] bg-[#1E2026] px-5 py-4",
+              compact ? "border-b border-[#2B2F36] pb-4" : "border border-[#1E1E26] bg-[#1E2026] px-5 py-4",
             )}
           >
             <ViewportReveal variant="fade" delay={60} duration="fast">
@@ -4204,7 +4873,7 @@ function SysLogsPanel({
         )
       ) : (
         <ViewportReveal variant="fade" delay={80}>
-          <div className="bento-card border border-[#3A3F4B] bg-[#1E2026]">
+          <div className="bento-card border border-[#1E1E26] bg-[#1E2026]">
             <div className="border-b border-[#2B2F36] px-5 py-5">
               <ViewportReveal variant="left" delay={120} duration="fast">
                 <h2 className="font-sans text-xl text-[#B0B3B8]">Decision &amp; Execution Log</h2>
@@ -4223,7 +4892,6 @@ function SysLogsPanel({
     </div>
   );
 }
-
 
 
 function ActivityPanel({
@@ -4259,7 +4927,7 @@ function ActivityPanel({
                   <button
                     type="button"
                     onClick={() => setPane("live")}
-                    className="group inline-flex items-center gap-2 border border-[#3A3F4B] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+                    className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
                   >
                     <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
                       ←
@@ -4302,7 +4970,7 @@ function ActivityPanel({
                 <button
                   type="button"
                   onClick={() => setPane("live")}
-                  className="group inline-flex items-center gap-2 border border-[#3A3F4B] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
+                  className="group inline-flex items-center gap-2 border border-[#1E1E26] bg-[#1E2026]/50 px-3 py-1.5 font-sans text-[11px] uppercase tracking-[0.14em] text-[#B0B3B8] transition-colors hover:border-[#4A4F5B] hover:text-white"
                 >
                   <span aria-hidden="true" className="text-[#848E9C] transition-colors group-hover:text-[#B0B3B8]">
                     ←
@@ -4435,7 +5103,7 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#1E1E26] bg-[#1E2026]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
@@ -4601,7 +5269,7 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#1E1E26] bg-[#1E2026]",
       )}
     >
       <div
@@ -4704,7 +5372,7 @@ function HomeActivitySummary({
                           <TokenIcon symbol={token} size={16} />
                         </span>
                       ) : (
-                        <span className="h-4 w-4 rounded-full border border-[#3A3F4B]" aria-hidden="true" />
+                        <span className="h-4 w-4 rounded-full border border-[#1E1E26]" aria-hidden="true" />
                       )}
                     </span>
                     <span className="min-w-0 truncate text-left font-sans text-[10px] font-bold tabular-nums text-[#FFFFFF]">
@@ -4774,7 +5442,7 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#3A3F4B] bg-[#1E2026]",
+        compact ? "bg-[#0B0E11]/30" : flush ? "bg-[#1E2026]" : "border border-[#1E1E26] bg-[#1E2026]",
       )}
     >
       <div
@@ -4792,7 +5460,7 @@ function HomeWalletSummary({
         {paperMode ? (
           <span
             className={cx(
-              "border border-[#3A3F4B] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
+              "border border-[#1E1E26] font-sans uppercase tracking-[0.12em] text-[#848E9C]",
               compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
             )}
           >
@@ -4867,7 +5535,7 @@ function HomeWalletSummary({
       {x402WalletAddress ? (
         <div
           className={cx(
-            "shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#3A3F4B] bg-[#0B0E11] bento-card",
+            "shrink-0 mx-4 mb-4 mt-3 rounded-xl border border-[#1E1E26] bg-[#0B0E11] bento-card",
             compact ? "px-3 py-3" : "px-4 py-4",
           )}
         >
@@ -4912,20 +5580,26 @@ function DesktopOverviewSection({
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col p-0">
-        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 bento-card border border-[#3A3F4B] bg-[#1E2026]/80">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-[minmax(0,1fr)_300px] gap-0 border border-[#1E1E26] bg-[#111114]/80">
           <ViewportReveal
             variant="fade"
             delay={200}
             duration="slow"
-            className="relative col-span-3 h-full min-h-0 overflow-hidden border-b border-[#3A3F4B]"
+            className="relative col-span-3 flex h-full min-h-0 flex-col overflow-hidden border-b border-[#1E1E26]"
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+            {/* Metrics + controls header row */}
+            <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-1">
               <DesktopHeroMetrics view={view} />
+              <div className="flex shrink-0 items-center gap-1.5">
+                <TimezoneMenu inline />
+                <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} inline />
+              </div>
             </div>
-            <TimezoneMenu />
-            <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
-            <div className="absolute inset-x-0 bottom-0 top-12">
-              <PortfolioChart data={view.chartData} variant="desktop" range={timeRange} />
+            {/* Chart fills remaining space */}
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <div className="absolute inset-0">
+                <PortfolioChart data={view.chartData} variant="desktop" range={timeRange} />
+              </div>
             </div>
           </ViewportReveal>
 
@@ -4933,7 +5607,7 @@ function DesktopOverviewSection({
             variant="up"
             delay={400}
             duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#3A3F4B]"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
           >
             <HomePositionsSummary positionRows={view.positionRows} totalPositionValue={view.totalPositionValue} flush />
           </ViewportReveal>
@@ -4941,7 +5615,7 @@ function DesktopOverviewSection({
             variant="up"
             delay={460}
             duration="normal"
-            className="flex h-full min-h-0 flex-col border-r border-[#3A3F4B]"
+            className="flex h-full min-h-0 flex-col border-r border-[#1E1E26]"
           >
             <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
           </ViewportReveal>
@@ -4956,35 +5630,42 @@ function DesktopOverviewSection({
 
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="px-4 pt-3">
-      <div className="grid grid-cols-4 divide-x divide-[#2B2F36]">
-        {view.metrics.map((metric, index) => (
-          <ViewportReveal
-            key={metric.label}
-            variant={homeMetricVariant(metric.label, metric.tone)}
-            delay={index * 60}
-            duration={metric.label.includes("Balance") ? "slow" : "normal"}
-            className="min-w-0 px-6 text-center first:pl-0 last:pr-0"
-          >
-            <div className="font-sans text-[7px] font-medium text-[#B0B3B8]">{metric.label}</div>
-            <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
-              <span className="font-sans text-[12px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-              {metric.unit ? <span className="font-sans text-[7px] text-[#B0B3B8]">{metric.unit}</span> : null}
-              {metric.delta ? (
-                <span
-                  className={cx(
-                    "font-sans text-[7px] font-bold tabular-nums",
-                    metric.tone === "negative" ? "text-[#F6465D]" : "text-[#0ECB81]",
-                  )}
-                >
-                  ({metric.delta})
-                </span>
-              ) : null}
-            </div>
-          </ViewportReveal>
-        ))}
-      </div>
-    </section>
+    <div className="flex min-w-0 flex-1 divide-x divide-[#1e1e26]">
+      {view.metrics.map((metric, index) => (
+        <ViewportReveal
+          key={metric.label}
+          variant={homeMetricVariant(metric.label, metric.tone)}
+          delay={index * 60}
+          duration={metric.label.includes("Balance") ? "slow" : "normal"}
+          className="group min-w-0 px-5 first:pl-0"
+        >
+          {/* terminal-style label */}
+          <div className="flex items-center gap-1">
+            <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">//</span>
+            <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+              {metric.label.replace(/ /g, "_")}
+            </span>
+          </div>
+          {/* value row */}
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <span className="font-mono text-[14px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+            {metric.unit ? (
+              <span className="font-mono text-[9px] text-[#7f7f94]">{metric.unit}</span>
+            ) : null}
+            {metric.delta ? (
+              <span
+                className={cx(
+                  "font-mono text-[9px] font-bold tabular-nums",
+                  metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                )}
+              >
+                ({metric.delta})
+              </span>
+            ) : null}
+          </div>
+        </ViewportReveal>
+      ))}
+    </div>
   );
 }
 
@@ -5097,9 +5778,11 @@ function OverviewTopBar({
 function ChartFilterMenu({
   timeRange,
   onTimeRangeChange,
+  inline = false,
 }: {
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -5120,7 +5803,7 @@ function ChartFilterMenu({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="absolute right-3 top-3 z-10">
+    <div ref={rootRef} className={inline ? "relative z-10" : "absolute right-3 top-3 z-10"}>
       <button
         type="button"
         onClick={() => setOpen((previous) => !previous)}
@@ -5168,7 +5851,7 @@ function ChartFilterMenu({
   );
 }
 
-function TimezoneMenu() {
+function TimezoneMenu({ inline = false }: { inline?: boolean }) {
   const { timeZone, setTimeZone } = useChartTimeZone();
   const [open, setOpen] = useState(false);
   // Snapshotted whenever the menu opens so offsets/clocks are current.
@@ -5200,7 +5883,7 @@ function TimezoneMenu() {
   }, [open]);
 
   return (
-    <div ref={rootRef} className="absolute right-[52px] top-3 z-10">
+    <div ref={rootRef} className={inline ? "relative z-10" : "absolute right-[52px] top-3 z-10"}>
       <button
         type="button"
         onClick={toggle}
@@ -5279,7 +5962,7 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#3A3F4B] bg-[#0B0E11]/30"
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0B0E11]/30"
       >
         <div className="absolute inset-0 flex flex-col">
           <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-3">
@@ -5328,7 +6011,7 @@ function MobileOverviewSection({
         className="flex shrink-0 flex-col"
       >
         <div className="grid grid-cols-2" style={{ height: "30vh" }}>
-          <div className="col-span-1 flex flex-col border-r border-[#3A3F4B]">
+          <div className="col-span-1 flex flex-col border-r border-[#1E1E26]">
             <HomeSignalSummary latestDecision={latestDecision} />
           </div>
           <div className="col-span-1 flex flex-col">
