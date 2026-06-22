@@ -6386,53 +6386,42 @@ function OverviewTopBar({
 }
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
-  const activeTrades = view.metrics[2];
-  const executionRate = view.metrics[3];
   return (
-    <section className="shrink-0 px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Total Balance</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-sans text-[13px] text-[#cccdde]">USD</span>
-          </div>
-        </ViewportReveal>
-        <ViewportReveal
-          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-          delay={80}
-          duration="slow"
-          className="min-w-0 text-center"
-        >
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Window Profit/Loss</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-            {view.pnlDelta ? (
-              <span
-                className={cx(
-                  "font-sans text-[14px] font-bold tabular-nums",
-                  view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                )}
-              >
-                ({view.pnlDelta})
+    <section className="shrink-0 px-4 py-3">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border border-[#1e1e26]">
+        {view.metrics.map((metric, index) => (
+          <ViewportReveal
+            key={metric.label}
+            variant={homeMetricVariant(metric.label, metric.tone)}
+            delay={index * 60}
+            duration={metric.label.includes("Balance") ? "slow" : "normal"}
+            className="group min-w-0 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-1">
+              <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
+              <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+                {metric.label.replace(/ /g, "_")}
               </span>
-            ) : null}
-          </div>
-        </ViewportReveal>
-        <ViewportReveal variant="scale" delay={120} duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Active Trades</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{activeTrades?.value ?? "0"}</span>
-          </div>
-        </ViewportReveal>
-        <ViewportReveal variant="scale" delay={160} duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Execution Rate</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{executionRate?.value ?? "N/A"}</span>
-          </div>
-        </ViewportReveal>
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              <span className="font-mono text-[18px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+              {metric.unit ? (
+                <span className="font-mono text-[9px] text-[#7f7f94]">{metric.unit}</span>
+              ) : null}
+              {metric.delta ? (
+                <span
+                  className={cx(
+                    "font-mono text-[10px] font-bold tabular-nums",
+                    metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                  )}
+                >
+                  ({metric.delta})
+                </span>
+              ) : null}
+            </div>
+          </ViewportReveal>
+        ))}
       </div>
-      <ViewportReveal variant="expand" delay={200} duration="slow" className="mt-2 h-px w-full bg-[#1E1E26]" />
     </section>
   );
 }
@@ -6627,47 +6616,39 @@ function MobileOverviewSection({
         className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]/30"
       >
         <div className="absolute inset-0 flex flex-col">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 pb-2 pt-3">
-            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Total Balance</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-                <span className="font-sans text-[11px] text-[#cccdde]">USD</span>
-              </div>
-            </ViewportReveal>
-            <ViewportReveal
-              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-              delay={80}
-              duration="slow"
-              className="min-w-0 text-center"
-            >
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Window Profit/Loss</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-                {view.pnlDelta ? (
-                  <span
-                    className={cx(
-                      "font-sans text-[11px] font-bold tabular-nums",
-                      view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                    )}
-                  >
-                    ({view.pnlDelta})
+          <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border-b border-[#1e1e26]">
+            {view.metrics.map((metric, index) => (
+              <ViewportReveal
+                key={metric.label}
+                variant={homeMetricVariant(metric.label, metric.tone)}
+                delay={index * 60}
+                duration={metric.label.includes("Balance") ? "slow" : "normal"}
+                className="group min-w-0 px-3 py-2"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="select-none font-mono text-[8px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
+                  <span className="font-mono text-[7px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+                    {metric.label.replace(/ /g, "_")}
                   </span>
-                ) : null}
-              </div>
-            </ViewportReveal>
-            <ViewportReveal variant="scale" delay={120} duration="slow" className="min-w-0 text-center">
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Active Trades</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.metrics[2]?.value ?? "0"}</span>
-              </div>
-            </ViewportReveal>
-            <ViewportReveal variant="scale" delay={160} duration="slow" className="min-w-0 text-center">
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Execution Rate</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.metrics[3]?.value ?? "N/A"}</span>
-              </div>
-            </ViewportReveal>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                  <span className="font-mono text-[15px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+                  {metric.unit ? (
+                    <span className="font-mono text-[8px] text-[#7f7f94]">{metric.unit}</span>
+                  ) : null}
+                  {metric.delta ? (
+                    <span
+                      className={cx(
+                        "font-mono text-[9px] font-bold tabular-nums",
+                        metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                      )}
+                    >
+                      ({metric.delta})
+                    </span>
+                  ) : null}
+                </div>
+              </ViewportReveal>
+            ))}
           </div>
           <div className="relative min-h-0 flex-1">
             <TimezoneMenu />
