@@ -6395,7 +6395,7 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
             variant={homeMetricVariant(metric.label, metric.tone)}
             delay={index * 60}
             duration={metric.label.includes("Balance") ? "slow" : "normal"}
-            className="group min-w-0 px-3 py-2.5"
+            className="group flex min-w-0 flex-col items-center justify-center px-3 py-2.5 text-center"
           >
             <div className="flex items-center gap-1">
               <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
@@ -6403,7 +6403,7 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
                 {metric.label.replace(/ /g, "_")}
               </span>
             </div>
-            <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
               <span className="font-mono text-[18px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
               {metric.unit ? (
                 <span className="font-mono text-[9px] text-[#7f7f94]">{metric.unit}</span>
@@ -6623,7 +6623,7 @@ function MobileOverviewSection({
                 variant={homeMetricVariant(metric.label, metric.tone)}
                 delay={index * 60}
                 duration={metric.label.includes("Balance") ? "slow" : "normal"}
-                className="group min-w-0 px-3 py-2"
+                className="group flex min-w-0 flex-col items-center justify-center px-3 py-2 text-center"
               >
                 <div className="flex items-center gap-1">
                   <span className="select-none font-mono text-[8px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
@@ -6631,7 +6631,7 @@ function MobileOverviewSection({
                     {metric.label.replace(/ /g, "_")}
                   </span>
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
                   <span className="font-mono text-[15px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
                   {metric.unit ? (
                     <span className="font-mono text-[8px] text-[#7f7f94]">{metric.unit}</span>
