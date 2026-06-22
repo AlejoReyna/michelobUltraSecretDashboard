@@ -391,6 +391,10 @@ type DashboardViewModel = {
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
   mobileChartData: PortfolioChartPoint[];
+  hourlyPnlPoints: PortfolioChartPoint[];
+  totalAllTimePnl: string | null;
+  totalAllTimePnlPct: string | null;
+  allTimePnlTone: "positive" | "negative";
   totalBalance: string;
   pnlValue: string;
   pnlDelta?: string;
@@ -1463,6 +1467,32 @@ function activePositionRowsFromTelemetry(data: StatusPayload | null): PositionRo
   return [...trackedRows, ...walletRows];
 }
 
+function buildHourlyPnlSummary(data: StatusPayload | null): {
+  hourlyPnlPoints: PortfolioChartPoint[];
+  totalAllTimePnl: string | null;
+  totalAllTimePnlPct: string | null;
+  allTimePnlTone: "positive" | "negative";
+} {
+  const records = data?.hourlyPnl ?? [];
+  const hourlyPnlPoints: PortfolioChartPoint[] = records.map((r, i) => ({
+    label: `H${i + 1}`,
+    value: r.portfolio_value_usdc,
+    timestamp: r.hour,
+  }));
+
+  const first = records[0]?.portfolio_value_usdc ?? null;
+  const last = records.at(-1)?.portfolio_value_usdc ?? null;
+  const absolute = first !== null && last !== null ? last - first : null;
+  const percent = first !== null && first !== 0 && absolute !== null ? (absolute / first) * 100 : null;
+
+  return {
+    hourlyPnlPoints,
+    totalAllTimePnl: absolute !== null ? formatSignedUsd(absolute) : null,
+    totalAllTimePnlPct: percent !== null ? formatPercent(percent) : null,
+    allTimePnlTone: (absolute ?? 0) >= 0 ? "positive" : "negative",
+  };
+}
+
 function buildViewModel(
   data: StatusPayload | null,
   error: string | null,
@@ -1531,6 +1561,7 @@ function buildViewModel(
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
     mobileChartData: chart.slice(-16).length > 1 ? chart.slice(-16) : chart,
+    ...buildHourlyPnlSummary(data),
     totalBalance: formatUsd(latest),
     pnlValue: formatSignedUsd(pnl.absolute),
     pnlDelta: windowDelta,
@@ -6300,6 +6331,42 @@ function DesktopOverviewSection({
   );
 }
 
+function PnlSparkline({ points, tone }: { points: PortfolioChartPoint[]; tone: "positive" | "negative" }) {
+  const W = 88;
+  const H = 28;
+  const PAD = 2;
+  if (points.length < 2) {
+    return <div style={{ width: W, height: H }} className="opacity-30 flex items-center justify-center font-mono text-[9px] text-[#7f7f94]">—</div>;
+  }
+  const vals = points.map((p) => p.value);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const span = hi - lo || 1;
+  const iW = W - PAD * 2;
+  const iH = H - PAD * 2;
+  const coords = points.map((p, i) => {
+    const x = PAD + (i / (points.length - 1)) * iW;
+    const y = PAD + (1 - (p.value - lo) / span) * iH;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const lineColor = tone === "negative" ? "#e05b73" : "#33c28e";
+  const areaPath = `M ${coords[0]} ${coords.slice(1).map((c) => `L ${c}`).join(" ")} L ${(PAD + iW).toFixed(1)},${(PAD + iH).toFixed(1)} L ${PAD},${(PAD + iH).toFixed(1)} Z`;
+  const linePath = `M ${coords[0]} ${coords.slice(1).map((c) => `L ${c}`).join(" ")}`;
+  const gradId = `pnl-spark-${tone}`;
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block overflow-visible" aria-hidden>
+      <defs>
+        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <polyline points={coords.join(" ")} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
     <div className="flex min-w-0 flex-1 divide-x divide-[#1e1e26]">
@@ -6337,6 +6404,45 @@ function DesktopHeroMetrics({ view }: { view: DashboardViewModel }) {
           </div>
         </ViewportReveal>
       ))}
+      {/* Total PnL History sparkline card */}
+      {view.hourlyPnlPoints.length > 0 ? (
+        <ViewportReveal
+          variant="up"
+          delay={view.metrics.length * 60}
+          duration="normal"
+          className="group min-w-0 px-5"
+        >
+          <div className="flex items-center gap-1">
+            <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40">{"//"}</span>
+            <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+              Total_PnL_History
+            </span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span
+                className={cx(
+                  "font-mono text-[14px] font-bold leading-none tabular-nums",
+                  view.allTimePnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                )}
+              >
+                {view.totalAllTimePnl ?? "N/A"}
+              </span>
+              {view.totalAllTimePnlPct ? (
+                <span
+                  className={cx(
+                    "font-mono text-[9px] font-bold tabular-nums",
+                    view.allTimePnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                  )}
+                >
+                  ({view.totalAllTimePnlPct})
+                </span>
+              ) : null}
+            </div>
+            <PnlSparkline points={view.hourlyPnlPoints} tone={view.allTimePnlTone} />
+          </div>
+        </ViewportReveal>
+      ) : null}
     </div>
   );
 }
@@ -6712,6 +6818,26 @@ function MobileOverviewSection({
               </ViewportReveal>
             ))}
           </div>
+          {view.hourlyPnlPoints.length > 0 ? (
+            <ViewportReveal variant="up" delay={160} duration="normal" className="shrink-0 border-b border-[#1E1E26] px-4 pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">Total_PnL_History</div>
+                  <div className="mt-0.5 flex items-baseline gap-1.5">
+                    <span className={cx("font-mono text-[13px] font-bold tabular-nums", view.allTimePnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]")}>
+                      {view.totalAllTimePnl ?? "N/A"}
+                    </span>
+                    {view.totalAllTimePnlPct ? (
+                      <span className={cx("font-mono text-[9px] font-bold tabular-nums", view.allTimePnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]")}>
+                        ({view.totalAllTimePnlPct})
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <PnlSparkline points={view.hourlyPnlPoints} tone={view.allTimePnlTone} />
+              </div>
+            </ViewportReveal>
+          ) : null}
           <div className="relative min-h-0 flex-1">
             <TimezoneMenu />
             <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />

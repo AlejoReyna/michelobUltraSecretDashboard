@@ -372,6 +372,7 @@ export function createMockStatus(options: MockOptions = {}): StatusPayload {
       walletUsdcBalance: 1.063356,
     },
     sellHistory: [],
+    hourlyPnl: [],
     files: {
       decisionLog: {
         path: "mock://decision_log.jsonl",
@@ -456,6 +457,7 @@ export function createUnavailableStatus(error: string): StatusPayload {
       walletUsdcBalance: null,
     },
     sellHistory: [],
+    hourlyPnl: [],
     files: {},
     connection: {
       source: "error",

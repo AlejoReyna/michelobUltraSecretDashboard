@@ -202,6 +202,18 @@ export const marketDataRowSchema = z
   })
   .passthrough();
 
+export const hourlyPnlRecordSchema = z
+  .object({
+    hour: z.string(),
+    timestamp: z.string(),
+    portfolio_value_usdc: z.number(),
+    prev_hour_value_usdc: z.number().nullable().optional(),
+    pnl_usdc: z.number().nullable().optional(),
+    pnl_pct: z.number().nullable().optional(),
+    open_position_count: z.number().optional(),
+  })
+  .passthrough();
+
 export type Decision = z.infer<typeof decisionSchema>;
 export type Execution = z.infer<typeof executionSchema>;
 export type Guardrails = z.infer<typeof guardrailsSchema>;
@@ -212,3 +224,4 @@ export type WalletTelemetry = z.infer<typeof walletSchema>;
 export type X402Call = z.infer<typeof x402CallSchema>;
 export type SellHistoryRow = z.infer<typeof sellHistorySchema>;
 export type MarketDataRow = z.infer<typeof marketDataRowSchema>;
+export type HourlyPnlRecord = z.infer<typeof hourlyPnlRecordSchema>;

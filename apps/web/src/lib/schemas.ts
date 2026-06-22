@@ -277,6 +277,14 @@ export const statusSchema = z
       .passthrough(),
     sellHistory: z.array(sellHistorySchema).default([]),
     sellHistoryErrors: z.array(z.string()).optional(),
+    hourlyPnl: z.array(
+      z.object({
+        hour: z.string(),
+        portfolio_value_usdc: z.number(),
+        pnl_usdc: z.number().nullable().optional(),
+        pnl_pct: z.number().nullable().optional(),
+      }).passthrough()
+    ).default([]),
     files: z.record(z.string(), fileStatusSchema).default({}),
     connection: z
       .object({
