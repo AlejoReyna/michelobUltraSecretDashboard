@@ -6386,9 +6386,11 @@ function OverviewTopBar({
 }
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
+  const activeTrades = view.metrics[2];
+  const executionRate = view.metrics[3];
   return (
     <section className="shrink-0 px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
           <div className="font-sans text-[14px] font-medium text-[#cccdde]">Total Balance</div>
           <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
@@ -6417,8 +6419,20 @@ function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
             ) : null}
           </div>
         </ViewportReveal>
+        <ViewportReveal variant="scale" delay={120} duration="slow" className="min-w-0 text-center">
+          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Active Trades</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{activeTrades?.value ?? "0"}</span>
+          </div>
+        </ViewportReveal>
+        <ViewportReveal variant="scale" delay={160} duration="slow" className="min-w-0 text-center">
+          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Execution Rate</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{executionRate?.value ?? "N/A"}</span>
+          </div>
+        </ViewportReveal>
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#1E1E26]" />
+      <ViewportReveal variant="expand" delay={200} duration="slow" className="mt-2 h-px w-full bg-[#1E1E26]" />
     </section>
   );
 }
@@ -6613,7 +6627,7 @@ function MobileOverviewSection({
         className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]/30"
       >
         <div className="absolute inset-0 flex flex-col">
-          <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 pb-2 pt-3">
             <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
               <div className="font-sans text-[11px] font-medium text-[#cccdde]">Total Balance</div>
               <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
@@ -6627,7 +6641,7 @@ function MobileOverviewSection({
               duration="slow"
               className="min-w-0 text-center"
             >
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Window P/L</div>
+              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Window Profit/Loss</div>
               <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
                 <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
                 {view.pnlDelta ? (
@@ -6640,6 +6654,18 @@ function MobileOverviewSection({
                     ({view.pnlDelta})
                   </span>
                 ) : null}
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="scale" delay={120} duration="slow" className="min-w-0 text-center">
+              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Active Trades</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.metrics[2]?.value ?? "0"}</span>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal variant="scale" delay={160} duration="slow" className="min-w-0 text-center">
+              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Execution Rate</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.metrics[3]?.value ?? "N/A"}</span>
               </div>
             </ViewportReveal>
           </div>
