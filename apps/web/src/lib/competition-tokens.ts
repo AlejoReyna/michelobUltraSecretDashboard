@@ -284,7 +284,12 @@ export function liveWalletBalancesFromTelemetry(data: StatusPayload | null): Wal
     upsert(balance.chain, balance.symbol, balance.amount, balance.valueUsd);
   }
 
-  return Array.from(rows.values()).sort((left, right) => (right.valueUsd ?? 0) - (left.valueUsd ?? 0));
+  const isBnb = (r: WalletBalanceRow) => r.symbol.toUpperCase() === "BNB" && r.chain.toLowerCase() === "bsc";
+  return Array.from(rows.values()).sort((left, right) => {
+    if (isBnb(left) && !isBnb(right)) return -1;
+    if (!isBnb(left) && isBnb(right)) return 1;
+    return (right.valueUsd ?? 0) - (left.valueUsd ?? 0);
+  });
 }
 
 export function agentModeLabel(data: StatusPayload | null) {

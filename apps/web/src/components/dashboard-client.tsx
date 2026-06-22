@@ -1763,11 +1763,16 @@ function WalletBalanceTableRow({
   scrollRoot: Element | null;
 }) {
   const isLeadHolding = index === 0 && (balance.valueUsd ?? 0) > 0;
+  const isBnbGas = balance.symbol.toUpperCase() === "BNB" && balance.chain.toLowerCase() === "bsc";
   const tokenVariant = isLeadHolding ? walletRowLeadVariant(balance.symbol, balance.valueUsd, index) : walletColumnVariant("token");
 
   return (
     <tr
-      className={cx("border-b border-[#1E1E26] text-white", !compact && "hover:bg-[#0c0c0f]")}
+      className={cx(
+        "border-b border-[#1E1E26] text-white",
+        !compact && "hover:bg-[#0c0c0f]",
+        isBnbGas && "bg-[#F0B90B]/[0.03]",
+      )}
     >
       <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#cccdde]">
         <ViewportReveal
@@ -1791,6 +1796,11 @@ function WalletBalanceTableRow({
         >
           <TokenIcon symbol={balance.symbol} size={16} />
           <span className="truncate">{balance.symbol}</span>
+          {isBnbGas ? (
+            <span className="shrink-0 rounded-sm border border-[#F0B90B]/30 px-1 font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-[#F0B90B]/70">
+              gas
+            </span>
+          ) : null}
         </ViewportReveal>
       </td>
       <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#cccdde]">
