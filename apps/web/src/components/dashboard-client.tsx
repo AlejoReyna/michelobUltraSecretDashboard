@@ -386,6 +386,7 @@ type DashboardViewModel = {
   x402TotalBudgetUsdc: number | null;
   x402WalletAddress: string | null;
   x402WalletUsdcBalance: number | null;
+  twakWalletAddress: string | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -1525,6 +1526,7 @@ function buildViewModel(
     x402TotalBudgetUsdc: data?.x402?.totalBudgetUsdc ?? null,
     x402WalletAddress: data?.x402?.walletAddress ?? null,
     x402WalletUsdcBalance: data?.x402?.walletUsdcBalance ?? null,
+    twakWalletAddress: data?.wallet?.address ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1830,9 +1832,43 @@ function WalletBalanceTableRow({
   );
 }
 
+function AddressActions({ address, explorerUrl }: { address: string; explorerUrl: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(address).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-2">
+      <span className="font-mono text-[10px] text-[#7f7f94]">
+        {address.slice(0, 6)}…{address.slice(-4)}
+      </span>
+      <button
+        onClick={copy}
+        title="Copy address"
+        className="flex items-center gap-1 rounded border border-[#2a2a3a] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[#7f7f94] transition-colors hover:border-[#b07de3]/50 hover:text-[#b07de3]"
+      >
+        {copied ? "✓ copied" : "copy"}
+      </button>
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="View on explorer"
+        className="flex items-center gap-1 rounded border border-[#2a2a3a] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[#7f7f94] transition-colors hover:border-[#33c28e]/50 hover:text-[#33c28e]"
+      >
+        explorer ↗
+      </a>
+    </div>
+  );
+}
+
 function WalletPanel({
   balances,
   agentMode,
+  twakWalletAddress,
   x402WalletAddress,
   x402WalletUsdcBalance,
   compact = false,
@@ -1840,6 +1876,7 @@ function WalletPanel({
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
+  twakWalletAddress?: string | null;
   x402WalletAddress?: string | null;
   x402WalletUsdcBalance?: number | null;
   compact?: boolean;
@@ -1869,15 +1906,23 @@ function WalletPanel({
         <ViewportReveal variant="blur" duration="slow">
           <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7f7f94]">TWAK Wallet</div>
           <div className="mt-2 flex items-start justify-between gap-4">
-            <h1
-              className={cx(
-                "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
-                flat ? "text-[28px]" : "text-[32px]",
-              )}
-            >
-              <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
-              Live Holdings
-            </h1>
+            <div className="min-w-0">
+              <h1
+                className={cx(
+                  "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
+                  flat ? "text-[28px]" : "text-[32px]",
+                )}
+              >
+                <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
+                Live Holdings
+              </h1>
+              {twakWalletAddress ? (
+                <AddressActions
+                  address={twakWalletAddress}
+                  explorerUrl={`https://bscscan.com/address/${twakWalletAddress}#tokentxns`}
+                />
+              ) : null}
+            </div>
             <div className="shrink-0 text-right font-sans">
               <ViewportReveal variant="fade" delay={70} duration="fast">
                 <div className="text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">
@@ -1954,9 +1999,10 @@ function WalletPanel({
                   </span>
                   Base USDC
                 </h2>
-                <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
-                  {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
-                </div>
+                <AddressActions
+                  address={x402WalletAddress}
+                  explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
+                />
               </div>
               <div className="shrink-0 text-right">
                 <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -5665,7 +5711,7 @@ function DesktopDashboard({
                 desktop
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -6176,9 +6222,10 @@ function HomeWalletSummary({
                 </span>
                 Base USDC
               </h2>
-              <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
-                {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
-              </div>
+              <AddressActions
+                address={x402WalletAddress}
+                explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
+              />
             </div>
             <div className="shrink-0 text-right">
               <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -6812,7 +6859,7 @@ function MobileDashboard({
                 compact
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
