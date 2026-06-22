@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowUp } from "lucide-react";
 import { TypewriterText } from "@/components/typewriter-text";
 import {
   createAssistantMessage,
@@ -39,8 +40,14 @@ function useFadePhase(initialPhase: FadePhase = "visible") {
   }
 
   useEffect(() => {
-    if (phase !== "out") return;
-    const timeout = window.setTimeout(() => setPhase("hidden"), FADE_OUT_MS);
+    if (phase !== "out") {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPhase("hidden");
+    }, FADE_OUT_MS);
+
     return () => window.clearTimeout(timeout);
   }, [phase]);
 
@@ -51,10 +58,16 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function formatTimestamp(iso: string) {
+function formatMessageTime(iso: string) {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function IntelSectionHeader({
@@ -66,47 +79,32 @@ function IntelSectionHeader({
   desktop?: boolean;
   greetingPhase: FadePhase;
 }) {
+  const flat = compact || desktop;
   const now = useNow();
   const [greeting] = useState(() => pickIntelGreeting());
 
   return (
     <div>
-      {/* terminal title bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] font-bold text-[#b07de3]/60">{"//"}</span>
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[#7f7f94]">
-            MARKET_INTEL
-          </span>
-          <span className="h-1.5 w-1.5 rounded-full bg-[#33c28e] shadow-[0_0_4px_#33c28e]" />
-        </div>
-        <span className="font-mono text-[9px] tabular-nums text-[#3f3f50]">
-          {formatTimestamp(new Date(now).toISOString())} UTC
-        </span>
+      <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#5A5A5A]">
+        Market Intel · {formatMessageTime(new Date(now).toISOString())}
       </div>
-
-      {/* welcome message */}
       {greetingPhase !== "hidden" ? (
-        <div className={cx("mt-3", greetingPhase === "out" && "section-fade-out")}>
-          <div className="section-fade-in font-mono text-[10px] text-[#3f3f50]">
-            {"┌─────────────────────────────────────┐"}
-          </div>
+        <div className={cx(greetingPhase === "out" && "section-fade-out")}>
           <div
             className={cx(
-              "section-fade-in font-mono font-semibold leading-snug text-[#b07de3]",
-              compact || desktop ? "text-[13px]" : "text-[14px]",
+              "section-fade-in mt-2 font-mono font-semibold leading-tight text-white",
+              flat ? "text-[28px]" : "text-[32px]",
+              compact && "whitespace-nowrap",
             )}
           >
-            {"│ "}{greeting}
-          </div>
-          <div className="section-fade-in font-mono text-[10px] text-[#3f3f50]">
-            {"└─────────────────────────────────────┘"}
+            {greeting}
           </div>
         </div>
       ) : null}
     </div>
   );
 }
+
 
 function ChatBubble({
   message,
@@ -121,62 +119,42 @@ function ChatBubble({
 }) {
   const isUser = message.role === "user";
   const content = isUser ? message.content : formatAssistantContent(message.content);
-  const ts = formatTimestamp(message.timestamp);
 
   return (
-    <div className="flex flex-col gap-0.5">
-      {/* prompt line */}
-      <div className="flex items-baseline gap-1.5">
-        <span className={cx(
-          "shrink-0 font-mono tabular-nums",
-          compact ? "text-[9px]" : "text-[10px]",
-          "text-[#3f3f50]",
-        )}>
-          [{ts}]
-        </span>
-        <span className={cx(
-          "shrink-0 font-mono font-bold",
-          compact ? "text-[9px]" : "text-[10px]",
-          isUser ? "text-[#b07de3]" : "text-[#33c28e]",
-        )}>
-          {isUser ? "cascade:~$" : "intel:>"}
-        </span>
-        {isUser ? (
-          <span className={cx(
-            "font-mono leading-snug text-white break-words min-w-0",
-            compact ? "text-[11px]" : "text-[12px]",
-          )}>
-            {content}
-          </span>
-        ) : null}
-      </div>
-
-      {/* assistant output block */}
-      {!isUser ? (
-        <div className={cx(
-          "ml-[3.25rem] border-l-2 border-[#1e1e2e] pl-3",
-          message.fallback && "border-[#8A6A3A]/40",
-        )}>
-          {message.fallback ? (
-            <div className="mb-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A6A3A]">
-              // offline_mode
-            </div>
-          ) : null}
-          <div className={cx(
-            "font-mono leading-[1.6] whitespace-pre-wrap break-words text-[#c0c0d0]",
-            compact ? "text-[11px]" : "text-[12px]",
-          )}>
-            {animate ? (
-              <TypewriterText text={content} speed={14} startDelay={120} />
-            ) : (
-              <>
-                {content}
-                {streaming ? <span className="typewriter-cursor" aria-hidden="true" /> : null}
-              </>
-            )}
+    <div className={cx("flex w-full", isUser ? "justify-end" : "justify-start")}>
+      <div className={cx("max-w-[min(100%,42rem)]", isUser ? "text-right" : "text-left")}>
+        {!isUser && message.fallback ? (
+          <div className="mb-1 font-mono text-[9px] uppercase tracking-[0.1em] text-[#8A6A3A]">
+            offline mode
           </div>
+        ) : null}
+        <div
+          className={cx(
+            "inline-block text-left font-mono leading-[1.55] whitespace-pre-wrap break-words",
+            compact ? "text-[12px]" : "text-[13px]",
+            isUser
+              ? "rounded-sm border border-[#333333] bg-[#141414] px-3 py-2.5 text-white"
+              : "px-1 py-1 text-[#D8D8D8]",
+          )}
+        >
+          {animate && !isUser ? (
+            <TypewriterText text={content} speed={14} startDelay={120} />
+          ) : (
+            <>
+              {content}
+              {streaming ? <span className="typewriter-cursor" aria-hidden="true" /> : null}
+            </>
+          )}
         </div>
-      ) : null}
+        <div
+          className={cx(
+            "mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#5A5A5A]",
+            isUser ? "text-right" : "text-left",
+          )}
+        >
+          {isUser ? "You" : "Bot"} · {formatMessageTime(message.timestamp)}
+        </div>
+      </div>
     </div>
   );
 }
@@ -201,36 +179,35 @@ function ChatComposer({
   return (
     <form
       className={cx(
-        "flex w-full shrink-0 items-center gap-2 border-t border-[#1e1e2e] bg-[#0B0E11]",
-        compact ? "px-4 py-2.5" : desktop ? "px-8 py-4" : "px-4 py-3",
-        disabled && "opacity-40",
+        "flex w-full shrink-0 items-center gap-2 border-t border-[#2A2A2A] bg-[#1C1C1C]",
+        compact && "px-4 py-[9px]",
+        desktop && "sticky bottom-0 z-10 px-8 py-[18.4px]",
+        disabled && "opacity-50",
       )}
       onSubmit={(event) => {
         event.preventDefault();
-        if (canSend) onSubmit();
+        if (canSend) {
+          onSubmit();
+        }
       }}
     >
-      <span className={cx(
-        "shrink-0 font-mono font-bold text-[#b07de3]",
-        compact ? "text-[10px]" : "text-[11px]",
-      )}>
-        cascade:~$
-      </span>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            if (canSend) onSubmit();
+            if (canSend) {
+              onSubmit();
+            }
           }
         }}
         rows={1}
-        placeholder="query market intel..."
+        placeholder="Ask about scans, x402 payments, or entry scores…"
         disabled={disabled}
         className={cx(
-          "max-h-28 min-h-0 flex-1 resize-none bg-transparent py-0 font-mono text-white outline-none placeholder:text-[#2e2e3e] caret-[#b07de3]",
-          compact ? "text-[11px] leading-[18px]" : desktop ? "text-[13px] leading-[28px]" : "text-[12px] leading-[22px]",
+          "max-h-28 min-h-0 flex-1 resize-none bg-transparent py-0 font-mono text-white outline-none placeholder:text-[#5A5A5A]",
+          compact ? "text-[12px] leading-[18px]" : desktop ? "text-[15px] leading-[44.8px]" : "text-[15px] leading-[28px]",
         )}
         aria-label="Market chat message"
       />
@@ -239,13 +216,14 @@ function ChatComposer({
         disabled={!canSend}
         aria-label="Send message"
         className={cx(
-          "shrink-0 font-mono text-[9px] font-bold uppercase tracking-[0.12em] border px-2 py-1 transition-colors",
+          "flex shrink-0 items-center justify-center rounded-sm border transition-colors",
+          compact ? "h-[29px] w-[29px]" : desktop ? "h-[59.2px] w-[59.2px]" : "h-[37px] w-[37px]",
           canSend
-            ? "border-[#b07de3]/50 text-[#b07de3] hover:border-[#b07de3] hover:bg-[#b07de3]/10"
-            : "border-[#2e2e3e] text-[#2e2e3e]",
+            ? "border-[#444444] bg-white text-black hover:bg-[#E8E8E8]"
+            : "border-[#3A3A3A] bg-[#252525] text-[#888888]",
         )}
       >
-        [exec]
+        <ArrowUp size={compact ? 15 : 18} strokeWidth={2.25} aria-hidden="true" />
       </button>
     </form>
   );
@@ -270,19 +248,25 @@ function MarketChatSurface({
   const scrollRef = useRef<HTMLDivElement>(null);
   const dataRef = useRef(data);
 
-  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const interactionDisabled = thinking;
 
   useEffect(() => {
     const node = scrollRef.current;
-    if (!node) return;
+    if (!node) {
+      return;
+    }
     node.scrollTop = node.scrollHeight;
   }, [messages, thinking]);
 
   async function sendMessage(raw: string) {
     const content = raw.trim();
-    if (!content || interactionDisabled) return;
+    if (!content || interactionDisabled) {
+      return;
+    }
 
     const userMessage = createUserMessage(content);
     const historyForApi = [...messages, userMessage].map((message) => ({
@@ -291,7 +275,9 @@ function MarketChatSurface({
     }));
 
     setMessages((current) => {
-      if (current.length === 0) onChatStart?.();
+      if (current.length === 0) {
+        onChatStart?.();
+      }
       const next = [...current, userMessage];
       writeStoredChatMessages(next);
       return next;
@@ -303,12 +289,17 @@ function MarketChatSurface({
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: historyForApi, telemetrySnapshot: dataRef.current }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: historyForApi,
+          telemetrySnapshot: dataRef.current,
+        }),
       });
 
       if (!response.ok && response.status === 400) {
-        setRequestError("ERR: invalid message format");
+        setRequestError("Invalid message format");
         setThinking(false);
         return;
       }
@@ -317,7 +308,9 @@ function MarketChatSurface({
       const contentType = response.headers.get("Content-Type") ?? "";
 
       if (fallbackMode || contentType.includes("application/json")) {
-        const payload = (await response.json()) as { response?: string };
+        const payload = (await response.json()) as {
+          response?: string;
+        };
         const assistantMessage = {
           ...createAssistantMessage(payload.response ?? "No response available."),
           fallback: true,
@@ -338,14 +331,19 @@ function MarketChatSurface({
       setStreamingId(assistantMessage.id);
 
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("Missing response stream");
+      if (!reader) {
+        throw new Error("Missing response stream");
+      }
 
       const decoder = new TextDecoder();
       let streamed = "";
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
+
         streamed += decoder.decode(value, { stream: true });
         setMessages((current) =>
           current.map((message) =>
@@ -363,7 +361,7 @@ function MarketChatSurface({
       setThinking(false);
     } catch {
       const assistantMessage = {
-        ...createAssistantMessage("ERR: intel offline. using local rules.\n\nrequest failed — try again."),
+        ...createAssistantMessage("⚠ Intel offline. Using local rules.\n\nRequest failed — try again."),
         fallback: true,
       };
       const stored = readStoredChatMessages();
@@ -376,7 +374,11 @@ function MarketChatSurface({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className={cx(
+        "flex min-h-0 flex-1 flex-col",
+      )}
+    >
       <div
         ref={scrollRef}
         className={cx(
@@ -384,7 +386,7 @@ function MarketChatSurface({
           compact ? "px-4" : desktop ? "px-8" : "px-4",
         )}
       >
-        <div className="flex flex-col gap-4 py-4">
+        <div className="flex flex-col gap-5 py-4">
           {messages.map((message) => (
             <ChatBubble
               key={message.id}
@@ -395,15 +397,12 @@ function MarketChatSurface({
             />
           ))}
           {requestError ? (
-            <div className="font-mono text-[11px] text-[#e05b73]">{requestError}</div>
+            <div className="px-1 font-mono text-[11px] text-[#B07070]">{requestError}</div>
           ) : null}
           {thinking && !streamingId ? (
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-mono text-[10px] text-[#3f3f50]">[{formatTimestamp(new Date().toISOString())}]</span>
-              <span className="font-mono text-[10px] font-bold text-[#33c28e]">intel:{">"}</span>
-              <span className="font-mono text-[11px] text-[#5f5f70]">
-                reading x402 telemetry<span className="typewriter-cursor" aria-hidden="true" />
-              </span>
+            <div className="px-1 font-mono text-[12px] text-[#8A8A8A]">
+              Reading x402 telemetry
+              <span className="typewriter-cursor" aria-hidden="true" />
             </div>
           ) : null}
         </div>
@@ -434,6 +433,9 @@ export function MarketChatPanel({
   const { phase: greetingPhase, dismiss: dismissGreeting } = useFadePhase(
     chatAlreadyStarted ? "hidden" : "visible",
   );
+  function handleChatStart() {
+    dismissGreeting();
+  }
 
   return (
     <section
@@ -445,8 +447,9 @@ export function MarketChatPanel({
     >
       <div
         className={cx(
-          "shrink-0 border-b border-[#1e1e2e]",
-          compact ? "px-4" : desktop ? "px-8" : "px-4",
+          "shrink-0 border-b border-[#1A1A1A]",
+          compact && "px-4",
+          desktop && "px-8",
           greetingPhase === "hidden" ? "pb-2" : "pb-3",
         )}
       >
@@ -456,7 +459,7 @@ export function MarketChatPanel({
         data={data}
         compact={compact}
         desktop={desktop}
-        onChatStart={dismissGreeting}
+        onChatStart={handleChatStart}
       />
     </section>
   );
