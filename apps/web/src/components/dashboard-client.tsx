@@ -27,6 +27,9 @@ import {
   FileText,
   Filter,
   Github,
+  Check,
+  Copy,
+  ExternalLink,
   Globe,
   Home,
   Layers,
@@ -1848,18 +1851,18 @@ function AddressActions({ address, explorerUrl }: { address: string; explorerUrl
       <button
         onClick={copy}
         title="Copy address"
-        className="flex items-center gap-1 rounded border border-[#2a2a3a] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[#7f7f94] transition-colors hover:border-[#b07de3]/50 hover:text-[#b07de3]"
+        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#b07de3]"
       >
-        {copied ? "✓ copied" : "copy"}
+        {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={2} />}
       </button>
       <a
         href={explorerUrl}
         target="_blank"
         rel="noopener noreferrer"
         title="View on explorer"
-        className="flex items-center gap-1 rounded border border-[#2a2a3a] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-[#7f7f94] transition-colors hover:border-[#33c28e]/50 hover:text-[#33c28e]"
+        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#33c28e]"
       >
-        explorer ↗
+        <ExternalLink size={13} strokeWidth={2} />
       </a>
     </div>
   );
