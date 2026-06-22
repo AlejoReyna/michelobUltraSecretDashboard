@@ -6675,7 +6675,7 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]/30"
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]"
       >
         <div className="absolute inset-0 flex flex-col">
           <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border-b border-[#1e1e26]">
