@@ -304,7 +304,7 @@ function positivePrice(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
+function activePositionPnl(positionRows: PositionRow[]): { absolute: number | null; percent: number | null } {
   let totalEntry = 0;
   let totalCurrent = 0;
   let valid = false;
@@ -325,8 +325,13 @@ function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
     }
   }
 
-  if (!valid || totalEntry === 0) return null;
-  return ((totalCurrent - totalEntry) / totalEntry) * 100;
+  if (!valid || totalEntry === 0) return { absolute: null, percent: null };
+  const absolute = totalCurrent - totalEntry;
+  return { absolute, percent: (absolute / totalEntry) * 100 };
+}
+
+function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
+  return activePositionPnl(positionRows).percent;
 }
 
 function positionRiskStats(row: PositionRow) {
@@ -1486,12 +1491,12 @@ function buildViewModel(
         tooltip: "Live TWAK portfolio total when available; otherwise latest strategy portfolio value.",
       },
       {
-        label: "Window Profit/Loss",
+        label: "Position P&L",
         value: formatSignedUsd(pnl.absolute),
         delta: windowDelta,
         tone: pnlTone,
         tooltip:
-          "Change from the first live decision in the selected window to the current TWAK portfolio total. Paper-mode snapshots are excluded when live wallet data is available.",
+          "Unrealized P&L across all open positions: sum of (current price × amount) minus sum of entry cost.",
       },
       {
         label: "Active Trades",
@@ -6894,13 +6899,17 @@ export function DashboardClient() {
     frozenPnlStore.getSnapshot,
     frozenPnlStore.getServerSnapshot,
   );
-  const positionPnlPercent = activePositionPnlPercent(view.positionRows);
+  const positionPnl = activePositionPnl(view.positionRows);
+  const positionPnlPercent = positionPnl.percent;
   useEffect(() => {
     frozenPnlStore.set(positionPnlPercent);
   }, [frozenPnlStore, positionPnlPercent]);
   const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnl;
+  const effectivePnlAbsolute = positionPnl.absolute;
   const effectiveDelta =
     effectivePnlPercent !== null ? formatPercent(effectivePnlPercent) : undefined;
+  const effectivePnlValue =
+    effectivePnlAbsolute !== null ? formatSignedUsd(effectivePnlAbsolute) : view.pnlValue;
   const effectivePnlTone: "positive" | "negative" =
     effectivePnlPercent !== null
       ? effectivePnlPercent >= 0
@@ -6909,20 +6918,22 @@ export function DashboardClient() {
       : view.pnlTone;
 
   const effectiveView = useMemo(() => {
+    const valueChanged = effectivePnlValue !== view.pnlValue;
     const deltaChanged = effectiveDelta !== view.pnlDelta;
     const toneChanged = effectivePnlTone !== view.pnlTone;
-    if (!deltaChanged && !toneChanged) return view;
+    if (!valueChanged && !deltaChanged && !toneChanged) return view;
     return {
       ...view,
+      pnlValue: effectivePnlValue,
       pnlDelta: effectiveDelta,
       pnlTone: effectivePnlTone,
       metrics: view.metrics.map((m) =>
-        m.label === "Window Profit/Loss"
-          ? { ...m, delta: effectiveDelta, tone: effectivePnlTone }
+        m.label === "Position P&L"
+          ? { ...m, value: effectivePnlValue, delta: effectiveDelta, tone: effectivePnlTone }
           : m,
       ),
     };
-  }, [view, effectiveDelta, effectivePnlTone]);
+  }, [view, effectivePnlValue, effectiveDelta, effectivePnlTone]);
 
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
