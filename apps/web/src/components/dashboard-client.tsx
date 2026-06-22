@@ -5776,7 +5776,7 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
@@ -5875,7 +5875,7 @@ function HomeSignalSummary({
   const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0c0c0f]/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#111114]">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] px-3 py-2">
         <span className="font-sans text-[11px] font-semibold leading-none text-white">Signal</span>
@@ -5942,7 +5942,7 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6115,7 +6115,7 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6675,7 +6675,7 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]"
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#111114]/80"
       >
         <div className="absolute inset-0 flex flex-col">
           <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border-b border-[#1e1e26]">
@@ -6788,7 +6788,7 @@ function MobileBottomNav({
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/75 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/95 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div
@@ -6836,7 +6836,7 @@ function MobileDashboard({
       <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <main className="relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#0c0c0f]">
         {showTopBar ? (
           <div className="shrink-0">
             <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
