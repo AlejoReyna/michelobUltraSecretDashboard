@@ -7,6 +7,7 @@ import {
   decisionSchema,
   executionSchema,
   guardrailsSchema,
+  hourlyPnlRecordSchema,
   marketDataRowSchema,
   positionsSchema,
   sellHistorySchema,
@@ -16,6 +17,7 @@ import {
   type Decision,
   type Execution,
   type Guardrails,
+  type HourlyPnlRecord,
   type MarketDataRow,
   type Positions,
   type SellHistoryRow,
@@ -70,6 +72,10 @@ export async function getX402Wallet(sourcePath: string) {
 
 export async function getSellHistory(sourcePath: string, limit = DEFAULT_LIMIT) {
   return readJsonlFile<SellHistoryRow>(sourceFile(sourcePath, FILES.sellHistoryLog), sellHistorySchema, limit);
+}
+
+export async function getHourlyPnl(sourcePath: string, limit = 500) {
+  return readJsonlFile<HourlyPnlRecord>(sourceFile(sourcePath, FILES.hourlyPnlLog), hourlyPnlRecordSchema, limit);
 }
 
 export async function getPositions(sourcePath: string) {
@@ -173,7 +179,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, x402Calls, x402SpendLedger, x402Wallet, sellHistory, marketData, positions, guardrails, files] =
+  const [health, decisions, executions, x402Calls, x402SpendLedger, x402Wallet, sellHistory, hourlyPnl, marketData, positions, guardrails, files] =
     await Promise.all([
       getHealth(sourcePath),
       getDecisions(sourcePath, limit),
@@ -182,6 +188,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
       getX402SpendLedger(sourcePath),
       getX402Wallet(sourcePath),
       getSellHistory(sourcePath, limit),
+      getHourlyPnl(sourcePath),
       getMarketData(sourcePath, limit),
       getPositions(sourcePath),
       getGuardrails(sourcePath),
@@ -198,6 +205,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
     executionErrors: executions.errors,
     sellHistory: sellHistory.fileMissing ? [] : sellHistory.items,
     sellHistoryErrors: sellHistory.errors,
+    hourlyPnl: hourlyPnl.fileMissing ? [] : hourlyPnl.items,
     positions: positions.data,
     positionsError: positions.error,
     guardrails: guardrails.data,

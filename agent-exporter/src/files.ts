@@ -23,6 +23,7 @@ export const FILES = {
   x402SpendLedger: "logs/x402_spend.json",
   x402Wallet: "logs/x402_wallet.json",
   sellHistoryLog: "logs/sell_history.jsonl",
+  hourlyPnlLog: "logs/hourly_pnl.jsonl",
   positions: "positions.json",
   guardrails: "guardrail_state.json",
   priceCache: "price_cache.json",
