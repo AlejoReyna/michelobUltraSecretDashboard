@@ -284,8 +284,8 @@ export function PortfolioChart({
 
   const yTicks = chart.scale.ticks;
 
-  const lineColor = isMobile ? "#00FF00" : "#FFFFFF";
-  const fillColor = isMobile ? "#00FF00" : "#B8B8B8";
+  const lineColor = "#FFFFFF";
+  const fillColor = "#B8B8B8";
 
   const chartSvg = (
     <svg

@@ -304,7 +304,7 @@ function positivePrice(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
+function activePositionPnl(positionRows: PositionRow[]): { absolute: number | null; percent: number | null } {
   let totalEntry = 0;
   let totalCurrent = 0;
   let valid = false;
@@ -325,8 +325,13 @@ function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
     }
   }
 
-  if (!valid || totalEntry === 0) return null;
-  return ((totalCurrent - totalEntry) / totalEntry) * 100;
+  if (!valid || totalEntry === 0) return { absolute: null, percent: null };
+  const absolute = totalCurrent - totalEntry;
+  return { absolute, percent: (absolute / totalEntry) * 100 };
+}
+
+function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
+  return activePositionPnl(positionRows).percent;
 }
 
 function positionRiskStats(row: PositionRow) {
@@ -381,6 +386,7 @@ type DashboardViewModel = {
   x402TotalBudgetUsdc: number | null;
   x402WalletAddress: string | null;
   x402WalletUsdcBalance: number | null;
+  twakWalletAddress: string | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -1486,12 +1492,12 @@ function buildViewModel(
         tooltip: "Live TWAK portfolio total when available; otherwise latest strategy portfolio value.",
       },
       {
-        label: "Window Profit/Loss",
+        label: "Position P&L",
         value: formatSignedUsd(pnl.absolute),
         delta: windowDelta,
         tone: pnlTone,
         tooltip:
-          "Change from the first live decision in the selected window to the current TWAK portfolio total. Paper-mode snapshots are excluded when live wallet data is available.",
+          "Unrealized P&L across all open positions: sum of (current price × amount) minus sum of entry cost.",
       },
       {
         label: "Active Trades",
@@ -1520,6 +1526,7 @@ function buildViewModel(
     x402TotalBudgetUsdc: data?.x402?.totalBudgetUsdc ?? null,
     x402WalletAddress: data?.x402?.walletAddress ?? null,
     x402WalletUsdcBalance: data?.x402?.walletUsdcBalance ?? null,
+    twakWalletAddress: data?.wallet?.address ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1758,11 +1765,16 @@ function WalletBalanceTableRow({
   scrollRoot: Element | null;
 }) {
   const isLeadHolding = index === 0 && (balance.valueUsd ?? 0) > 0;
+  const isBnbGas = balance.symbol.toUpperCase() === "BNB" && balance.chain.toLowerCase() === "bsc";
   const tokenVariant = isLeadHolding ? walletRowLeadVariant(balance.symbol, balance.valueUsd, index) : walletColumnVariant("token");
 
   return (
     <tr
-      className={cx("border-b border-[#1E1E26] text-white", !compact && "hover:bg-[#0c0c0f]")}
+      className={cx(
+        "border-b border-[#1E1E26] text-white",
+        !compact && "hover:bg-[#0c0c0f]",
+        isBnbGas && "bg-[#F0B90B]/[0.03]",
+      )}
     >
       <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#cccdde]">
         <ViewportReveal
@@ -1786,6 +1798,11 @@ function WalletBalanceTableRow({
         >
           <TokenIcon symbol={balance.symbol} size={16} />
           <span className="truncate">{balance.symbol}</span>
+          {isBnbGas ? (
+            <span className="shrink-0 rounded-sm border border-[#F0B90B]/30 px-1 font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-[#F0B90B]/70">
+              gas
+            </span>
+          ) : null}
         </ViewportReveal>
       </td>
       <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#cccdde]">
@@ -1815,9 +1832,43 @@ function WalletBalanceTableRow({
   );
 }
 
+function AddressActions({ address, explorerUrl }: { address: string; explorerUrl: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(address).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <div className="mt-1.5 flex items-center gap-2">
+      <span className="font-mono text-[10px] text-[#7f7f94]">
+        {address.slice(0, 6)}…{address.slice(-4)}
+      </span>
+      <button
+        onClick={copy}
+        title="Copy address"
+        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#b07de3]"
+      >
+        {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={2} />}
+      </button>
+      <a
+        href={explorerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="View on explorer"
+        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#33c28e]"
+      >
+        <ExternalLink size={13} strokeWidth={2} />
+      </a>
+    </div>
+  );
+}
+
 function WalletPanel({
   balances,
   agentMode,
+  twakWalletAddress,
   x402WalletAddress,
   x402WalletUsdcBalance,
   compact = false,
@@ -1825,6 +1876,7 @@ function WalletPanel({
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
+  twakWalletAddress?: string | null;
   x402WalletAddress?: string | null;
   x402WalletUsdcBalance?: number | null;
   compact?: boolean;
@@ -1854,15 +1906,23 @@ function WalletPanel({
         <ViewportReveal variant="blur" duration="slow">
           <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7f7f94]">TWAK Wallet</div>
           <div className="mt-2 flex items-start justify-between gap-4">
-            <h1
-              className={cx(
-                "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
-                flat ? "text-[28px]" : "text-[32px]",
-              )}
-            >
-              <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
-              Live Holdings
-            </h1>
+            <div className="min-w-0">
+              <h1
+                className={cx(
+                  "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
+                  flat ? "text-[28px]" : "text-[32px]",
+                )}
+              >
+                <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
+                Live Holdings
+              </h1>
+              {twakWalletAddress ? (
+                <AddressActions
+                  address={twakWalletAddress}
+                  explorerUrl={`https://bscscan.com/address/${twakWalletAddress}#tokentxns`}
+                />
+              ) : null}
+            </div>
             <div className="shrink-0 text-right font-sans">
               <ViewportReveal variant="fade" delay={70} duration="fast">
                 <div className="text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">
@@ -1939,9 +1999,10 @@ function WalletPanel({
                   </span>
                   Base USDC
                 </h2>
-                <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
-                  {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
-                </div>
+                <AddressActions
+                  address={x402WalletAddress}
+                  explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
+                />
               </div>
               <div className="shrink-0 text-right">
                 <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -5650,7 +5711,7 @@ function DesktopDashboard({
                 desktop
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -5715,7 +5776,7 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
@@ -5814,7 +5875,7 @@ function HomeSignalSummary({
   const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0c0c0f]/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#111114]">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] px-3 py-2">
         <span className="font-sans text-[11px] font-semibold leading-none text-white">Signal</span>
@@ -5881,7 +5942,7 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6054,7 +6115,7 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6161,9 +6222,10 @@ function HomeWalletSummary({
                 </span>
                 Base USDC
               </h2>
-              <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
-                {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
-              </div>
+              <AddressActions
+                address={x402WalletAddress}
+                explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
+              />
             </div>
             <div className="shrink-0 text-right">
               <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -6387,38 +6449,41 @@ function OverviewTopBar({
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="shrink-0 px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-4">
-        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Total Balance</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-            <span className="font-sans text-[13px] text-[#cccdde]">USD</span>
-          </div>
-        </ViewportReveal>
-        <ViewportReveal
-          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-          delay={80}
-          duration="slow"
-          className="min-w-0 text-center"
-        >
-          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Window Profit/Loss</div>
-          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-            {view.pnlDelta ? (
-              <span
-                className={cx(
-                  "font-sans text-[14px] font-bold tabular-nums",
-                  view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                )}
-              >
-                ({view.pnlDelta})
+    <section className="shrink-0 px-4 py-3">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border border-[#1e1e26]">
+        {view.metrics.map((metric, index) => (
+          <ViewportReveal
+            key={metric.label}
+            variant={homeMetricVariant(metric.label, metric.tone)}
+            delay={index * 60}
+            duration={metric.label.includes("Balance") ? "slow" : "normal"}
+            className="group flex min-w-0 flex-col items-center justify-center px-3 py-2.5 text-center"
+          >
+            <div className="flex items-center gap-1">
+              <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
+              <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+                {metric.label.replace(/ /g, "_")}
               </span>
-            ) : null}
-          </div>
-        </ViewportReveal>
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+              <span className="font-mono text-[18px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+              {metric.unit ? (
+                <span className="font-mono text-[9px] text-[#7f7f94]">{metric.unit}</span>
+              ) : null}
+              {metric.delta ? (
+                <span
+                  className={cx(
+                    "font-mono text-[10px] font-bold tabular-nums",
+                    metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                  )}
+                >
+                  ({metric.delta})
+                </span>
+              ) : null}
+            </div>
+          </ViewportReveal>
+        ))}
       </div>
-      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#1E1E26]" />
     </section>
   );
 }
@@ -6610,38 +6675,42 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]/30"
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#111114]/80"
       >
         <div className="absolute inset-0 flex flex-col">
-          <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-3">
-            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Total Balance</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
-                <span className="font-sans text-[11px] text-[#cccdde]">USD</span>
-              </div>
-            </ViewportReveal>
-            <ViewportReveal
-              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
-              delay={80}
-              duration="slow"
-              className="min-w-0 text-center"
-            >
-              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Window P/L</div>
-              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
-                {view.pnlDelta ? (
-                  <span
-                    className={cx(
-                      "font-sans text-[11px] font-bold tabular-nums",
-                      view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                    )}
-                  >
-                    ({view.pnlDelta})
+          <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border-b border-[#1e1e26]">
+            {view.metrics.map((metric, index) => (
+              <ViewportReveal
+                key={metric.label}
+                variant={homeMetricVariant(metric.label, metric.tone)}
+                delay={index * 60}
+                duration={metric.label.includes("Balance") ? "slow" : "normal"}
+                className="group flex min-w-0 flex-col items-center justify-center px-3 py-2 text-center"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="select-none font-mono text-[8px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
+                  <span className="font-mono text-[7px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
+                    {metric.label.replace(/ /g, "_")}
                   </span>
-                ) : null}
-              </div>
-            </ViewportReveal>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
+                  <span className="font-mono text-[15px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
+                  {metric.unit ? (
+                    <span className="font-mono text-[8px] text-[#7f7f94]">{metric.unit}</span>
+                  ) : null}
+                  {metric.delta ? (
+                    <span
+                      className={cx(
+                        "font-mono text-[9px] font-bold tabular-nums",
+                        metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                      )}
+                    >
+                      ({metric.delta})
+                    </span>
+                  ) : null}
+                </div>
+              </ViewportReveal>
+            ))}
           </div>
           <div className="relative min-h-0 flex-1">
             <TimezoneMenu />
@@ -6719,7 +6788,7 @@ function MobileBottomNav({
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/75 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/95 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div
@@ -6767,7 +6836,7 @@ function MobileDashboard({
       <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <main className="relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#0c0c0f]">
         {showTopBar ? (
           <div className="shrink-0">
             <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
@@ -6790,7 +6859,7 @@ function MobileDashboard({
                 compact
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -6887,13 +6956,17 @@ export function DashboardClient() {
     frozenPnlStore.getSnapshot,
     frozenPnlStore.getServerSnapshot,
   );
-  const positionPnlPercent = activePositionPnlPercent(view.positionRows);
+  const positionPnl = activePositionPnl(view.positionRows);
+  const positionPnlPercent = positionPnl.percent;
   useEffect(() => {
     frozenPnlStore.set(positionPnlPercent);
   }, [frozenPnlStore, positionPnlPercent]);
   const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnl;
+  const effectivePnlAbsolute = positionPnl.absolute;
   const effectiveDelta =
     effectivePnlPercent !== null ? formatPercent(effectivePnlPercent) : undefined;
+  const effectivePnlValue =
+    effectivePnlAbsolute !== null ? formatSignedUsd(effectivePnlAbsolute) : view.pnlValue;
   const effectivePnlTone: "positive" | "negative" =
     effectivePnlPercent !== null
       ? effectivePnlPercent >= 0
@@ -6902,20 +6975,22 @@ export function DashboardClient() {
       : view.pnlTone;
 
   const effectiveView = useMemo(() => {
+    const valueChanged = effectivePnlValue !== view.pnlValue;
     const deltaChanged = effectiveDelta !== view.pnlDelta;
     const toneChanged = effectivePnlTone !== view.pnlTone;
-    if (!deltaChanged && !toneChanged) return view;
+    if (!valueChanged && !deltaChanged && !toneChanged) return view;
     return {
       ...view,
+      pnlValue: effectivePnlValue,
       pnlDelta: effectiveDelta,
       pnlTone: effectivePnlTone,
       metrics: view.metrics.map((m) =>
-        m.label === "Window Profit/Loss"
-          ? { ...m, delta: effectiveDelta, tone: effectivePnlTone }
+        m.label === "Position P&L"
+          ? { ...m, value: effectivePnlValue, delta: effectiveDelta, tone: effectivePnlTone }
           : m,
       ),
     };
-  }, [view, effectiveDelta, effectivePnlTone]);
+  }, [view, effectivePnlValue, effectiveDelta, effectivePnlTone]);
 
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
