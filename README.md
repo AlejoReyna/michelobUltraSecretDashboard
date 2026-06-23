@@ -286,6 +286,23 @@ The dashboard serves mock telemetry only when `USE_MOCK_AGENT_DATA=true`. If `AG
 
 ---
 
+<! Instruction for Claude: Explain here how the data is obtained for this section: Balance labels >
+<img width="737" height="74" alt="Screenshot 2026-06-23 at 9 56 02 a m" src="https://github.com/user-attachments/assets/13efdcf5-67b0-404b-93a8-13b0992bde19" />
+
+<! Instruction for Claude: Explain here how the data is obtained for this section: Positions resume >
+<img width="469" height="296" alt="Screenshot 2026-06-23 at 9 56 07 a m" src="https://github.com/user-attachments/assets/48922aeb-cda3-4116-8a73-787864e272c1" />
+
+<! Instruction for Claude: Explain here how the data is obtained for this section: Logs resume >
+<img width="483" height="303" alt="Screenshot 2026-06-23 at 9 56 11 a m" src="https://github.com/user-attachments/assets/fd9ec2e3-fde3-49c4-bf29-ef9ea6e48dd2" />
+
+<! Instruction for Claude: Explain here how the data is obtained for this section: x402 wallet >
+<img width="453" height="135" alt="Screenshot 2026-06-23 at 9 56 24 a m" src="https://github.com/user-attachments/assets/198a96b8-f9bd-4c9c-888e-0e4f792679b7" />
+
+
+
+
+
+
 ## References & links
 
 | | |
