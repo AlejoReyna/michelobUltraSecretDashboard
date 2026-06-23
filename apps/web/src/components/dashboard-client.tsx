@@ -1545,12 +1545,19 @@ function DesktopNavRail({
       aria-label="Dashboard navigation"
     >
       <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[#111114]">
-        <img
-          src="/no-bg.png"
-          alt="Logo"
-          className="h-9 w-auto object-contain opacity-90"
-          style={{ filter: "brightness(1.5) drop-shadow(0 0 3px rgba(255,255,255,0.4))" }}
-        />
+        <a
+          href="https://www.alexisreyna.dev"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Visit Alexis Reyna's website"
+        >
+          <img
+            src="/no-bg.png"
+            alt="Logo"
+            className="h-9 w-auto object-contain opacity-90"
+            style={{ filter: "brightness(1.5) drop-shadow(0 0 3px rgba(255,255,255,0.4))" }}
+          />
+        </a>
       </div>
       <div className="flex w-full flex-1 flex-col items-center gap-1 px-2 py-3">
         {desktopNavItems.map((item) => {
