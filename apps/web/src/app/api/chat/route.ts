@@ -16,6 +16,7 @@ import {
   trimStatusPayload,
 } from "@/lib/market-chat-context";
 import { FALLBACK_REASONS, resolveMarketChatResponse } from "@/lib/market-chat-engine";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { statusSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -363,6 +364,14 @@ function fallbackPrefix(reason: string, telemetryAgeMs: number): string {
 }
 
 export async function POST(request: Request) {
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown";
+  if (!checkRateLimit(ip).allowed) {
+    return Response.json({ error: "Too many requests" }, { status: 429, headers: NO_STORE_HEADERS });
+  }
+
   let body: unknown;
 
   try {

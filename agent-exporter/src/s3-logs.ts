@@ -128,6 +128,17 @@ export async function getS3LogsDownloadUrl(config: S3LogsConfig, key: string): P
     };
   }
 
+  // Prevent path-traversal: key must stay within the configured prefix
+  if (!key.startsWith(config.prefix)) {
+    return {
+      ok: false,
+      url: null,
+      key,
+      bucket: config.bucket,
+      error: `Key is outside the allowed prefix (${config.prefix})`,
+    };
+  }
+
   const client = createS3Client(config.region);
 
   try {

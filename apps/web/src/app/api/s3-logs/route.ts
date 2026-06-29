@@ -87,16 +87,26 @@ export async function GET(request: Request) {
   }
 
   const continuationToken = searchParams.get("continuationToken");
-  const limit = searchParams.get("limit");
-  const pathParts = ["s3-logs"];
+  const rawLimit = searchParams.get("limit");
 
-  if (continuationToken) {
-    pathParts.push(`continuationToken=${encodeURIComponent(continuationToken)}`);
+  // Validate limit before forwarding — must be an integer in [1, 1000]
+  let validatedLimit: number | null = null;
+  if (rawLimit !== null) {
+    const parsed = parseInt(rawLimit, 10);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1000) {
+      return json(
+        { ok: false, error: "limit must be an integer between 1 and 1000" },
+        { status: 400 },
+      );
+    }
+    validatedLimit = parsed;
   }
 
-  if (limit) {
-    pathParts.push(`limit=${encodeURIComponent(limit)}`);
-  }
+  // Build query string correctly — join("?") was a bug when both params present
+  const qs = new URLSearchParams();
+  if (continuationToken) qs.set("continuationToken", continuationToken);
+  if (validatedLimit !== null) qs.set("limit", String(validatedLimit));
+  const qstr = qs.toString();
 
-  return proxyToExporter(pathParts.join("?"), token, exporterUrl);
+  return proxyToExporter(qstr ? `s3-logs?${qstr}` : "s3-logs", token, exporterUrl);
 }
