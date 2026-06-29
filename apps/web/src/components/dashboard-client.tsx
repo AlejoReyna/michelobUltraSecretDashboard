@@ -304,7 +304,7 @@ function positivePrice(value: number | null): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function activePositionPnl(positionRows: PositionRow[]): { absolute: number | null; percent: number | null } {
+function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
   let totalEntry = 0;
   let totalCurrent = 0;
   let valid = false;
@@ -325,13 +325,8 @@ function activePositionPnl(positionRows: PositionRow[]): { absolute: number | nu
     }
   }
 
-  if (!valid || totalEntry === 0) return { absolute: null, percent: null };
-  const absolute = totalCurrent - totalEntry;
-  return { absolute, percent: (absolute / totalEntry) * 100 };
-}
-
-function activePositionPnlPercent(positionRows: PositionRow[]): number | null {
-  return activePositionPnl(positionRows).percent;
+  if (!valid || totalEntry === 0) return null;
+  return ((totalCurrent - totalEntry) / totalEntry) * 100;
 }
 
 function positionRiskStats(row: PositionRow) {
@@ -386,7 +381,6 @@ type DashboardViewModel = {
   x402TotalBudgetUsdc: number | null;
   x402WalletAddress: string | null;
   x402WalletUsdcBalance: number | null;
-  twakWalletAddress: string | null;
   agentMode: string;
   telemetryError: string | null;
   chartData: PortfolioChartPoint[];
@@ -581,6 +575,52 @@ function shortHash(value: string | null | undefined) {
 
 function stringFromUnknown(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function ProjectEndedBanner({
+  projectEnded,
+  compact = false,
+}: {
+  projectEnded: StatusPayload["projectEnded"];
+  compact?: boolean;
+}) {
+  if (!projectEnded?.projectEnded) {
+    return null;
+  }
+
+  const endedDate = projectEnded.endedAt
+    ? new Date(projectEnded.endedAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : " Competition ended";
+
+  return (
+    <div
+      className={cx(
+        "flex items-center gap-2 border border-[#7f7f94]/30 bg-[#7f7f94]/10",
+        compact ? "px-3 py-1.5" : "px-4 py-2",
+      )}
+    >
+      <span
+        className={cx(
+          "shrink-0 rounded-sm bg-[#b07de3] px-1.5 font-sans font-bold uppercase tracking-[0.12em] text-black",
+          compact ? "text-[8px]" : "text-[9px]",
+        )}
+      >
+        Project Ended
+      </span>
+      <span
+        className={cx(
+          "min-w-0 font-sans leading-tight text-[#cccdde]",
+          compact ? "text-[10px]" : "text-[11px]",
+        )}
+      >
+        Trading stopped on {endedDate}. This dashboard is preserved as a legacy record of the 7-day BNB Hack track.
+      </span>
+    </div>
+  );
 }
 
 function timeReference(timestamp: string | null | undefined) {
@@ -1474,13 +1514,16 @@ function buildHourlyPnlSummary(data: StatusPayload | null): {
   allTimePnlTone: "positive" | "negative";
 } {
   const records = data?.hourlyPnl ?? [];
-  const hourlyPnlPoints: PortfolioChartPoint[] = records.map((r, i) => ({
+  const window = records.slice(-25);
+  const hourlyPnlPoints: PortfolioChartPoint[] = window.map((r, i) => ({
     label: `H${i + 1}`,
     value: r.portfolio_value_usdc,
     timestamp: r.hour,
   }));
 
-  const first = records[0]?.portfolio_value_usdc ?? null;
+  // Use the value from 25 hours ago as the baseline so the PnL reflects the last 25h window
+  const baseline = records.at(-26) ?? records[0];
+  const first = baseline?.portfolio_value_usdc ?? null;
   const last = records.at(-1)?.portfolio_value_usdc ?? null;
   const absolute = first !== null && last !== null ? last - first : null;
   const percent = first !== null && first !== 0 && absolute !== null ? (absolute / first) * 100 : null;
@@ -1522,12 +1565,12 @@ function buildViewModel(
         tooltip: "Live TWAK portfolio total when available; otherwise latest strategy portfolio value.",
       },
       {
-        label: "Position P&L",
+        label: "Window Profit/Loss",
         value: formatSignedUsd(pnl.absolute),
         delta: windowDelta,
         tone: pnlTone,
         tooltip:
-          "Unrealized P&L across all open positions: sum of (current price × amount) minus sum of entry cost.",
+          "Change from the first live decision in the selected window to the current TWAK portfolio total. Paper-mode snapshots are excluded when live wallet data is available.",
       },
       {
         label: "Active Trades",
@@ -1556,7 +1599,6 @@ function buildViewModel(
     x402TotalBudgetUsdc: data?.x402?.totalBudgetUsdc ?? null,
     x402WalletAddress: data?.x402?.walletAddress ?? null,
     x402WalletUsdcBalance: data?.x402?.walletUsdcBalance ?? null,
-    twakWalletAddress: data?.wallet?.address ?? null,
     agentMode: agentModeLabel(data),
     telemetryError: error ?? data?.connection?.error ?? null,
     chartData: chart,
@@ -1645,11 +1687,12 @@ function DesktopNavRail({
   );
 }
 
-function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow" | "red" }) {
+function StatusBadge({ status, tone }: { status: string; tone: "green" | "yellow" | "red" | "purple" }) {
   const classes = {
     green: "border-[#33c28e]/20 bg-[#33c28e]/10 text-[#33c28e]",
     yellow: "border-[#cccdde]/20 bg-[#cccdde]/10 text-[#cccdde]",
     red: "border-[#e05b73]/20 bg-[#e05b73]/10 text-[#e05b73]",
+    purple: "border-[#b07de3]/20 bg-[#b07de3]/10 text-[#b07de3]",
   }[tone];
 
   return (
@@ -1688,6 +1731,8 @@ function activityStatusLabel(status: string): string {
       return "Running";
     case "READY":
       return "Ready";
+    case "ENDED":
+      return "Ended";
     default:
       return status;
   }
@@ -1796,16 +1841,11 @@ function WalletBalanceTableRow({
   scrollRoot: Element | null;
 }) {
   const isLeadHolding = index === 0 && (balance.valueUsd ?? 0) > 0;
-  const isBnbGas = balance.symbol.toUpperCase() === "BNB" && balance.chain.toLowerCase() === "bsc";
   const tokenVariant = isLeadHolding ? walletRowLeadVariant(balance.symbol, balance.valueUsd, index) : walletColumnVariant("token");
 
   return (
     <tr
-      className={cx(
-        "border-b border-[#1E1E26] text-white",
-        !compact && "hover:bg-[#0c0c0f]",
-        isBnbGas && "bg-[#F0B90B]/[0.03]",
-      )}
+      className={cx("border-b border-[#1E1E26] text-white", !compact && "hover:bg-[#0c0c0f]")}
     >
       <td className="truncate px-3 py-2 font-sans text-[12px] uppercase text-[#cccdde]">
         <ViewportReveal
@@ -1829,11 +1869,6 @@ function WalletBalanceTableRow({
         >
           <TokenIcon symbol={balance.symbol} size={16} />
           <span className="truncate">{balance.symbol}</span>
-          {isBnbGas ? (
-            <span className="shrink-0 rounded-sm border border-[#F0B90B]/30 px-1 font-mono text-[8px] font-semibold uppercase tracking-[0.1em] text-[#F0B90B]/70">
-              gas
-            </span>
-          ) : null}
         </ViewportReveal>
       </td>
       <td className="truncate px-2 py-2 font-sans text-[12px] tabular-nums text-[#cccdde]">
@@ -1863,55 +1898,22 @@ function WalletBalanceTableRow({
   );
 }
 
-function AddressActions({ address, explorerUrl }: { address: string; explorerUrl: string }) {
-  const [copied, setCopied] = useState(false);
-  function copy() {
-    navigator.clipboard.writeText(address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-  return (
-    <div className="mt-1.5 flex items-center gap-2">
-      <span className="font-mono text-[10px] text-[#7f7f94]">
-        {address.slice(0, 6)}…{address.slice(-4)}
-      </span>
-      <button
-        onClick={copy}
-        title="Copy address"
-        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#b07de3]"
-      >
-        {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={2} />}
-      </button>
-      <a
-        href={explorerUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="View on explorer"
-        className="flex items-center justify-center text-[#7f7f94] transition-colors hover:text-[#33c28e]"
-      >
-        <ExternalLink size={13} strokeWidth={2} />
-      </a>
-    </div>
-  );
-}
-
 function WalletPanel({
   balances,
   agentMode,
-  twakWalletAddress,
   x402WalletAddress,
   x402WalletUsdcBalance,
   compact = false,
   desktop = false,
+  projectEnded,
 }: {
   balances: WalletBalanceRow[];
   agentMode: string;
-  twakWalletAddress?: string | null;
   x402WalletAddress?: string | null;
   x402WalletUsdcBalance?: number | null;
   compact?: boolean;
   desktop?: boolean;
+  projectEnded?: StatusPayload["projectEnded"];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
@@ -1919,6 +1921,7 @@ function WalletPanel({
   const totalValue = balances.reduce((sum, balance) => sum + (balance.valueUsd ?? 0), 0);
   const flat = panelUsesFlatChrome(compact, desktop);
   const tableCompact = flat;
+  const projectEndedActive = Boolean(projectEnded?.projectEnded);
 
   useEffect(() => {
     setScrollRoot(scrollRef.current);
@@ -1937,23 +1940,15 @@ function WalletPanel({
         <ViewportReveal variant="blur" duration="slow">
           <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7f7f94]">TWAK Wallet</div>
           <div className="mt-2 flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1
-                className={cx(
-                  "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
-                  flat ? "text-[28px]" : "text-[32px]",
-                )}
-              >
-                <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
-                Live Holdings
-              </h1>
-              {twakWalletAddress ? (
-                <AddressActions
-                  address={twakWalletAddress}
-                  explorerUrl={`https://bscscan.com/address/${twakWalletAddress}#tokentxns`}
-                />
-              ) : null}
-            </div>
+            <h1
+              className={cx(
+                "font-sans font-semibold leading-tight text-white inline-flex items-center gap-2",
+                flat ? "text-[28px]" : "text-[32px]",
+              )}
+            >
+              <img src="/trust_logo.png" alt="TWAK" className="h-6 w-6 object-contain rounded-sm" />
+              {projectEndedActive ? "Final Holdings" : "Live Holdings"}
+            </h1>
             <div className="shrink-0 text-right font-sans">
               <ViewportReveal variant="fade" delay={70} duration="fast">
                 <div className="text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">
@@ -1963,13 +1958,24 @@ function WalletPanel({
               <ViewportReveal variant="scale" delay={130} duration="slow">
                 <div className="mt-1 text-sm tabular-nums text-white">{formatUsd(totalValue)}</div>
               </ViewportReveal>
-              {paperMode ? (
+              {projectEndedActive ? (
+                <ViewportReveal variant="down" delay={190} duration="fast">
+                  <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#b07de3]">Project ended</div>
+                </ViewportReveal>
+              ) : paperMode ? (
                 <ViewportReveal variant="down" delay={190} duration="fast">
                   <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-[#cccdde]">Paper mode</div>
                 </ViewportReveal>
               ) : null}
             </div>
           </div>
+          {projectEndedActive ? (
+            <ViewportReveal variant="fade" delay={220} duration="fast">
+              <p className="mt-3 max-w-xl font-sans text-[11px] leading-relaxed text-[#7f7f94]">
+                {projectEnded?.note ?? "Trading has stopped. These balances reflect the final snapshot at the end of the competition window."}
+              </p>
+            </ViewportReveal>
+          ) : null}
         </ViewportReveal>
       </div>
 
@@ -2030,10 +2036,9 @@ function WalletPanel({
                   </span>
                   Base USDC
                 </h2>
-                <AddressActions
-                  address={x402WalletAddress}
-                  explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
-                />
+                <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
+                  {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
+                </div>
               </div>
               <div className="shrink-0 text-right">
                 <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -5436,6 +5441,7 @@ function SysLogsPanel({
   fillHeight = false,
   readable = false,
   rowsPerPage = ACTIVITY_ROWS_PER_PAGE,
+  projectEnded,
 }: {
   rows: ActivityRow[];
   agentLog: ReturnType<typeof resolveAgentLogLine>;
@@ -5448,6 +5454,7 @@ function SysLogsPanel({
   fillHeight?: boolean;
   readable?: boolean;
   rowsPerPage?: number;
+  projectEnded?: StatusPayload["projectEnded"];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<Element | null>(null);
@@ -5476,7 +5483,11 @@ function SysLogsPanel({
               </p>
             </ViewportReveal>
             <ViewportReveal variant="scale" delay={180} duration="fast" className="mt-3">
-              <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
+              {projectEnded?.projectEnded ? (
+                <StatusBadge status="ENDED" tone="purple" />
+              ) : (
+                <StatusBadge status={agentRunning ? "RUNNING" : "OFFLINE"} tone={agentRunning ? "green" : "red"} />
+              )}
             </ViewportReveal>
           </div>
         </ViewportReveal>
@@ -5603,6 +5614,7 @@ function ActivityPanel({
   agentRunning,
   compact = false,
   desktop = false,
+  projectEnded,
 }: {
   activityRows: ActivityRow[];
   logRows: ActivityRow[];
@@ -5612,6 +5624,7 @@ function ActivityPanel({
   agentRunning: boolean;
   compact?: boolean;
   desktop?: boolean;
+  projectEnded?: StatusPayload["projectEnded"];
 }) {
   const [pane, setPane] = useState<"live" | "past">("live");
 
@@ -5650,6 +5663,7 @@ function ActivityPanel({
                   compact
                   readable
                   fillHeight
+                  projectEnded={projectEnded}
                 />
               </div>
             </div>
@@ -5693,6 +5707,7 @@ function ActivityPanel({
                 compact
                 readable
                 fillHeight
+                projectEnded={projectEnded}
               />
             </div>
           </div>
@@ -5740,9 +5755,10 @@ function DesktopDashboard({
                 decisions={data?.decisions ?? []}
                 agentRunning={Boolean(data?.health.agentRunning)}
                 desktop
+                projectEnded={data?.projectEnded}
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} desktop projectEnded={data?.projectEnded} />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -5774,7 +5790,7 @@ function DesktopDashboard({
             ) : section === "logs" ? (
               <S3LogsPanel desktop />
             ) : (
-              <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} />
+              <DesktopOverviewSection view={view} timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} projectEnded={data?.projectEnded} />
             )
           }
         </SectionTransition>
@@ -5807,7 +5823,7 @@ function HomePositionsSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div className="console-scroll min-h-0 flex-1 overflow-y-auto">
@@ -5906,7 +5922,7 @@ function HomeSignalSummary({
   const actionTone = latestDecision ? decisionActionTone(latestDecision.action) : "yellow";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#111114]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0c0c0f]/30">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-[#1E1E26] px-3 py-2">
         <span className="font-sans text-[11px] font-semibold leading-none text-white">Signal</span>
@@ -5973,7 +5989,7 @@ function HomeActivitySummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6128,6 +6144,7 @@ function HomeWalletSummary({
   x402WalletUsdcBalance,
   compact = false,
   flush = false,
+  projectEnded,
 }: {
   walletBalances: WalletBalanceRow[];
   agentMode: string;
@@ -6135,8 +6152,10 @@ function HomeWalletSummary({
   x402WalletUsdcBalance?: number | null;
   compact?: boolean;
   flush?: boolean;
+  projectEnded?: StatusPayload["projectEnded"];
 }) {
   const paperMode = agentMode === "PAPER";
+  const projectEndedActive = Boolean(projectEnded?.projectEnded);
   const rowLimit = compact ? HOME_SUMMARY_MOBILE_ROW_LIMIT : HOME_SUMMARY_ROW_LIMIT;
   const rows = [...walletBalances]
     .sort((left, right) => (right.valueUsd ?? 0) - (left.valueUsd ?? 0))
@@ -6146,7 +6165,7 @@ function HomeWalletSummary({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden",
-        compact ? "bg-[#111114]" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
+        compact ? "bg-[#0c0c0f]/30" : flush ? "bg-[#111114]" : "border border-[#1E1E26] bg-[#111114]",
       )}
     >
       <div
@@ -6158,10 +6177,19 @@ function HomeWalletSummary({
         <div>
           <div className="font-sans text-[10px] uppercase tracking-[0.2em] text-[#7f7f94]">TWAK Wallet</div>
           <h2 className={cx("font-sans font-semibold text-white", compact ? "text-[13px]" : "mt-1 text-[16px]")}>
-            Live Holdings
+            {projectEndedActive ? "Final Holdings" : "Live Holdings"}
           </h2>
         </div>
-        {paperMode ? (
+        {projectEndedActive ? (
+          <span
+            className={cx(
+              "border border-[#b07de3]/40 bg-[#b07de3]/10 font-sans uppercase tracking-[0.12em] text-[#b07de3]",
+              compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]",
+            )}
+          >
+            Ended
+          </span>
+        ) : paperMode ? (
           <span
             className={cx(
               "border border-[#1E1E26] font-sans uppercase tracking-[0.12em] text-[#7f7f94]",
@@ -6253,10 +6281,9 @@ function HomeWalletSummary({
                 </span>
                 Base USDC
               </h2>
-              <AddressActions
-                address={x402WalletAddress}
-                explorerUrl={`https://basescan.org/address/${x402WalletAddress}`}
-              />
+              <div className="mt-1 font-sans text-[10px] text-[#7f7f94]">
+                {x402WalletAddress.slice(0, 6)}…{x402WalletAddress.slice(-4)}
+              </div>
             </div>
             <div className="shrink-0 text-right">
               <div className="font-sans text-[10px] uppercase tracking-[0.12em] text-[#7f7f94]">Balance</div>
@@ -6275,10 +6302,12 @@ function DesktopOverviewSection({
   view,
   timeRange,
   onTimeRangeChange,
+  projectEnded,
 }: {
   view: DashboardViewModel;
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  projectEnded: StatusPayload["projectEnded"];
 }) {
   return (
     <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -6291,11 +6320,14 @@ function DesktopOverviewSection({
             className="relative col-span-3 flex h-full min-h-0 flex-col overflow-hidden border-b border-[#1E1E26]"
           >
             {/* Metrics + controls header row */}
-            <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-4 pt-3 pb-1">
-              <DesktopHeroMetrics view={view} />
-              <div className="flex shrink-0 items-center gap-1.5">
-                <TimezoneMenu inline />
-                <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} inline />
+            <div className="relative z-10 flex shrink-0 flex-col gap-2 px-4 pt-3 pb-1">
+              <ProjectEndedBanner projectEnded={projectEnded} />
+              <div className="flex shrink-0 items-center justify-between gap-2">
+                <DesktopHeroMetrics view={view} />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <TimezoneMenu inline />
+                  <ChartFilterMenu timeRange={timeRange} onTimeRangeChange={onTimeRangeChange} inline />
+                </div>
               </div>
             </div>
             {/* Chart fills remaining space */}
@@ -6323,7 +6355,7 @@ function DesktopOverviewSection({
             <HomeActivitySummary activityRows={view.activityRows} logRows={view.logRows} flush />
           </ViewportReveal>
           <ViewportReveal variant="up" delay={520} duration="normal" className="flex h-full min-h-0 flex-col">
-            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} flush />
+            <HomeWalletSummary walletBalances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} flush projectEnded={projectEnded} />
           </ViewportReveal>
         </div>
       </div>
@@ -6555,41 +6587,38 @@ function OverviewTopBar({
 
 function MobileHeroMetrics({ view }: { view: DashboardViewModel }) {
   return (
-    <section className="shrink-0 px-4 py-3">
-      <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border border-[#1e1e26]">
-        {view.metrics.map((metric, index) => (
-          <ViewportReveal
-            key={metric.label}
-            variant={homeMetricVariant(metric.label, metric.tone)}
-            delay={index * 60}
-            duration={metric.label.includes("Balance") ? "slow" : "normal"}
-            className="group flex min-w-0 flex-col items-center justify-center px-3 py-2.5 text-center"
-          >
-            <div className="flex items-center gap-1">
-              <span className="select-none font-mono text-[9px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
-              <span className="font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
-                {metric.label.replace(/ /g, "_")}
+    <section className="shrink-0 px-4 py-2">
+      <div className="grid grid-cols-2 gap-x-4">
+        <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
+          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Total Balance</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+            <span className="font-sans text-[13px] text-[#cccdde]">USD</span>
+          </div>
+        </ViewportReveal>
+        <ViewportReveal
+          variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+          delay={80}
+          duration="slow"
+          className="min-w-0 text-center"
+        >
+          <div className="font-sans text-[14px] font-medium text-[#cccdde]">Window Profit/Loss</div>
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+            <span className="font-sans text-[24px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+            {view.pnlDelta ? (
+              <span
+                className={cx(
+                  "font-sans text-[14px] font-bold tabular-nums",
+                  view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                )}
+              >
+                ({view.pnlDelta})
               </span>
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
-              <span className="font-mono text-[18px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-              {metric.unit ? (
-                <span className="font-mono text-[9px] text-[#7f7f94]">{metric.unit}</span>
-              ) : null}
-              {metric.delta ? (
-                <span
-                  className={cx(
-                    "font-mono text-[10px] font-bold tabular-nums",
-                    metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                  )}
-                >
-                  ({metric.delta})
-                </span>
-              ) : null}
-            </div>
-          </ViewportReveal>
-        ))}
+            ) : null}
+          </div>
+        </ViewportReveal>
       </div>
+      <ViewportReveal variant="expand" delay={160} duration="slow" className="mt-2 h-px w-full bg-[#1E1E26]" />
     </section>
   );
 }
@@ -6769,11 +6798,13 @@ function MobileOverviewSection({
   timeRange,
   onTimeRangeChange,
   latestDecision = null,
+  projectEnded,
 }: {
   view: DashboardViewModel;
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
   latestDecision?: StatusPayload["latestDecision"] | null;
+  projectEnded: StatusPayload["projectEnded"];
 }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -6781,42 +6812,41 @@ function MobileOverviewSection({
         variant="fade"
         delay={120}
         duration="normal"
-        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#111114]/80"
+        className="relative min-h-0 flex-1 border-b border-[#1E1E26] bg-[#0c0c0f]/30"
       >
         <div className="absolute inset-0 flex flex-col">
-          <div className="grid grid-cols-2 divide-x divide-y divide-[#1e1e26] border-b border-[#1e1e26]">
-            {view.metrics.map((metric, index) => (
-              <ViewportReveal
-                key={metric.label}
-                variant={homeMetricVariant(metric.label, metric.tone)}
-                delay={index * 60}
-                duration={metric.label.includes("Balance") ? "slow" : "normal"}
-                className="group flex min-w-0 flex-col items-center justify-center px-3 py-2 text-center"
-              >
-                <div className="flex items-center gap-1">
-                  <span className="select-none font-mono text-[8px] font-bold text-[#b07de3]/40 group-first:text-[#b07de3]/60">{"//"}</span>
-                  <span className="font-mono text-[7px] font-semibold uppercase tracking-[0.14em] text-[#7f7f94]">
-                    {metric.label.replace(/ /g, "_")}
+          <div className="px-4 pt-3 pb-2">
+            <ProjectEndedBanner projectEnded={projectEnded} compact />
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 px-4 pb-2 pt-1">
+            <ViewportReveal variant="scale" duration="slow" className="min-w-0 text-center">
+              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Total Balance</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.totalBalance}</span>
+                <span className="font-sans text-[11px] text-[#cccdde]">USD</span>
+              </div>
+            </ViewportReveal>
+            <ViewportReveal
+              variant={homeMetricVariant("Window Profit/Loss", view.pnlTone)}
+              delay={80}
+              duration="slow"
+              className="min-w-0 text-center"
+            >
+              <div className="font-sans text-[11px] font-medium text-[#cccdde]">Window P/L</div>
+              <div className="mt-1 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+                <span className="font-sans text-[20px] font-bold leading-none text-white tabular-nums">{view.pnlValue}</span>
+                {view.pnlDelta ? (
+                  <span
+                    className={cx(
+                      "font-sans text-[11px] font-bold tabular-nums",
+                      view.pnlTone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
+                    )}
+                  >
+                    ({view.pnlDelta})
                   </span>
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-1 gap-y-0.5">
-                  <span className="font-mono text-[15px] font-bold leading-none text-white tabular-nums">{metric.value}</span>
-                  {metric.unit ? (
-                    <span className="font-mono text-[8px] text-[#7f7f94]">{metric.unit}</span>
-                  ) : null}
-                  {metric.delta ? (
-                    <span
-                      className={cx(
-                        "font-mono text-[9px] font-bold tabular-nums",
-                        metric.tone === "negative" ? "text-[#e05b73]" : "text-[#33c28e]",
-                      )}
-                    >
-                      ({metric.delta})
-                    </span>
-                  ) : null}
-                </div>
-              </ViewportReveal>
-            ))}
+                ) : null}
+              </div>
+            </ViewportReveal>
           </div>
           {view.hourlyPnlPoints.length > 0 ? (
             <ViewportReveal variant="up" delay={160} duration="normal" className="shrink-0 border-b border-[#1E1E26] px-4 pb-2">
@@ -6914,7 +6944,7 @@ function MobileBottomNav({
 
   return (
     <nav
-      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/95 backdrop-blur-sm"
+      className="relative z-40 h-[52px] shrink-0 border-t border-[#1E1E26] bg-[#111114]/75 backdrop-blur-sm"
       aria-label="Mobile navigation"
     >
       <div
@@ -6962,7 +6992,7 @@ function MobileDashboard({
       <DeviceTopSection color={deviceTopSectionColor} />
       <AsciiRaccoonWatermark glitch={activeSection === "market-chat"} />
       {view.telemetryError ? <TelemetryBanner message={view.telemetryError} /> : null}
-      <main className="relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#0c0c0f]">
+      <main className="technical-grid technical-grid--fine relative z-[1] flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         {showTopBar ? (
           <div className="shrink-0">
             <OverviewTopBar activeSection={activeSection} enabled={sectionTransitionEnabled} />
@@ -6983,9 +7013,10 @@ function MobileDashboard({
                 decisions={data?.decisions ?? []}
                 agentRunning={Boolean(data?.health.agentRunning)}
                 compact
+                projectEnded={data?.projectEnded}
               />
             ) : section === "wallet" ? (
-              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} twakWalletAddress={view.twakWalletAddress} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact />
+              <WalletPanel balances={view.walletBalances} agentMode={view.agentMode} x402WalletAddress={view.x402WalletAddress} x402WalletUsdcBalance={view.x402WalletUsdcBalance} compact projectEnded={data?.projectEnded} />
             ) : section === "x402" ? (
               <X402PaymentsPanel
                 records={view.x402Records}
@@ -7020,6 +7051,7 @@ function MobileDashboard({
                 timeRange={timeRange}
                 onTimeRangeChange={onTimeRangeChange}
                 latestDecision={data?.latestDecision ?? null}
+                projectEnded={data?.projectEnded}
               />
             )
           }
@@ -7082,17 +7114,13 @@ export function DashboardClient() {
     frozenPnlStore.getSnapshot,
     frozenPnlStore.getServerSnapshot,
   );
-  const positionPnl = activePositionPnl(view.positionRows);
-  const positionPnlPercent = positionPnl.percent;
+  const positionPnlPercent = activePositionPnlPercent(view.positionRows);
   useEffect(() => {
     frozenPnlStore.set(positionPnlPercent);
   }, [frozenPnlStore, positionPnlPercent]);
   const effectivePnlPercent = positionPnlPercent ?? frozenPositionPnl;
-  const effectivePnlAbsolute = positionPnl.absolute;
   const effectiveDelta =
     effectivePnlPercent !== null ? formatPercent(effectivePnlPercent) : undefined;
-  const effectivePnlValue =
-    effectivePnlAbsolute !== null ? formatSignedUsd(effectivePnlAbsolute) : view.pnlValue;
   const effectivePnlTone: "positive" | "negative" =
     effectivePnlPercent !== null
       ? effectivePnlPercent >= 0
@@ -7101,22 +7129,20 @@ export function DashboardClient() {
       : view.pnlTone;
 
   const effectiveView = useMemo(() => {
-    const valueChanged = effectivePnlValue !== view.pnlValue;
     const deltaChanged = effectiveDelta !== view.pnlDelta;
     const toneChanged = effectivePnlTone !== view.pnlTone;
-    if (!valueChanged && !deltaChanged && !toneChanged) return view;
+    if (!deltaChanged && !toneChanged) return view;
     return {
       ...view,
-      pnlValue: effectivePnlValue,
       pnlDelta: effectiveDelta,
       pnlTone: effectivePnlTone,
       metrics: view.metrics.map((m) =>
-        m.label === "Position P&L"
-          ? { ...m, value: effectivePnlValue, delta: effectiveDelta, tone: effectivePnlTone }
+        m.label === "Window Profit/Loss"
+          ? { ...m, delta: effectiveDelta, tone: effectivePnlTone }
           : m,
       ),
     };
-  }, [view, effectivePnlValue, effectiveDelta, effectivePnlTone]);
+  }, [view, effectiveDelta, effectivePnlTone]);
 
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
