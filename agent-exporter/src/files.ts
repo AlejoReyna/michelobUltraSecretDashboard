@@ -28,6 +28,7 @@ export const FILES = {
   guardrails: "guardrail_state.json",
   priceCache: "price_cache.json",
   volumeCache: "volume_cache.json",
+  projectEnded: "project_ended.json",
 } as const;
 
 export function sourceFile(sourcePath: string, fileName: string): string {

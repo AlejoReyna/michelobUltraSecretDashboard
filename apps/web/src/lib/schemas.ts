@@ -286,6 +286,20 @@ export const statusSchema = z
       }).passthrough()
     ).default([]),
     files: z.record(z.string(), fileStatusSchema).default({}),
+    projectEnded: z
+      .object({
+        projectEnded: z.boolean(),
+        endedAt: z.string(),
+        competition: z.string().nullable().optional(),
+        tradingWindow: z.string().nullable().optional(),
+        finalPortfolioValueUsdc: z.number().nullable().optional(),
+        finalPortfolioAthUsdc: z.number().nullable().optional(),
+        note: z.string().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    projectEndedError: z.string().optional(),
     connection: z
       .object({
         source: z.enum(["mock", "exporter", "error"]),

@@ -10,6 +10,7 @@ import {
   hourlyPnlRecordSchema,
   marketDataRowSchema,
   positionsSchema,
+  projectEndedSchema,
   sellHistorySchema,
   x402CallSchema,
   x402SpendLedgerSchema,
@@ -20,6 +21,7 @@ import {
   type HourlyPnlRecord,
   type MarketDataRow,
   type Positions,
+  type ProjectEnded,
   type SellHistoryRow,
   type X402Call,
   type X402SpendLedger,
@@ -48,6 +50,13 @@ export async function getDecisions(sourcePath: string, limit = DEFAULT_LIMIT) {
 
 export async function getExecutions(sourcePath: string, limit = DEFAULT_LIMIT) {
   return readJsonlFile<Execution>(sourceFile(sourcePath, FILES.executionLog), executionSchema, limit);
+}
+
+export async function getProjectEnded(sourcePath: string) {
+  return readJsonFile<ProjectEnded>(sourceFile(sourcePath, FILES.projectEnded), projectEndedSchema, {
+    projectEnded: false,
+    endedAt: "",
+  });
 }
 
 export async function getX402Calls(sourcePath: string, limit = DEFAULT_LIMIT) {
@@ -179,7 +188,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
   requestTwakRefresh("status");
   const twak = getTwakTelemetrySnapshot();
 
-  const [health, decisions, executions, x402Calls, x402SpendLedger, x402Wallet, sellHistory, hourlyPnl, marketData, positions, guardrails, files] =
+  const [health, decisions, executions, x402Calls, x402SpendLedger, x402Wallet, sellHistory, hourlyPnl, marketData, positions, guardrails, files, projectEnded] =
     await Promise.all([
       getHealth(sourcePath),
       getDecisions(sourcePath, limit),
@@ -193,6 +202,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
       getPositions(sourcePath),
       getGuardrails(sourcePath),
       fileStatuses(sourcePath),
+      getProjectEnded(sourcePath),
     ]);
 
   return redact({
@@ -241,5 +251,7 @@ export async function getStatus(sourcePath: string, limit = DEFAULT_LIMIT) {
           walletUsdcBalance: x402Wallet.data.usdc_balance ?? null,
         },
     files,
+    projectEnded: projectEnded.data.projectEnded ? projectEnded.data : null,
+    projectEndedError: projectEnded.error,
   });
 }
